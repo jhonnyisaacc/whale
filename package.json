@@ -1,0 +1,49 @@
+{
+  "name": "whale",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node scripts/patch-jayson-stream-json.mjs && tsc -p tsconfig.json && node --test dist/test/*.test.js",
+    "start:executor": "node dist/src/executor-server.js",
+    "start:cli": "node dist/src/cli.js",
+    "create-wallet": "node dist/src/create-wallet.js",
+    "policy:turnkey": "tsc -p tsconfig.json && node scripts/write-turnkey-policy.mjs",
+    "check:size": "node scripts/check-file-size.mjs",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check": "node scripts/check-file-size.mjs && node scripts/check-boundaries.mjs && tsc -p tsconfig.json && node scripts/patch-jayson-stream-json.mjs && node --test dist/test/*.test.js",
+    "start:mcp": "node dist/src/mcp-server.js",
+    "smoke": "node scripts/patch-jayson-stream-json.mjs && tsc -p tsconfig.json && node scripts/smoke-entrypoints.mjs",
+    "canary": "tsc -p tsconfig.json && node dist/src/canary.js",
+    "policy:manifest": "tsc -p tsconfig.json && node scripts/turnkey-policy.mjs"
+  },
+  "dependencies": {
+    "@fastify/auth": "^5.0.3",
+    "@fastify/rate-limit": "^10.3.0",
+    "@msgpack/msgpack": "^3.1.2",
+    "@solana/web3.js": "^1.98.4",
+    "@turnkey/sdk-server": "^4.0.0",
+    "bs58": "^6.0.0",
+    "fastify": "^5.6.1",
+    "pg": "^8.16.3",
+    "pino": "^9.11.0",
+    "viem": "^2.38.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "@types/pg": "^8.15.5",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "uuid": "11.1.1",
+    "stream-json": "3.7.0"
+  }
+}

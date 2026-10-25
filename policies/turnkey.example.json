@@ -1,0 +1,16 @@
+[
+  {
+    "policyName": "EVM swaps on allowlisted chains and routers",
+    "notes": "Scoped to the EVM wallet. Routers, selectors, and the 2000000000000000 wei native cap come from turnkeyPolicyDocument. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.",
+    "effect": "EFFECT_ALLOW",
+    "consensus": "approvers.any(user, user.id == '11111111-1111-4111-8111-111111111111')",
+    "condition": "activity.action == 'SIGN' && wallet.id == '22222222-2222-4222-8222-222222222222' && ((eth.tx.chain_id == 8453 && (eth.tx.to == '0x1111111111111111111111111111111111111111'))) && eth.tx.value <= 2000000000000000"
+  },
+  {
+    "policyName": "Solana swaps through Jupiter and the base programs",
+    "notes": "Scoped to the Solana wallet. Native transfers may pay only the hot wallet, its wrapped SOL account, or a Jito tip account. A transfer to a lookup-table address reads as ADDRESS_TABLE_LOOKUP and is denied. Top-level SPL transfers are denied, so SPL recovery is a root-quorum ceremony. Add each DEX program id Jupiter puts in the transaction, or Turnkey denies the sign.",
+    "effect": "EFFECT_ALLOW",
+    "consensus": "approvers.any(user, user.id == '11111111-1111-4111-8111-111111111111')",
+    "condition": "activity.action == 'SIGN' && wallet.id == '33333333-3333-4333-8333-333333333333' && solana.tx.program_keys.all(p, p == 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4' || p == '11111111111111111111111111111111' || p == 'ComputeBudget111111111111111111111111111111' || p == 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || p == 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' || p == 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL') && solana.tx.transfers.all(t, t.to == 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' || t.to == 'CNnqCiSWvQMRqNdaQ3TvuTMumQ4GcPDhBAMBMNC4j3Q3' || t.to == '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5' || t.to == 'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe' || t.to == 'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY' || t.to == 'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49' || t.to == 'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh' || t.to == 'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt' || t.to == 'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL' || t.to == '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT') && solana.tx.spl_transfers.count() == 0"
+  }
+]

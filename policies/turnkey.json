@@ -1,0 +1,23 @@
+[
+  {
+    "policyName": "EVM swaps on allowlisted chains and routers",
+    "notes": "Scoped to the EVM wallet. Routers, selectors, and the 2000000000000000 wei native cap come from turnkeyPolicyDocument. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.",
+    "effect": "EFFECT_ALLOW",
+    "consensus": "approvers.any(user, user.id == '<TURNKEY_API_USER_ID>')",
+    "condition": "activity.action == 'SIGN' && wallet.id == '<TURNKEY_EVM_WALLET_ID>' && (eth.tx.chain_id == 0) && eth.tx.value <= 2000000000000000"
+  },
+  {
+    "policyName": "Solana swaps through Jupiter and the base programs",
+    "notes": "Scoped to the Solana wallet. Native transfers may pay only the hot wallet, its wrapped SOL account, or a Jito tip account. A transfer to a lookup-table address reads as ADDRESS_TABLE_LOOKUP and is denied. Top-level SPL transfers are denied, so SPL recovery is a root-quorum ceremony. Add each DEX program id Jupiter puts in the transaction, or Turnkey denies the sign.",
+    "effect": "EFFECT_ALLOW",
+    "consensus": "approvers.any(user, user.id == '<TURNKEY_API_USER_ID>')",
+    "condition": "activity.action == 'SIGN' && wallet.id == '<TURNKEY_SOLANA_WALLET_ID>' && solana.tx.program_keys.all(p, p == 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4' || p == '11111111111111111111111111111111' || p == 'ComputeBudget111111111111111111111111111111' || p == 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || p == 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' || p == 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL') && solana.tx.transfers.all(t, t.to == '<TURNKEY_SOLANA_ADDRESS>' || t.to == '<TURNKEY_SOLANA_WSOL_ACCOUNT>' || t.to == '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5' || t.to == 'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe' || t.to == 'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY' || t.to == 'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49' || t.to == 'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh' || t.to == 'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt' || t.to == 'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL' || t.to == '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT') && solana.tx.spl_transfers.count() == 0"
+  },
+  {
+    "policyName": "Hyperliquid agent typed data",
+    "notes": "Scoped to the agent wallet. The L1 action is hashed into connectionId before EIP-712, so this policy can pin the Agent domain and cannot see withdraw3. The app rejects non-tradable actions before it submits.",
+    "effect": "EFFECT_ALLOW",
+    "consensus": "approvers.any(user, user.id == '<TURNKEY_API_USER_ID>')",
+    "condition": "activity.action == 'SIGN' && wallet.id == '<TURNKEY_HYPERLIQUID_WALLET_ID>' && eth.eip_712.primary_type == 'Agent' && eth.eip_712.domain.name == 'Exchange' && eth.eip_712.domain.version == '1' && eth.eip_712.domain.chain_id == 1337 && eth.eip_712.message['source'] == 'a'"
+  }
+]
