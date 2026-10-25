@@ -1,0 +1,23 @@
+{
+  "name": "whale",
+  "version": "0.1.0",
+  "description": "Whale, a multichain wallet for AI agents. Quote, swap, bridge, balance, and transfer. Dry-run is the default.",
+  "author": {
+    "name": "Rocket"
+  },
+  "repository": "https://github.com/jhonnyisaacc/whale",
+  "license": "MIT",
+  "keywords": [
+    "rocket",
+    "agentic wallet",
+    "multichain wallet",
+    "turnkey"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Rocket",
+    "shortDescription": "Secure multichain wallet for agents. Dry-run by default.",
+    "category": "Finance"
+  }
+}

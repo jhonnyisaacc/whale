@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "whale": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "dist/src/mcp-server.js"
+      ],
+      "env": {
+        "EXECUTOR_URL": "http://127.0.0.1:8788",
+        "EXECUTOR_AUTH_TOKEN": "<executor token>"
+      }
+    }
+  }
+}

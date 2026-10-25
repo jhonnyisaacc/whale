@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "whale",
+  "displayName": "Whale",
+  "version": "0.1.0",
+  "description": "Whale, a multichain wallet for AI agents. Quote, swap, bridge, balance, and transfer. Dry-run is the default.",
+  "compat": {
+    "source": "native",
+    "manifestDir": ".muse-plugin"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "whale-wallet",
+        "path": "skills/whale-wallet/SKILL.md",
+        "enabledDefault": true
+      }
+    ],
+    "commands": [],
+    "hooks": [],
+    "mcpServers": [
+      {
+        "id": "whale",
+        "transport": "stdio",
+        "command": [
+          "node",
+          "dist/src/mcp-server.js"
+        ]
+      }
+    ],
+    "reminders": []
+  }
+}
