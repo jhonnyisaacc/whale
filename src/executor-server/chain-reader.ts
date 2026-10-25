@@ -44,3 +44,4 @@ export function chainReader(config: AppConfig, signer: TransactionSigner | null)
     return Number(formatUnits(raw, decimals));
   };
 }
+
