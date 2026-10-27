@@ -328,7 +328,7 @@ test("an untagged holding funds an alternate chain", async () => {
   const solHolding = { ...holding, address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" };
   const config = loadConfig({
     EXECUTOR_AUTH_TOKEN: auth, RESOLVER_AUTH_TOKEN: "resolver-token-123456",
-    LISTING_TRADER_LIVE: "true",
+    WHALE_BROADCAST: "true",
     RESOLVER_URL: "http://resolver.railway.internal:8080",
   });
   const resolution = {
@@ -452,7 +452,7 @@ test("a null or thrown read skips that holding and the other chain still quotes"
   const auth = "0123456789abcdef";
   const config = loadConfig({
     EXECUTOR_AUTH_TOKEN: auth, RESOLVER_AUTH_TOKEN: "resolver-token-123456",
-    LISTING_TRADER_LIVE: "true",
+    WHALE_BROADCAST: "true",
     RESOLVER_URL: "http://resolver.railway.internal:8080",
   });
   const resolution = {

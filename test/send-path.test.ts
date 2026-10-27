@@ -673,10 +673,10 @@ test("a hyperliquid sizing failure is skipped, not thrown", async () => {
 test("live screening denies a token whose tax fields are missing", async () => {
   const row = async () => new Response(JSON.stringify({ code: 1, result: { [TOKEN]: { is_honeypot: "0", cannot_sell_all: "0" } } }), { status: 200 });
   const token = { chainKey: "base", chain: { kind: "evm" as const, chainId: 8453 }, contract: TOKEN };
-  assert.equal(await screenToken(loadConfig({ LISTING_TRADER_LIVE: "true" }), token, row), "deny");
+  assert.equal(await screenToken(loadConfig({ WHALE_BROADCAST: "true" }), token, row), "deny");
   assert.equal(await screenToken(loadConfig({ TOKEN_SCREENING: "true" }), token, row), "allow");
   const taxed = async () => new Response(JSON.stringify({ code: 1, result: { [TOKEN]: { is_honeypot: "0", buy_tax: "0.01", sell_tax: "0" } } }), { status: 200 });
-  assert.equal(await screenToken(loadConfig({ LISTING_TRADER_LIVE: "true" }), token, taxed), "deny");
+  assert.equal(await screenToken(loadConfig({ WHALE_BROADCAST: "true" }), token, taxed), "deny");
 });
 
 test("reconciliation commits landed rows, releases dead ones, and keeps what it cannot prove", () => {

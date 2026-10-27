@@ -24,6 +24,6 @@ test("a dead provider set fails the case instead of passing silently", async () 
 
 test("the canary refuses live mode", async () => {
   resetProviderGuards();
-  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456", LISTING_TRADER_LIVE: "true", DATABASE_URL: "postgres://localhost/db", TURNKEY_ORGANIZATION_ID: "org", TURNKEY_API_PUBLIC_KEY: "pub", TURNKEY_API_PRIVATE_KEY: "priv" });
+  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456", WHALE_BROADCAST: "true", DATABASE_URL: "postgres://localhost/db", TURNKEY_ORGANIZATION_ID: "org", TURNKEY_API_PUBLIC_KEY: "pub", TURNKEY_API_PRIVATE_KEY: "priv" });
   await assert.rejects(() => runCanary(config, async () => { throw new Error("offline"); }), /live mode/);
 });

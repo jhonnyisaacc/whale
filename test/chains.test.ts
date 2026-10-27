@@ -39,7 +39,8 @@ test("live mode is off unless the flag is the exact string true", () => {
   assert.equal(dry.live, false);
   assert.equal(dry.maxUsdPerTrade, 5);
   assert.equal(dry.maxLeverage, 1);
-  const live = loadConfig({ LISTING_TRADER_LIVE: "true" } as NodeJS.ProcessEnv);
+  assert.equal(loadConfig({ WHALE_BROADCAST: "false" } as NodeJS.ProcessEnv).live, false);
+  const live = loadConfig({ WHALE_BROADCAST: "true" } as NodeJS.ProcessEnv);
   assert.equal(live.live, true);
   assert.throws(() => loadConfig({ MAX_SLIPPAGE_BPS: "400" } as NodeJS.ProcessEnv));
 });

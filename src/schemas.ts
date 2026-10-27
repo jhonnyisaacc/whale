@@ -73,16 +73,6 @@ export const intentSchema = z.object({
   alternates: z.array(intentTokenSchema).max(16).optional(),
 });
 
-export const alertSchema = z.object({
-  id: z.string().min(1).max(200),
-  ticker: z.string().min(1).max(32),
-  projectName: z.string().min(1).max(200),
-  source: z.string().min(1).max(80),
-  publishedAt: z.string().min(1).max(40),
-  receivedAt: z.string().min(1).max(40),
-  chainHint: z.string().max(40).optional(),
-});
-
 export const withdrawSchema = z.object({
   idempotencyKey: z.string().min(1).max(80).optional(),
   to: z.string().min(1).max(128),
@@ -105,28 +95,6 @@ export const rebalanceSchema = z.object({
     .max(8),
   ownAddresses: z.array(z.string().min(1).max(128)).max(8),
   spentBridgeUsd: z.number().nonnegative().default(0),
-});
-
-export const tokenRecordSchema = z
-  .object({
-    id: z.string(),
-    ticker: z.string(),
-    names: z.array(z.string()),
-    chainKey: z.string(),
-    chain: chainSchema,
-    contract: z.string(),
-    decimals: z.number().nullable(),
-    pairMap: pairMapSchema,
-    hyperliquid: hyperliquidSchema.nullable(),
-    refreshedAt: z.string(),
-  })
-  .passthrough();
-
-export const resolutionSchema = z.object({
-  kind: z.string(),
-  token: tokenRecordSchema.optional(),
-  alternates: z.array(tokenRecordSchema).optional(),
-  detail: z.string().optional(),
 });
 
 export const holdingsSchema = z.array(holdingSchema).max(64);
