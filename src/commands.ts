@@ -1,5 +1,6 @@
 import type { ChainRef, ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
 import { planRebalance, type BridgeQuote, type RebalancePlan } from "./rebalance.js";
+import { intentSchema } from "./schemas.js";
 
 export type Asset = {
   chain: ChainRef;
@@ -12,6 +13,7 @@ export type Asset = {
 export type WalletCommand =
   | { kind: "quote"; sell: Asset; buy: Asset; sellAmount: string; taker: string | null; slippageBps: number }
   | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "dry_run" }
+  | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "live"; notionalUsd: number }
   | {
       kind: "bridge";
       quotes: readonly BridgeQuote[];
@@ -30,22 +32,27 @@ export type WalletResult =
   | { kind: "quote"; status: "skipped"; quote: null; reason: string }
   | { kind: "swap"; report: ExecutionReport }
   | { kind: "bridge"; plan: RebalancePlan }
-  | { kind: "balance"; holdings: Holding[] }
+  | { kind: "balance"; holdings: Holding[]; reason?: string }
   | { kind: "transfer"; status: "would_send" | "skipped"; reason: string };
 
 export type CommandDeps = {
   quote?: (command: Extract<WalletCommand, { kind: "quote" }>) => Promise<RouteQuote | null>;
   execute?: (intent: SwapIntent) => Promise<ExecutionReport>;
-  readBalance?: (chainKey: string, address: string) => Promise<Holding[]>;
+  readBalance?: (chainKey: string, address: string) => Promise<{ holdings: Holding[]; reason?: string }>;
   now?: () => number;
 };
 
-function skippedSwap(command: Extract<WalletCommand, { kind: "swap" }>, reason: string, now: number): WalletResult {
+function swapReport(
+  command: Extract<WalletCommand, { kind: "swap" }>,
+  now: number,
+  mode: "dry_run" | "live",
+  reason: string,
+): WalletResult {
   return {
     kind: "swap",
     report: {
       idempotencyKey: command.idempotencyKey,
-      mode: "dry_run",
+      mode,
       decision: "skipped",
       reason,
       venue: command.buy.chainKey,
@@ -55,12 +62,12 @@ function skippedSwap(command: Extract<WalletCommand, { kind: "swap" }>, reason: 
   };
 }
 
-function swapIntent(command: Extract<WalletCommand, { kind: "swap" }>, now: number): SwapIntent {
+function swapIntent(command: Extract<WalletCommand, { kind: "swap"; mode: "live" }>, now: number): SwapIntent {
   const sellAmount = Number(command.sellAmount);
-  return {
+  return intentSchema.parse({
     idempotencyKey: command.idempotencyKey,
     side: "buy",
-    notionalUsd: 0,
+    notionalUsd: command.notionalUsd,
     slippageBps: command.slippageBps,
     token: {
       symbol: command.buy.symbol,
@@ -77,13 +84,13 @@ function swapIntent(command: Extract<WalletCommand, { kind: "swap" }>, now: numb
         amount: Number.isFinite(sellAmount) ? sellAmount : 0,
         usd: 0,
         native: false,
-        decimals: command.sell.decimals ?? undefined,
+        ...(command.sell.decimals === null ? {} : { decimals: command.sell.decimals }),
         chainKey: command.sell.chainKey,
       },
     ],
     hyperliquid: null,
     receivedAtMs: now,
-  };
+  });
 }
 
 export async function run(command: WalletCommand, deps: CommandDeps = {}): Promise<WalletResult> {
@@ -95,7 +102,8 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
     return { kind: "quote", status: "quoted", quote };
   }
   if (command.kind === "swap") {
-    if (!deps.execute) return skippedSwap(command, "no quote provider", now);
+    if (command.mode !== "live") return swapReport(command, now, "dry_run", "nothing was broadcast");
+    if (!deps.execute) return swapReport(command, now, "live", "live swap was not posted");
     return { kind: "swap", report: await deps.execute(swapIntent(command, now)) };
   }
   if (command.kind === "bridge") {
@@ -104,12 +112,10 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
   }
   if (command.kind === "balance") {
     if (!deps.readBalance) return { kind: "balance", holdings: [] };
-    const rows = await deps.readBalance(command.chainKey, command.address);
+    const read = await deps.readBalance(command.chainKey, command.address);
     const address = command.address.toLowerCase();
-    return {
-      kind: "balance",
-      holdings: rows.filter((row) => row.chainKey === command.chainKey && row.address.toLowerCase() === address),
-    };
+    const holdings = read.holdings.filter((row) => row.chainKey === command.chainKey && row.address.toLowerCase() === address);
+    return read.reason ? { kind: "balance", holdings, reason: read.reason } : { kind: "balance", holdings };
   }
   // TODO: local keystore signing exists for dry-run. Live mode still refuses raw keys in loadManagedSigner, so a live transfer stays skipped.
   if (command.mode === "live") {

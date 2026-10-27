@@ -157,7 +157,7 @@ export async function createExecutorApp(
     if (!anyTokenMatches(presented, config.executorAuthTokens)) return reply.code(401).send({ error: "unauthorized" });
     const parsed = intentSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
-    const report = await app.drain.track(() => execute(parsed.data, { ...runtime, mode: "dry_run" }));
+    const report = await app.drain.track(() => execute(parsed.data, config.live ? runtime : { ...runtime, mode: "dry_run" }));
     console.log(JSON.stringify({ report: { ...report, latency: latencyLog(report.latency) } }));
     await notify(config, report, secrets);
     return report;

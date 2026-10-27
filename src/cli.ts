@@ -1,5 +1,5 @@
 import { chainByKey } from "./chains.js";
-import { run, type Asset, type WalletCommand } from "./commands.js";
+import { run, type Asset, type WalletCommand, type WalletResult } from "./commands.js";
 
 function flag(argv: readonly string[], name: string): string | null {
   const index = argv.indexOf(name);
@@ -33,7 +33,11 @@ export function parseCommand(argv: readonly string[]): WalletCommand {
     if (kind === "quote") return { kind, ...shared, taker: flag(rest, "--taker") };
     const idempotencyKey = flag(rest, "--idempotency-key");
     if (!idempotencyKey) throw new Error("--idempotency-key is required");
-    return { kind, ...shared, idempotencyKey, mode: "dry_run" };
+    if (!rest.includes("--live")) return { kind, ...shared, idempotencyKey, mode: "dry_run" };
+    const notional = flag(rest, "--notional-usd");
+    const notionalUsd = notional === null ? Number.NaN : Number(notional);
+    if (!(notionalUsd > 0) || !Number.isFinite(notionalUsd)) throw new Error("--notional-usd must be a positive number");
+    return { kind, ...shared, idempotencyKey, mode: "live", notionalUsd };
   }
   if (kind === "balance") {
     const chainKey = flag(rest, "--chain");
@@ -54,15 +58,47 @@ export function parseCommand(argv: readonly string[]): WalletCommand {
   throw new Error("usage: quote | swap | bridge | balance | transfer");
 }
 
+function liveSwapSkipped(command: Extract<WalletCommand, { kind: "swap"; mode: "live" }>): WalletResult {
+  return {
+    kind: "swap",
+    report: {
+      idempotencyKey: command.idempotencyKey,
+      mode: "live",
+      decision: "skipped",
+      reason: "WHALE_BROADCAST is unset, so this live swap was skipped",
+      venue: command.buy.chainKey,
+      route: null,
+      latency: { alertReceivedMs: Date.now() },
+    },
+  };
+}
+
+async function depsFor(command: WalletCommand) {
+  if (command.kind !== "quote" && command.kind !== "balance" && !(command.kind === "swap" && command.mode === "live")) return {};
+  const { commandDeps } = await import("./command-callers.js");
+  return commandDeps(process.env, command);
+}
+
 const entry = process.argv[1] ?? "";
 if (entry.endsWith("cli.js")) {
-  const command = parseCommand(process.argv.slice(2));
-  run(command)
-    .then((result) => {
-      process.stdout.write(`${JSON.stringify(result)}\n`);
-    })
-    .catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : "command failed");
-      process.exit(1);
-    });
+  let command: WalletCommand;
+  try {
+    command = parseCommand(process.argv.slice(2));
+  } catch (error: unknown) {
+    console.error(error instanceof Error ? error.message : "command failed");
+    process.exit(1);
+  }
+  if (command.kind === "swap" && command.mode === "live" && process.env.WHALE_BROADCAST !== "true") {
+    process.stdout.write(`${JSON.stringify(liveSwapSkipped(command))}\n`);
+  } else {
+    depsFor(command)
+      .then((deps) => run(command, deps))
+      .then((result) => {
+        process.stdout.write(`${JSON.stringify(result)}\n`);
+      })
+      .catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : "command failed");
+        process.exit(1);
+      });
+  }
 }

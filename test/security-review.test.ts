@@ -95,6 +95,31 @@ test("live mode does not send a token the screener denies", async () => {
 });
 
 
+test("POST /execute uses live mode only when WHALE_BROADCAST is on and still does not send without a balance", async () => {
+  resetExecutorState();
+  const config = loadConfig({
+    EXECUTOR_AUTH_TOKEN: tokenAuth,
+    RESOLVER_AUTH_TOKEN: "resolver-token-123456",
+    WHALE_BROADCAST: "true",
+    TOKEN_SCREENING: "false",
+  });
+  const sends: string[] = [];
+  const app = await createExecutorApp(config, runtime(config, sends, async () => {
+    throw new Error("quote must not run");
+  }), null, [], []);
+  const response = await app.inject({
+    method: "POST",
+    url: "/execute",
+    headers: { authorization: `Bearer ${tokenAuth}`, "content-type": "application/json" },
+    payload: intent(),
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().mode, "live");
+  assert.equal(sends.length, 0);
+  assert.equal(JSON.stringify(response.json()).includes("txHash"), false);
+  await app.close();
+});
+
 test("/execute stays dry-run, a thrown quote is a generic 500, and plain text is rejected", async () => {
   resetExecutorState();
   const databaseUrl = "postgres://listing:s3cret-db@db.internal:5432/listing";
