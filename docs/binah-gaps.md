@@ -4,13 +4,13 @@ The source is Binah rules v4.6, read on 2026-10-21. Each row names the rule, the
 
 | Rule | State in the wallet | Enforcer |
 | --- | --- | --- |
-| One project directory per product | Done. The directory is `wallet`. | This PR stack. Review. |
+| One project directory per product | Done. The directory is the repository root. | This PR stack. Review. |
 | File-size ratchet at about 5,000 tokens | Done. Every source file sits at or under the budget. | `scripts/check-file-size.mjs` in the hygiene job |
 | Enforced import boundaries | Done for domain, config, and engines. | `scripts/check-boundaries.mjs` in the hygiene job |
 | One fast check command | Done. `npm run check` runs size, boundaries, build, and tests. | The wallet workflow |
-| Short AGENTS.md as a map | Done. `wallet/AGENTS.md` names what an agent cannot infer. | Review |
-| Feature map with a check per feature | Started. Six rows. Each new feature adds one. | `wallet/feature-map.md`. Review |
-| Decisions recorded in the repo | Started. The modular split holds a record. | `wallet/docs/decisions/` |
+| Short AGENTS.md as a map | Done. `AGENTS.md` names what an agent cannot infer. | Review |
+| Feature map with a check per feature | Started. Six rows. Each new feature adds one. | `feature-map.md`. Review |
+| Decisions recorded in the repo | Started. The modular split holds a record. | `docs/decisions/` |
 | Pin behavior before a refactor | Done for this split. The test count held at 130 passed before and after. | `npm test` |
 | Explicit contracts at every boundary | Held. Zod parses requests and vendor bodies. Types live in `domain.ts`. | `npm test`. The parsers tests |
 | No code comments as a rule with a lint | Gap. No lint enforces it yet. | Planned. No enforcer |
@@ -22,7 +22,7 @@ The source is Binah rules v4.6, read on 2026-10-21. Each row names the rule, the
 
 ## CI audit, 2026-10-21
 
-The wallet workflows split cleanly. `wallet.yml` runs hygiene, unit tests, entrypoint smoke, and the Docker build. `wallet-security.yml` runs CodeQL, Semgrep, and Gitleaks. `research-governance.yml` covers Python paths only and never overlaps a wallet path. Two duplications remain by design. The smoke job compiles again after the test job, and `npm run check` locally repeats the hygiene scripts that CI runs on their own. The Semgrep container digest in `wallet-security.yml` has no automated update path. Dependabot covers the Dockerfile at `/wallet`, not a workflow container image. That digest stays a manual review item until the repo adopts a tool that scans workflow containers.
+The wallet workflows split cleanly. `wallet.yml` runs hygiene, unit tests, entrypoint smoke, and the Docker build. `wallet-security.yml` runs CodeQL, Semgrep, and Gitleaks. `research-governance.yml` covers Python paths only and never overlaps a wallet path. Two duplications remain by design. The smoke job compiles again after the test job, and `npm run check` locally repeats the hygiene scripts that CI runs on their own. The Semgrep container digest in `wallet-security.yml` has no automated update path. Dependabot covers the Dockerfile at the repository root, not a workflow container image. That digest stays a manual review item until the repo adopts a tool that scans workflow containers. The Dockerfile command is `node dist/src/executor-server.js`, and the Railway root is the repository root.
 
 ## Order
 

@@ -11,9 +11,9 @@ One wallet serves three hosts. The MCP server and the skills stay the same. Only
 
 ## Shared setup
 
-Build the wallet. Start the resolver and the executor in dry-run. The MCP entry in `.mcp.json` starts `dist/src/mcp-server.js` over stdio.
+Build the wallet. Start the executor with `npm run start:executor`, the CLI with `npm run start:cli`, and MCP with `npm run start:mcp`. The MCP entry in `.mcp.json` starts `dist/src/mcp-server.js` over stdio.
 
-Set `EXECUTOR_URL` and `RESOLVER_URL` for the MCP process. Set `EXECUTOR_AUTH_TOKEN` and `RESOLVER_AUTH_TOKEN` to the matching service tokens. The two tokens differ by design. Set `WALLET_APPROVAL_MODE` only to change the human step. The default is `always_approve`.
+The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read `GET /status`. Leave `WHALE_BROADCAST` unset. If `LISTING_TRADER_LIVE` is set, boot throws. If `WITHDRAW_ENABLED` is set, boot throws. `POST /withdraw` is absent.
 
 ## Claude
 
@@ -29,4 +29,4 @@ Install this directory as a Codex plugin, or copy `agents/codex/rocket-wallet.to
 
 ## Security
 
-No host integration adds a money path. Every host reaches the same executor routes. A live listing still passes screening, simulation, the spend reservation, and the Turnkey signing policy. Under `iframe` or `always_approve`, the MCP tool returns `pending_approval` and sends nothing. No integration asks for a seed phrase or a key.
+No host integration adds a money path. Every host reaches the same executor. `swap` and `transfer` stay dry-run in the MCP server. A live executor still requires `WHALE_BROADCAST` set to `true`, plus Turnkey, screening, simulation, the spend reservation, and the signing policy. No integration asks for a seed phrase or a key.

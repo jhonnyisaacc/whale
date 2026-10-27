@@ -4,9 +4,9 @@ Facts are from the public PayBox plugin on 2026-10-21. The plugin is `moonpay/pa
 
 ## Taken
 
-- **Per-credential grants with approval modes.** PayBox grants stay per credential and revocable. Its modes are `autonomous`, `iframe`, and `always_approve`. Rocket now carries the same three names in `src/approval-modes.ts`. The default is `always_approve`. The mode only decides the human step. It never widens a cap.
+- **Per-credential grants with approval modes.** PayBox grants stay per credential and revocable. Its modes are `autonomous`, `iframe`, and `always_approve`. The same three names live in `src/approval-modes.ts`. The parsed default is `always_approve`. The MCP server does not call `approvalGate`, so the mode does not widen a cap.
 - **Granted is not owned.** A credential that exists but holds no grant stays invisible. Rocket applies the same rule. A chain outside `ENABLED_CHAINS` and a router outside the Turnkey policy cannot sign, and `wallet_status` says so.
-- **The plugin shape.** A `.grok-plugin/plugin.json`, a `.mcp.json`, and small skills that carry judgement the manifest cannot. Rocket follows that shape. The MCP tools wrap the existing executor and resolver routes. No second money path exists.
+- **The plugin shape.** A `.grok-plugin/plugin.json`, a `.mcp.json`, and small skills that carry judgement the manifest cannot. Rocket follows that shape. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. `npm run start:mcp` starts them. There is no resolver process in this tree. No second money path exists.
 - **Units and pre-spend checks.** Amounts stay in the smallest unit. A balance read comes before a spend. The recipient gets read back before a human signs. Rocket already converted amounts once at the send boundary. The skills now state the rule where an agent reads it.
 - **Cost before an x402 spend.** The skill states it before the wallet grows an x402 route, so the first route inherits the rule.
 - **Never ask for a seed phrase.** PayBox never asks. Rocket never asks. The Turnkey policy and the keystore already enforce it in code. The skills state it for the agent.
