@@ -6,7 +6,6 @@ import { createBalanceCache, holdingFitsChain, type BalanceCache, type BalanceRe
 import { resolveTokenDecimals } from "./token-decimals.js";
 import { createExecutorState, execute, restoreSpent, type ExecutorDeps, type ExecutorState } from "./executor.js";
 import { chainReader } from "./executor-server/chain-reader.js";
-import { registerWithdraw } from "./executor-server/withdraw-route.js";
 import { closeWithdrawPools } from "./withdraw-journal.js";
 import { latencyLog } from "./latency.js";
 import { anyTokenMatches, bearerOf, buildApp, mutatingLimit, shutdown } from "./http.js";
@@ -165,7 +164,6 @@ export async function createExecutorApp(
   });
   void holdings;
   void fetchImpl;
-  registerWithdraw(app, guard, { config, runtime, signer, secrets });
   app.post("/rebalance", guard, async (request, reply) => {
     const parsed = rebalanceSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });

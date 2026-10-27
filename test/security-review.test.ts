@@ -147,123 +147,31 @@ test("/execute stays dry-run, a thrown quote is a generic 500, and plain text is
   assert.equal(redacted, "connect [redacted] via [redacted]");
 });
 
-test("withdraw requires the admin token, the enable flag, the cap, and the allowlist", async () => {
+test("WITHDRAW_ENABLED is closed and POST /withdraw is not registered", async () => {
   const config = loadConfig({
-    EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456",
+    EXECUTOR_AUTH_TOKEN: tokenAuth,
+    RESOLVER_AUTH_TOKEN: "resolver-token-123456",
     ADMIN_TOKEN: adminAuth,
-    WITHDRAW_ENABLED: "true",
     OWNER_WITHDRAW_ADDRESSES: owner,
-    MAX_WITHDRAW_AMOUNT: "1",
   });
   const app = await createExecutorApp(config, runtime(config, [], async () => ({ priceImpactPct: null, feeUsd: 0, buyAmount: "0" })), null, [], []);
-  const headers = { "content-type": "application/json", authorization: `Bearer ${tokenAuth}`, "x-admin-token": adminAuth };
-  const trading = await app.inject({
-    method: "POST",
-    url: "/withdraw",
-    headers: { "content-type": "application/json", authorization: `Bearer ${tokenAuth}` },
-    payload: { to: owner, amount: 1, chainKey: "base" },
-  });
-  assert.equal(trading.statusCode, 401);
-  const noBearer = await app.inject({
+  const missing = await app.inject({
     method: "POST",
     url: "/withdraw",
     headers: { "content-type": "application/json", "x-admin-token": adminAuth },
     payload: { to: owner, amount: 1, chainKey: "base" },
   });
-  assert.equal(noBearer.statusCode, 401);
-  const disabled = await createExecutorApp(loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", ADMIN_TOKEN: adminAuth }), runtime(config, [], async () => ({ priceImpactPct: null, feeUsd: 0, buyAmount: "0" })), null, [], []);
-  const off = await disabled.inject({
-    method: "POST",
-    url: "/withdraw",
-    headers,
-    payload: { to: owner, amount: 1, chainKey: "base" },
-  });
-  assert.equal(off.statusCode, 403);
-  assert.equal(off.json().error, "withdraw is disabled");
-  const over = await app.inject({
-    method: "POST",
-    url: "/withdraw",
-    headers,
-    payload: { to: owner, amount: 5, chainKey: "base" },
-  });
-  assert.equal(over.statusCode, 403);
-  const foreign = await app.inject({
-    method: "POST",
-    url: "/withdraw",
-    headers,
-    payload: { to: "0x3333333333333333333333333333333333333333", amount: 1, chainKey: "base" },
-  });
-  assert.equal(foreign.statusCode, 403);
-  const tokenDenied = await app.inject({
-    method: "POST",
-    url: "/withdraw",
-    headers,
-    payload: { to: owner, amount: 1, chainKey: "base", mint: "0x4444444444444444444444444444444444444444", decimals: 6 },
-  });
-  assert.equal(tokenDenied.statusCode, 403);
-  const planned = await app.inject({
-    method: "POST",
-    url: "/withdraw",
-    headers,
-    payload: { to: owner, amount: 1, chainKey: "base" },
-  });
-  assert.equal(planned.statusCode, 200);
-  assert.equal(planned.json().decision, "would_send");
+  assert.equal(missing.statusCode, 404);
   await app.close();
-  await disabled.close();
-  assert.throws(() => assertBoot(loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", WITHDRAW_ENABLED: "true" }), "executor"), /OWNER_WITHDRAW_ADDRESSES/);
-  assert.throws(() => assertBoot(loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", WITHDRAW_ENABLED: "true", OWNER_WITHDRAW_ADDRESSES: "not-an-address" }), "executor"), /invalid address/);
-});
-
-test("the database kill switch leaves withdraw open and the env switch holds it at would_send", async () => {
-  const config = loadConfig({
-    EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456",
-    ADMIN_TOKEN: adminAuth,
-    WHALE_BROADCAST: "true",
-    WITHDRAW_ENABLED: "true",
-    OWNER_WITHDRAW_ADDRESSES: owner,
-    MAX_WITHDRAW_AMOUNT: "1",
-  });
-  const headers = { "content-type": "application/json", authorization: `Bearer ${tokenAuth}`, "x-admin-token": adminAuth };
-  const payload = { to: owner, amount: 1, chainKey: "base" };
-  const signer: TransactionSigner = {
-    backend: "keystore",
-    evmAddress: () => owner,
-    solanaAddress: () => null,
-    async signEvm() {
-      return "0x";
-    },
-    async signSolana() {
-      return new Uint8Array();
-    },
-    async signHyperliquid() {
-      return { r: "0x01", s: "0x02", v: 27 };
-    },
-  };
-  const dbKilled = await createExecutorApp(config, { ...runtime(config, [], async () => ({ priceImpactPct: null, feeUsd: 0, buyAmount: "0" })), killSwitchEnabled: async () => true }, signer, [], []);
-  const reachable = await dbKilled.inject({ method: "POST", url: "/withdraw", headers, payload });
-  assert.equal(reachable.statusCode, 409);
-  assert.equal(reachable.json().error, "live withdraw needs an idempotencyKey");
-  await dbKilled.close();
-  const envConfig = loadConfig({
-    EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456",
-    ADMIN_TOKEN: adminAuth,
-    WHALE_BROADCAST: "true",
-    WITHDRAW_ENABLED: "true",
-    OWNER_WITHDRAW_ADDRESSES: owner,
-    MAX_WITHDRAW_AMOUNT: "1",
-    KILL_SWITCH: "true",
-  });
-  const envKilled = await createExecutorApp(envConfig, runtime(envConfig, [], async () => ({ priceImpactPct: null, feeUsd: 0, buyAmount: "0" })), signer, [], []);
-  const held = await envKilled.inject({ method: "POST", url: "/withdraw", headers, payload });
-  assert.equal(held.statusCode, 200);
-  assert.equal(held.json().decision, "would_send");
-  await envKilled.close();
-  const open = await createExecutorApp(config, runtime(config, [], async () => ({ priceImpactPct: null, feeUsd: 0, buyAmount: "0" })), signer, [], []);
-  const noKey = await open.inject({ method: "POST", url: "/withdraw", headers, payload });
-  assert.equal(noKey.statusCode, 409);
-  assert.equal(noKey.json().error, "live withdraw needs an idempotencyKey");
-  await open.close();
+  const allowlisted = { WITHDRAW_ENABLED: "true", OWNER_WITHDRAW_ADDRESSES: owner };
+  assert.throws(() => assertBoot(config, "executor", allowlisted), /WITHDRAW_ENABLED/);
+  assert.throws(() => assertBoot(config, "executor", { WITHDRAW_ENABLED: "false", OWNER_WITHDRAW_ADDRESSES: owner }), /WITHDRAW_ENABLED/);
+  for (const value of ["true", "false", "1", ""]) {
+    assert.throws(
+      () => loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", WITHDRAW_ENABLED: value }),
+      /WITHDRAW_ENABLED/,
+    );
+  }
 });
 
 test("the withdraw journal blocks a duplicate key and a second asset scope keeps its own cap", async () => {
