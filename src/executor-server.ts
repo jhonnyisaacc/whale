@@ -30,7 +30,6 @@ import {
   spendDay,
   spentOnDay,
   type SpendScope,
-  strategyKey,
 } from "./spend.js";
 import { planRebalance } from "./rebalance.js";
 import { screenToken } from "./screening.js";
@@ -156,34 +155,10 @@ export async function createExecutorApp(
   app.get("/provider-health", { preHandler: app.auth([app.verifyBearer]) }, async () => ({ providers: guardFor(config).snapshot() }));
   app.post("/execute", { config: mutatingLimit }, async (request, reply) => {
     const presented = bearerOf(request);
-    const strategyPeek = Object.values(config.strategies).some((strategy) => anyTokenMatches(presented, strategy.tokens));
-    if (!anyTokenMatches(presented, config.executorAuthTokens) && !strategyPeek) return reply.code(401).send({ error: "unauthorized" });
+    if (!anyTokenMatches(presented, config.executorAuthTokens)) return reply.code(401).send({ error: "unauthorized" });
     const parsed = intentSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
-    if (anyTokenMatches(presented, config.executorAuthTokens)) {
-      const report = await app.drain.track(() => execute(parsed.data, { ...runtime, mode: "dry_run" }));
-      console.log(JSON.stringify({ report: { ...report, latency: latencyLog(report.latency) } }));
-      await notify(config, report, secrets);
-      return report;
-    }
-    const strategyEntry = Object.entries(config.strategies).find(([, strategy]) => anyTokenMatches(presented, strategy.tokens));
-    if (!strategyEntry) return reply.code(401).send({ error: "unauthorized" });
-    const [strategyId, strategy] = strategyEntry;
-    const intent: SwapIntent = { ...parsed.data, idempotencyKey: strategyKey(strategyId, parsed.data.idempotencyKey) };
-    if (parsed.data.notionalUsd > strategy.maxUsdPerTrade) {
-      return {
-        idempotencyKey: intent.idempotencyKey,
-        mode: runtime.mode,
-        decision: "skipped",
-        reason: `strategy ${strategyId} maxUsdPerTrade cap ${strategy.maxUsdPerTrade} USD`,
-        venue: parsed.data.token.chainKey,
-        route: null,
-        latency: { alertReceivedMs: parsed.data.receivedAtMs },
-      };
-    }
-    const report = await app.drain.track(() =>
-      execute(intent, { ...runtime, spendScope: { strategyId, capUsd: strategy.dailyUsdCap } }),
-    );
+    const report = await app.drain.track(() => execute(parsed.data, { ...runtime, mode: "dry_run" }));
     console.log(JSON.stringify({ report: { ...report, latency: latencyLog(report.latency) } }));
     await notify(config, report, secrets);
     return report;
