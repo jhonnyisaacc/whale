@@ -251,9 +251,9 @@ test("signing policy denies an empty router list, a foreign router, and a hyperl
 });
 
 test("live mode refuses the local keystore", () => {
-  const live = loadConfig({ LISTING_TRADER_LIVE: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
+  const live = loadConfig({ WHALE_BROADCAST: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
   assert.throws(() => loadManagedSigner({}, live), /live mode requires Turnkey/);
-  const flagged = loadConfig({ LISTING_TRADER_LIVE: "true", ALLOW_LOCAL_SIGNER: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
+  const flagged = loadConfig({ WHALE_BROADCAST: "true", ALLOW_LOCAL_SIGNER: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
   assert.throws(() => loadManagedSigner({ ALLOW_LOCAL_SIGNER: "true" }, flagged), /live mode requires Turnkey/);
 });
 
@@ -438,7 +438,7 @@ test("screening fails closed on a bad body, a honeypot, and a Blockaid warning",
     ),
     "deny",
   );
-  const live = loadConfig({ LISTING_TRADER_LIVE: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
+  const live = loadConfig({ WHALE_BROADCAST: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
   assert.equal(live.screening, true);
   assert.equal(loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" }).screening, false);
 });

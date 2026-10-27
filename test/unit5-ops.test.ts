@@ -4,7 +4,6 @@ import { loadConfig } from "../src/config.js";
 import { createExecutorState, execute, type ExecutorDeps } from "../src/executor.js";
 import { createExecutorApp } from "../src/executor-server.js";
 import { buildApp, shutdown } from "../src/http.js";
-import { createBalanceCache } from "../src/balances.js";
 import { EXECUTOR_LOCK_SQL, RESERVE_SUM_SCOPED_SQL, createMemoryJournal, listingKey, lockAcquired, reserveDecision, strategyKey } from "../src/spend.js";
 import { createExecutor } from "../src/index.js";
 import { landedSend } from "./fixtures.js";
@@ -12,7 +11,6 @@ import { landedSend } from "./fixtures.js";
 const EXEC = "executor-token-123456";
 const RES = "resolver-token-123456";
 const STRAT = "strategy-token-12345";
-const ADMIN = "admin-token-1234567";
 
 function intent(key = "k1") {
   return {
@@ -77,38 +75,18 @@ test("shutdown drains: mutating routes 503 and it waits for in-flight work", asy
   assert.equal((await pending).statusCode, 200);
 });
 
-test("strategy token executes live-namespaced and enforces its own cap", async () => {
-  const config = loadConfig({
-    EXECUTOR_AUTH_TOKEN: EXEC, RESOLVER_AUTH_TOKEN: RES, ADMIN_TOKEN: ADMIN,
-    STRATEGY_CAPS_JSON: JSON.stringify({ copy1: { dailyUsdCap: 50, maxUsdPerTrade: 10, token: STRAT } }),
+test("a bearer that is not an executor token gets 401 on /execute", async () => {
+  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: EXEC, RESOLVER_AUTH_TOKEN: RES });
+  const app = await createExecutorApp(config, runtime(config), null, [], []);
+  const stranger = await app.inject({
+    method: "POST",
+    url: "/execute",
+    headers: { authorization: `Bearer ${STRAT}`, "content-type": "application/json" },
+    payload: intent("s1"),
   });
-  const scopes: unknown[] = [];
-  const reads: string[] = [];
-  const balances = createBalanceCache(async (holding) => {
-    reads.push(holding.symbol);
-    return 20;
-  }, 60_000);
-  const wired = createExecutor(config, null, null, { balances, priceOf: () => 1 }).deps;
-  const rt: ExecutorDeps = {
-    ...wired,
-    mode: "live",
-    quoteHop: async () => ({ priceImpactPct: 0.1, feeUsd: 0, buyAmount: "10", signable: true }),
-    send: async () => landedSend(),
-    recordSpend: async (_k, _u, scope) => {
-      scopes.push(scope);
-      return "reserved";
-    },
-    commitSpend: async () => undefined,
-    releaseSpend: async () => undefined,
-  };
-  const app = await createExecutorApp(config, rt, null, [], []);
-  const ok = await app.inject({ method: "POST", url: "/execute", headers: { authorization: `Bearer ${STRAT}`, "content-type": "application/json" }, payload: intent("s1") });
-  assert.equal(ok.json().idempotencyKey, "copy1:s1");
-  assert.equal(ok.json().decision, "sent", "the strategy route reads live balances through the runtime the server builds");
-  assert.deepEqual(reads, ["USDC"]);
-  assert.deepEqual(scopes, [{ strategyId: "copy1", capUsd: 50 }]);
-  const tooBig = await app.inject({ method: "POST", url: "/execute", headers: { authorization: `Bearer ${STRAT}`, "content-type": "application/json" }, payload: { ...intent("s2"), notionalUsd: 11 } });
-  assert.match(tooBig.json().reason, /strategy.*cap|maxUsdPerTrade/i);
+  assert.equal(stranger.statusCode, 401);
+  assert.equal(stranger.json().error, "unauthorized");
+  assert.equal(JSON.stringify(stranger.json()).includes("txHash"), false);
   await app.close();
 });
 
@@ -160,7 +138,7 @@ test("listing and strategy idempotency keys never alias", () => {
   assert.notEqual(listingKey("copy1:s1"), strategyKey("copy1", "s1"));
   assert.throws(
     () => loadConfig({ STRATEGY_CAPS_JSON: JSON.stringify({ listing: { dailyUsdCap: 5, maxUsdPerTrade: 5, token: STRAT } }) }),
-    /invalid entry for listing/,
+    /STRATEGY_CAPS_JSON/,
   );
 });
 

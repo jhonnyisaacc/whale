@@ -156,7 +156,7 @@ test("the Jupiter swap body asks for a capped veryHigh priority fee, or a Jito t
 });
 
 test("live boot requires a 0x key, a unique Kyber client id, and https on every RPC in a list", () => {
-  const live = { LISTING_TRADER_LIVE: "true", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "rocket-trader" };
+  const live = { WHALE_BROADCAST: "true", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "rocket-trader" };
   assert.doesNotThrow(() => assertLiveEdges(loadConfig(live), {}));
   assert.throws(() => assertLiveEdges(loadConfig({ ...live, ZEROX_API_KEY: "" }), {}), /ZEROX_API_KEY/);
   assert.throws(() => assertLiveEdges(loadConfig({ ...live, ZEROX_SETTLER_ALLOWLIST_JSON: "" }), {}), /ZEROX_SETTLER_ALLOWLIST_JSON/);

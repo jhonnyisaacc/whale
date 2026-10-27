@@ -83,7 +83,7 @@ function runtime(config: ReturnType<typeof loadConfig>, sends: string[], quote: 
 
 test("live mode does not send a token the screener denies", async () => {
   resetExecutorState();
-  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", LISTING_TRADER_LIVE: "true" });
+  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", WHALE_BROADCAST: "true" });
   const sends: string[] = [];
   const report = await execute(intent(), {
     ...runtime(config, sends, async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10" })),
@@ -219,7 +219,7 @@ test("the database kill switch leaves withdraw open and the env switch holds it 
   const config = loadConfig({
     EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456",
     ADMIN_TOKEN: adminAuth,
-    LISTING_TRADER_LIVE: "true",
+    WHALE_BROADCAST: "true",
     WITHDRAW_ENABLED: "true",
     OWNER_WITHDRAW_ADDRESSES: owner,
     MAX_WITHDRAW_AMOUNT: "1",
@@ -248,7 +248,7 @@ test("the database kill switch leaves withdraw open and the env switch holds it 
   const envConfig = loadConfig({
     EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456",
     ADMIN_TOKEN: adminAuth,
-    LISTING_TRADER_LIVE: "true",
+    WHALE_BROADCAST: "true",
     WITHDRAW_ENABLED: "true",
     OWNER_WITHDRAW_ADDRESSES: owner,
     MAX_WITHDRAW_AMOUNT: "1",
@@ -338,7 +338,7 @@ test("a router allowed on one chain is denied on another, and a token sell canno
 });
 
 test("live mode pins aggregator hosts and private service URLs", () => {
-  const live = { LISTING_TRADER_LIVE: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "listing-trader-test" };
+  const live = { WHALE_BROADCAST: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "listing-trader-test" };
   assert.throws(() => assertBoot(loadConfig({ ...live, JUPITER_API_BASE: "https://evil.example/swap/v1" }), "executor"), /pins jupiterBase/);
   assert.throws(() => assertBoot(loadConfig({ ...live, RESOLVER_URL: "http://evil.example/alert" }), "executor"), /https or a railway.internal host/);
   assert.doesNotThrow(() => assertBoot(loadConfig({ ...live, RESOLVER_URL: "http://resolver.railway.internal:8080" }), "executor"));
@@ -347,7 +347,7 @@ test("live mode pins aggregator hosts and private service URLs", () => {
 
 test("the kill switch skips a live buy and a missing balance read does not trade", async () => {
   resetExecutorState();
-  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", LISTING_TRADER_LIVE: "true", RESOLVER_URL: "http://resolver.railway.internal:8080" });
+  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", WHALE_BROADCAST: "true", RESOLVER_URL: "http://resolver.railway.internal:8080" });
   const sends: string[] = [];
   const stopped = await execute(intent(), { ...runtime(config, sends, async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10" })), killSwitchEnabled: async () => true });
   assert.equal(stopped.decision, "skipped");
@@ -376,7 +376,7 @@ test("keystore headers are authenticated, buffers zero, and the passphrase promp
   zeroLoadedSecrets();
   assert.equal(secret.reveal(), "");
   const env = { KEYSTORE_PASSPHRASE: "correct horse battery", ALLOW_LOCAL_SIGNER: "true" };
-  assert.throws(() => loadManagedSigner(env, loadConfig({ LISTING_TRADER_LIVE: "true", ALLOW_LOCAL_SIGNER: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" })), /refuses raw key material in KEYSTORE_PASSPHRASE/);
+  assert.throws(() => loadManagedSigner(env, loadConfig({ WHALE_BROADCAST: "true", ALLOW_LOCAL_SIGNER: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456" })), /refuses raw key material in KEYSTORE_PASSPHRASE/);
   assert.equal(env.KEYSTORE_PASSPHRASE, undefined);
   let written = "";
   const listeners = new Set<(chunk: Buffer) => void>();
@@ -458,4 +458,17 @@ test("jupiter quotes with the slippage left after impact and refuses a quote wit
   );
   assert.equal(new URL(quotes[0] ?? "http://x").searchParams.get("slippageBps"), "70");
   assert.deepEqual(swaps, []);
+});
+
+test("loadConfig throws when LISTING_TRADER_LIVE is set", () => {
+  assert.throws(() => loadConfig({ LISTING_TRADER_LIVE: "true" }), /LISTING_TRADER_LIVE/);
+  assert.throws(() => loadConfig({ LISTING_TRADER_LIVE: "false" }), /LISTING_TRADER_LIVE/);
+});
+
+test("loadConfig throws when STRATEGY_CAPS_JSON is set", () => {
+  assert.throws(
+    () => loadConfig({ STRATEGY_CAPS_JSON: JSON.stringify({ copy1: { dailyUsdCap: 50, maxUsdPerTrade: 10, token: "strategy-token-123456" } }) }),
+    /STRATEGY_CAPS_JSON/,
+  );
+  assert.throws(() => loadConfig({ STRATEGY_CAPS_JSON: "" }), /STRATEGY_CAPS_JSON/);
 });

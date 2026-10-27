@@ -1,10 +1,9 @@
 import { CHAINS, QUOTE_ASSETS, chainByKey, type QuoteAsset, type QuoteAssets } from "../chains.js";
 import { kyberSupports } from "../aggregators.js";
 import { DEFAULT_MAX_VALUE_WEI, SOLANA_BASE_PROGRAMS } from "../signing-policy.js";
-import { LISTING_SCOPE } from "../spend.js";
 import { chainAddressMap, reorgDepths, routerAllowlist, spendTimezone, splitList } from "./guard.js";
 import { isSolanaAddress } from "../signer.js";
-import { DEFAULT_KYBER_CLIENT_ID, type AppConfig, type ApprovalSeed, type StrategyCap } from "./types.js";
+import { DEFAULT_KYBER_CLIENT_ID, type AppConfig, type ApprovalSeed } from "./types.js";
 import { manifestRouters, parseDeploymentManifest } from "../deployment-manifest.js";
 import { supportByChain } from "../support.js";
 export type { AppConfig, ApprovalSeed, StrategyCap } from "./types.js";
@@ -78,6 +77,9 @@ function quoteAssets(env: NodeJS.ProcessEnv): QuoteAssets {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (env.AUTH_TOKEN) throw new Error("AUTH_TOKEN was split into EXECUTOR_AUTH_TOKEN and RESOLVER_AUTH_TOKEN. Set those and unset AUTH_TOKEN.");
+  if (env.LISTING_TRADER_LIVE !== undefined) throw new Error("LISTING_TRADER_LIVE is closed");
+  if (env.STRATEGY_CAPS_JSON !== undefined) throw new Error("STRATEGY_CAPS_JSON is closed");
+  const live = env.WHALE_BROADCAST === "true";
   const maxSlippageBps = intEnv(env, "MAX_SLIPPAGE_BPS", 100);
   const slippageHardMaxBps = intEnv(env, "SLIPPAGE_HARD_MAX_BPS", 300);
   if (maxSlippageBps > slippageHardMaxBps) {
@@ -101,7 +103,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dexscreenerSlugOverrides = parsed as Record<string, string>;
   }
   return {
-    live: env.LISTING_TRADER_LIVE === "true",
+    live,
     killSwitch: env.KILL_SWITCH === "1" || env.KILL_SWITCH === "true",
     port: intEnv(env, "PORT", 8080),
     maxUsdPerTrade: intEnv(env, "MAX_USD_PER_TRADE", 5),
@@ -157,7 +159,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     targetNativeUsd: intEnv(env, "TARGET_NATIVE_USD", 2),
     executorAuthTokens: splitList(env.EXECUTOR_AUTH_TOKEN),
     resolverAuthTokens: splitList(env.RESOLVER_AUTH_TOKEN),
-    strategies: strategyCaps(env.STRATEGY_CAPS_JSON),
+    strategies: {},
     listingRateLimitPerMin: intEnv(env, "LISTING_RATE_LIMIT_PER_MIN", 60),
     resolverTimeoutMs: intEnv(env, "RESOLVER_TIMEOUT_MS", 6_500),
     resolverFetchTimeoutMs: intEnv(env, "RESOLVER_FETCH_TIMEOUT_MS", 5_000),
@@ -173,7 +175,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     minVolume24hUsd: intEnv(env, "MIN_VOLUME_24H_USD", 10_000),
     hyperliquidAccount: env.HYPERLIQUID_ACCOUNT_ADDRESS ?? null,
     allowHotApproval: env.ALLOW_HOT_APPROVAL === "true",
-    screening: screeningEnabled(env, env.LISTING_TRADER_LIVE === "true"),
+    screening: screeningEnabled(env, live),
     maxTokenTax: taxCap(env),
     confirmTimeoutMs: intEnv(env, "CONFIRM_TIMEOUT_MS", 30_000),
     reconcileAfterMinutes: intEnv(env, "RECONCILE_AFTER_MINUTES", 10),
@@ -248,25 +250,6 @@ function approvalSeed(env: NodeJS.ProcessEnv): ApprovalSeed[] {
     }
     return [{ chainId: item.chainId, token: item.token, spender: item.spender, owner: item.owner, amount: item.amount }];
   });
-}
-
-const STRATEGY_ID = /^[a-z0-9][a-z0-9_-]{0,39}$/;
-
-function strategyCaps(raw: string | undefined): Record<string, StrategyCap> {
-  if (!raw) return {};
-  const parsed: unknown = JSON.parse(raw);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("STRATEGY_CAPS_JSON must be an object");
-  const out: Record<string, StrategyCap> = {};
-  for (const [id, row] of Object.entries(parsed)) {
-    const item = (typeof row === "object" && row !== null ? row : {}) as { dailyUsdCap?: unknown; maxUsdPerTrade?: unknown; token?: unknown };
-    const tokens = Array.isArray(item.token) ? item.token.filter((value): value is string => typeof value === "string") : splitList(typeof item.token === "string" ? item.token : "");
-    const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
-    if (!STRATEGY_ID.test(id) || id === LISTING_SCOPE || !positive(item.dailyUsdCap) || !positive(item.maxUsdPerTrade) || tokens.length === 0) {
-      throw new Error(`STRATEGY_CAPS_JSON has an invalid entry for ${id}`);
-    }
-    out[id] = { dailyUsdCap: item.dailyUsdCap, maxUsdPerTrade: item.maxUsdPerTrade, tokens };
-  }
-  return out;
 }
 
 // Worst case for one send: two legs, each waiting up to 3x CONFIRM_TIMEOUT_MS (the Solana bound; EVM is 2x),

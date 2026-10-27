@@ -199,7 +199,7 @@ function screeningFetch(hosts: string[], bodies: string[]): typeof fetch {
 }
 
 test("a chain Blockaid does not cover is screened by GoPlus alone, and a chain GoPlus does not cover is denied", async () => {
-  const config = loadConfig({ TOKEN_SCREENING: "true", LISTING_TRADER_LIVE: "true", BLOCKAID_API_KEY: "blockaid-test" });
+  const config = loadConfig({ TOKEN_SCREENING: "true", BLOCKAID_API_KEY: "blockaid-test" });
   const hosts: string[] = [];
   const bodies: string[] = [];
   const uncovered = await screenToken(config, { chainKey: "uncovered", chain: { kind: "evm", chainId: 8453 }, contract: TOKEN }, screeningFetch(hosts, bodies));
