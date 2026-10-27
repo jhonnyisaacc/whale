@@ -79,6 +79,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (env.AUTH_TOKEN) throw new Error("AUTH_TOKEN was split into EXECUTOR_AUTH_TOKEN and RESOLVER_AUTH_TOKEN. Set those and unset AUTH_TOKEN.");
   if (env.LISTING_TRADER_LIVE !== undefined) throw new Error("LISTING_TRADER_LIVE is closed");
   if (env.STRATEGY_CAPS_JSON !== undefined) throw new Error("STRATEGY_CAPS_JSON is closed");
+  if (env.WITHDRAW_ENABLED !== undefined) throw new Error("WITHDRAW_ENABLED is closed");
   const live = env.WHALE_BROADCAST === "true";
   const maxSlippageBps = intEnv(env, "MAX_SLIPPAGE_BPS", 100);
   const slippageHardMaxBps = intEnv(env, "SLIPPAGE_HARD_MAX_BPS", 300);
@@ -166,7 +167,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     resolverMaxBodyBytes: intEnv(env, "RESOLVER_MAX_BODY_BYTES", 16 * 1024 * 1024),
     reconcileIntervalMs: intEnv(env, "RECONCILE_INTERVAL_MS", 5 * 60 * 1000),
     adminToken: env.ADMIN_TOKEN ?? null,
-    withdrawEnabled: env.WITHDRAW_ENABLED === "true",
+    withdrawEnabled: false,
     maxWithdrawAmount,
     maxWithdrawDailyAmount: intEnv(env, "MAX_WITHDRAW_DAILY_AMOUNT", maxWithdrawAmount),
     tokenRecoveryAllowlist: splitList(env.TOKEN_RECOVERY_ALLOWLIST),

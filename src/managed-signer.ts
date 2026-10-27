@@ -299,5 +299,6 @@ export function assertBoot(config: AppConfig, service: "executor" | "resolver", 
     }
   }
   if (env.RAILWAY_PUBLIC_DOMAIN) throw new Error("a public Railway domain is set. Remove it and use the private network.");
+  if (env.WITHDRAW_ENABLED !== undefined || config.withdrawEnabled) throw new Error("WITHDRAW_ENABLED is closed");
   assertLiveEdges(config, env);
 }
