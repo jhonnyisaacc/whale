@@ -43,7 +43,8 @@ async function callHttp(deps: McpDeps, route: string): Promise<unknown> {
 }
 
 function commandFrom(name: string, args: Record<string, unknown>): WalletCommand {
-  if (name === "quote" || name === "swap" || name === "bridge" || name === "balance" || name === "transfer") {
+  if (name === "swap") return { kind: "swap", ...args, mode: "dry_run" } as WalletCommand;
+  if (name === "quote" || name === "bridge" || name === "balance" || name === "transfer") {
     return { kind: name, ...args } as WalletCommand;
   }
   throw new Error(`unknown tool ${name}`);
@@ -52,7 +53,10 @@ function commandFrom(name: string, args: Record<string, unknown>): WalletCommand
 export async function callTool(deps: McpDeps, name: string, args: Record<string, unknown>): Promise<unknown> {
   if (name === "wallet_status") return callHttp(deps, "/status");
   const execute = deps.runCommand ?? run;
-  return execute(commandFrom(name, args));
+  const command = commandFrom(name, args);
+  if (command.kind !== "quote" && command.kind !== "balance") return execute(command);
+  const { commandDeps } = await import("./command-callers.js");
+  return execute(command, commandDeps(process.env, command));
 }
 
 type JsonRpcRequest = { jsonrpc?: string; id?: unknown; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } };
