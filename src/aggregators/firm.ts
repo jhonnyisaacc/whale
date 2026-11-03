@@ -10,7 +10,7 @@ export async function firmJupiter(config: AppConfig, hop: QuoteHop, slippageBps:
   return jupiterQuote(config, body);
 }
 
-const jupiterSwapSchema = z.object({ swapTransaction: z.string().min(1), lastValidBlockHeight: z.number().int().optional() }).passthrough();
+const jupiterSwapSchema = z.object({ swapTransaction: z.string().min(1), lastValidBlockHeight: z.number().int().optional() }).loose();
 
 function jupiterFees(config: AppConfig): Record<string, unknown> {
   if (config.jitoUrl) return { jitoTipLamports: config.jitoTipLamports };

@@ -84,37 +84,37 @@ export function providersFor(chain: ChainRef, config: AppConfig): QuoteProviderI
   return out;
 }
 
-export const oneInchSchema = z.object({ dstAmount: z.string() }).passthrough();
+export const oneInchSchema = z.object({ dstAmount: z.string() }).loose();
 export const kyberSchema = z
   .object({
     data: z.object({
-      routeSummary: z.object({ amountOut: z.string(), gasUsd: z.string().optional(), routerAddress: z.string() }).passthrough(),
+      routeSummary: z.object({ amountOut: z.string(), gasUsd: z.string().optional(), routerAddress: z.string() }).loose(),
     }),
   })
-  .passthrough();
+  .loose();
 export const kyberBuildSchema = z
   .object({ data: z.object({ data: z.string(), routerAddress: z.string(), transactionValue: z.string().optional(), amountOut: z.string().optional() }) })
-  .passthrough();
-export const veloraSchema = z.object({ priceRoute: z.object({ destAmount: z.string(), gasCostUSD: z.string().optional() }).passthrough() }).passthrough();
+  .loose();
+export const veloraSchema = z.object({ priceRoute: z.object({ destAmount: z.string(), gasCostUSD: z.string().optional() }).loose() }).loose();
 export const okxSchema = z
   .object({
     code: z.string(),
-    data: z.array(z.object({ toTokenAmount: z.string(), tradeFee: z.string().optional() }).passthrough()),
+    data: z.array(z.object({ toTokenAmount: z.string(), tradeFee: z.string().optional() }).loose()),
   })
-  .passthrough();
+  .loose();
 
 export const lifiBridgeSchema = z
   .object({
     estimate: z.object({ toAmount: z.string(), feeCosts: z.array(z.object({ amountUSD: z.string().optional() })).optional() }).optional(),
     action: z.object({ toAddress: z.string().optional() }).optional(),
   })
-  .passthrough();
+  .loose();
 export const relayBridgeSchema = z
   .object({
     details: z.object({ recipient: z.string(), currencyOut: z.object({ amountUsd: z.string().optional() }).optional() }),
-    fees: z.record(z.object({ amountUsd: z.string().optional() }).passthrough()),
+    fees: z.record(z.string(), z.object({ amountUsd: z.string().optional() }).loose()),
   })
-  .passthrough();
+  .loose();
 export const debridgeSchema = z
   .object({
     estimation: z.object({
@@ -122,10 +122,10 @@ export const debridgeSchema = z
       dstChainTokenOut: z.object({ amount: z.string(), approximateUsdValue: z.number().optional() }),
     }),
   })
-  .passthrough();
+  .loose();
 export const acrossSchema = z
   .object({ expectedOutputAmount: z.string(), fees: z.object({ total: z.object({ amountUsd: z.string() }) }) })
-  .passthrough();
+  .loose();
 
 export function empty(): HopQuote {
   return { priceImpactPct: null, feeUsd: 0, buyAmount: "0", signable: false };

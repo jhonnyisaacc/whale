@@ -24,7 +24,7 @@ export async function sendJito(fetchImpl: typeof fetch, url: string, signed: Uin
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "sendTransaction", params: [Buffer.from(signed).toString("base64"), { encoding: "base64" }] }),
   }, false);
   if (!response.ok) throw new Error("jito send failed");
-  const body = z.object({ error: z.unknown().optional() }).passthrough().parse(JSON.parse(await readVendorText(response)));
+  const body = z.object({ error: z.unknown().optional() }).loose().parse(JSON.parse(await readVendorText(response)));
   if (body.error) throw new Error("jito send failed");
 }
 

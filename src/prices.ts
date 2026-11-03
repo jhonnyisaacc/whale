@@ -36,7 +36,7 @@ const NATIVE_COINGECKO_ID: Record<string, string> = {
   MON: "monad",
 };
 
-const priceSchema = z.record(z.string(), z.object({ usd: z.number() }).passthrough());
+const priceSchema = z.record(z.string(), z.object({ usd: z.number() }).loose());
 
 export function priceKey(holding: Holding): string | null {
   if (!holding.chainKey) return null;
