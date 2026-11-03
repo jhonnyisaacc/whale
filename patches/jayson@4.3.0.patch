@@ -1,0 +1,18 @@
+diff --git a/lib/utils.js b/lib/utils.js
+index 0fa2435ecf3bddfbea92ee8e1fe38b44adb2fae7..5023f1912e9de682c17c8cadc8cb9c66f12e6c8a 100644
+--- a/lib/utils.js
++++ b/lib/utils.js
+@@ -1,7 +1,11 @@
+ 'use strict';
+ 
+-const StreamValues = require('stream-json/streamers/StreamValues');
+-const Verifier = require('stream-json/utils/Verifier');
++const streamValuesModule = require('stream-json/streamers/stream-values.js');
++const streamValues = streamValuesModule.default || streamValuesModule;
++const StreamValues = { withParser: (options) => streamValues.withParserAsStream(options) };
++const verifierModule = require('stream-json/utils/verifier.js');
++const verifierFactory = verifierModule.default || verifierModule;
++function Verifier(options) { return verifierFactory.asStream(options); }
+ const JSONstringify = require('json-stringify-safe');
+ const uuid = require('uuid').v4;
+ 

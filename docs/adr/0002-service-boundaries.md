@@ -6,7 +6,7 @@ Accepted. Rocket stays read-only. This tree is not imported by `rocket/`.
 
 ## Decision
 
-One HTTP process, the executor, owns quotes, the spend journal, and signing. This tree has no resolver process. The Dockerfile command is `node dist/src/executor-server.js`, and the Railway root is the repository root. `npm run start:executor` runs that same file. `npm run start:cli` and `npm run start:mcp` are the local CLI and MCP scripts. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`.
+One HTTP process, the executor, owns quotes, the spend journal, and signing. This tree has no resolver process. The Dockerfile command is `node dist/src/executor-server.js`, and the Railway root is the repository root. `pnpm run start:executor` runs that same file. `pnpm run start:cli` and `pnpm run start:mcp` are the local CLI and MCP scripts. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`.
 
 `GET /health` is open and returns `{"ok":true}`. Mutating routes require `Authorization: Bearer` compared with `EXECUTOR_AUTH_TOKEN` by SHA-256 and `timingSafeEqual`. Fastify sets a 32 KiB body limit, a 10 second request timeout, a global rate limit of 60 requests a minute, and a limit of 10 a minute on `POST /execute` and `POST /rebalance`. A POST that is not JSON is a 415. Request bodies and aggregator responses are parsed with Zod. A shape that does not match is a skip or a 400, not a guess.
 

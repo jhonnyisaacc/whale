@@ -26,11 +26,11 @@ The layout follows the Binah rules at <https://github.com/jhonnyisaacc/binah> (r
 
 ## How an agent calls Whale
 
-MCP. `npm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, and `.muse-plugin`. The skill is `skills/whale-wallet/SKILL.md`.
+MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, and `.muse-plugin`. The skill is `skills/whale-wallet/SKILL.md`.
 
-CLI. After `npm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `balance`, and `transfer` are the other commands. `bridge` is refused on the CLI until a quote can be fetched.
+CLI. After `pnpm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `balance`, and `transfer` are the other commands. `bridge` is refused on the CLI until a quote can be fetched.
 
-HTTP. `npm run start:executor` serves `/health`, `/status`, `/execute`, `/rebalance`, and `/withdraw`. `/execute` with the executor token forces dry-run. A strategy bearer can ask the engine to run under that strategy's cap. This service does not accept listing alerts.
+HTTP. `pnpm run start:executor` serves `/health`, `/status`, `/execute`, `/rebalance`, and `/withdraw`. `/execute` with the executor token forces dry-run. A strategy bearer can ask the engine to run under that strategy's cap. This service does not accept listing alerts.
 
 ## Not in this tree
 
@@ -39,10 +39,11 @@ Listing match, watchlist refresh, and the receive-then-buy flow stay in Rocket. 
 ## Check
 
 ```bash
-npm run check
+pnpm install --frozen-lockfile
+pnpm run check
 ```
 
-That runs the file-size ratchet, the import boundaries, the TypeScript build, and the unit tests. Tests use fakes. They do not acquire market data and they do not broadcast.
+`pnpm run check` runs the file-size ratchet, the import boundaries, the TypeScript build, and the unit tests. It needs Node 22.12 or later. Corepack picks the pnpm version pinned in `package.json`. Tests use fakes. They do not acquire market data and they do not broadcast.
 
 ## Still open
 

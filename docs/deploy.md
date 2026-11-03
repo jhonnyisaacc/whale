@@ -4,11 +4,11 @@ Deploy one executor from this repository. Leave `WHALE_BROADCAST` unset until yo
 
 ## Build
 
-The Railway root is the repository root. The Dockerfile pins `node:22-bookworm-slim` by digest and runs `npm ci --ignore-scripts`. The Dockerfile command is `node dist/src/executor-server.js`. That is the same file `npm run start:executor` runs. `railway.json` checks `GET /health`. Do not add a public domain. Boot throws if `RAILWAY_PUBLIC_DOMAIN` is present. Call the executor on the private network URL.
+The Railway root is the repository root. The Dockerfile pins `node:22-bookworm-slim` by digest, enables corepack for the pnpm version and hash in `package.json`, and runs `pnpm install --frozen-lockfile`. The runtime stage adds `--prod`. The Dockerfile command is `node dist/src/executor-server.js`. That is the same file `pnpm run start:executor` runs. `railway.json` checks `GET /health`. Do not add a public domain. Boot throws if `RAILWAY_PUBLIC_DOMAIN` is present. Call the executor on the private network URL.
 
-`npm run start:cli` and `npm run start:mcp` run on a laptop. The container command stays `node dist/src/executor-server.js`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`.
+`pnpm run start:cli` and `pnpm run start:mcp` run on a laptop. The container command stays `node dist/src/executor-server.js`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`.
 
-`uuid` is overridden to `11.1.1`. `stream-json` is overridden to `3.7.0`. jayson still imports the old `StreamValues` path, so `scripts/patch-jayson-stream-json.mjs` runs after `npm ci` and points that require at the 3.7 stream adapters. The image does not install `@solana/web3.js` 3.
+jayson's `uuid` is overridden to `11.1.1` and its `stream-json` to `3.7.0` in `pnpm-workspace.yaml`. jayson still imports the old `StreamValues` path, so `patches/jayson@4.3.0.patch` points that require at the 3.7 stream adapters. pnpm applies the patch during install and fails the install if it no longer applies. The image does not install `@solana/web3.js` 3.
 
 Railway injects `PORT`.
 

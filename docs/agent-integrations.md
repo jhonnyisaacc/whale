@@ -11,7 +11,7 @@ One wallet serves three hosts. The MCP server and the skills stay the same. Only
 
 ## Shared setup
 
-Build the wallet. Start the executor with `npm run start:executor`, the CLI with `npm run start:cli`, and MCP with `npm run start:mcp`. The MCP entry in `.mcp.json` starts `dist/src/mcp-server.js` over stdio.
+Build the wallet. Start the executor with `pnpm run start:executor`, the CLI with `pnpm run start:cli`, and MCP with `pnpm run start:mcp`. The MCP entry in `.mcp.json` starts `dist/src/mcp-server.js` over stdio.
 
 The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read `GET /status`. Leave `WHALE_BROADCAST` unset. If `LISTING_TRADER_LIVE` is set, boot throws. If `WITHDRAW_ENABLED` is set, boot throws. `POST /withdraw` is absent.
 

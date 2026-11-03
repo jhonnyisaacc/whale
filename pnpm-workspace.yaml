@@ -1,0 +1,22 @@
+# test/supply-chain.test.ts fails if any of these settings is removed or weakened.
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+# Each entry was published by hand after an earlier release had provenance. Review before adding one.
+trustPolicyExclude:
+  - undici-types@6.21.0 # .d.ts only, pinned by @types/node 22, dev dependency
+blockExoticSubdeps: true
+strictDepBuilds: true
+engineStrict: true
+
+# jayson asks for uuid 8 and stream-json 1. See docs/decisions/0002-dependency-containment.md.
+overrides:
+  # Optional native accelerators for ws. ws falls back to plain JS, so no native code ships.
+  bufferutil: "-"
+  utf-8-validate: "-"
+  jayson>uuid: 11.1.1
+  jayson>stream-json: 3.7.0
+
+patchedDependencies:
+  jayson@4.3.0: patches/jayson@4.3.0.patch
