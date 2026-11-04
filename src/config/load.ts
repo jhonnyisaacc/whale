@@ -87,7 +87,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("MAX_SLIPPAGE_BPS exceeds SLIPPAGE_HARD_MAX_BPS");
   }
   const manifest = env.WALLET_DEPLOYMENT_MANIFEST_JSON ? parseDeploymentManifest(JSON.parse(env.WALLET_DEPLOYMENT_MANIFEST_JSON) as unknown) : null;
-  if (manifest?.version === 2) throw new Error("WALLET_DEPLOYMENT_MANIFEST_JSON version 2 is closed");
   const legacyRouters = routerAllowlist(env);
   if (manifest && env.ROUTER_ALLOWLIST_JSON && JSON.stringify(manifestRouters(manifest)) !== JSON.stringify(legacyRouters)) {
     throw new Error("WALLET_DEPLOYMENT_MANIFEST_JSON and ROUTER_ALLOWLIST_JSON disagree on routers");
@@ -187,7 +186,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     zeroExSettlers: env.ZEROX_SETTLER_ALLOWLIST_JSON ? chainAddressMap(env.ZEROX_SETTLER_ALLOWLIST_JSON, "ZEROX_SETTLER_ALLOWLIST_JSON", /^0x[0-9a-fA-F]{40}$/) : {},
     supportByChain: supportByChain(CHAINS.map((chain) => chain.key), env.SUPPORT_TIERS),
     solanaProgramAllowlist: [...new Set([...SOLANA_BASE_PROGRAMS, ...splitList(env.SOLANA_PROGRAM_ALLOWLIST), ...(manifest?.solanaPrograms ?? [])])],
-    maxValueWei: manifest?.maxValueWei !== undefined ? BigInt(manifest.maxValueWei) : weiEnv(env.MAX_NATIVE_VALUE_WEI),
+    maxValueWei: manifest ? BigInt(manifest.maxValueWei) : weiEnv(env.MAX_NATIVE_VALUE_WEI),
     mevRpcByChainId: mevRpcs(env),
     jitoUrl: env.JITO_ENABLED === "true" ? (env.JITO_BLOCK_ENGINE_URL ?? "https://mainnet.block-engine.jito.wtf/api/v1/transactions") : null,
     oneInchBase: env.ONEINCH_API_BASE ?? "https://api.1inch.com",

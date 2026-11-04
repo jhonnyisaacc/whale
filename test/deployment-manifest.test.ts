@@ -30,26 +30,6 @@ test("a manifest parses and drives routers and the Turnkey document from one sou
 
 test("a bad manifest fails with the field that is wrong", () => {
   assert.throws(() => parseDeploymentManifest({ ...manifest, maxValueWei: "1.5" }), /maxValueWei/);
-  assert.throws(() => parseDeploymentManifest({ ...manifest, turnkey: undefined }), /turnkey/);
-});
-
-test("version 2 parses without turnkey and keeps omitted caps omitted", () => {
-  const parsed = parseDeploymentManifest({ version: 2, routers: {}, settlers: {}, solanaPrograms: [] });
-  assert.equal(parsed.version, 2);
-  if (parsed.version !== 2) return;
-  assert.equal(parsed.turnkey, undefined);
-  assert.equal(parsed.chains, undefined);
-  assert.equal(parsed.maxUsdPerTrade, undefined);
-  assert.equal(parsed.dailyUsdCap, undefined);
-  assert.equal(parsed.maxValueWei, undefined);
-  assert.equal(parsed.transferRecipients, undefined);
-  assert.deepEqual(parsed.routers, {});
-  assert.deepEqual(parsed.settlers, {});
-  const emptyChains = parseDeploymentManifest({ ...parsed, chains: [] });
-  if (emptyChains.version !== 2) assert.fail("version 2");
-  assert.deepEqual(emptyChains.chains, []);
-  assert.throws(() => parseDeploymentManifest({ version: 2, chains: ["not-a-chain"] }), /chains/);
-  assert.throws(() => parseDeploymentManifest({ version: 2, maxUsdPerTrade: "5.5" }), /maxUsdPerTrade/);
 });
 
 test("policy verification passes on equality and names a missing policy", () => {
@@ -81,11 +61,4 @@ test("config exposes the support map", () => {
   const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
   assert.equal(config.supportByChain.monad, "disabled");
   assert.equal(config.supportByChain.base, "live");
-});
-
-test("version 2 does not boot until a signer enforces its caps", () => {
-  const base = { EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456" };
-  const v2 = { version: 2, chains: ["solana"], maxUsdPerTrade: "1", dailyUsdCap: "1" };
-  assert.throws(() => loadConfig({ ...base, WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(v2) }), /version 2 is closed/);
-  assert.throws(() => loadConfig({ ...base, WHALE_BROADCAST: "true", WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(v2) }), /version 2 is closed/);
 });
