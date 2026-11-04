@@ -3,6 +3,7 @@ import { MIGRATIONS_DIR, migrate } from "./db/migrate.js";
 import { buildGateway } from "./gateway/app.js";
 import { loadGatewayConfig } from "./gateway/config.js";
 import { applyDueChanges } from "./gateway/policy-changes.js";
+import { deliverDue } from "./gateway/webhooks.js";
 
 const config = loadGatewayConfig();
 const applied = await migrate(config.databaseUrl, MIGRATIONS_DIR);
@@ -16,12 +17,17 @@ const sweep = setInterval(() => {
   applyDueChanges(pool).catch((error: unknown) => app.log.warn({ err: error }, "policy sweep failed"));
 }, 60_000);
 sweep.unref();
+const deliveries = setInterval(() => {
+  deliverDue(pool, config.secret).catch((error: unknown) => app.log.warn({ err: error }, "webhook delivery failed"));
+}, 15_000);
+deliveries.unref();
 
 let stopping = false;
 async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   clearInterval(sweep);
+  clearInterval(deliveries);
   await Promise.race([app.close(), new Promise((resolve) => setTimeout(resolve, 10_000).unref())]);
   await pool.end();
   process.exit(0);
