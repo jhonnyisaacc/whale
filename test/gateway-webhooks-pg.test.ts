@@ -1,0 +1,79 @@
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import test from "node:test";
+import { audit } from "../src/gateway/accounts.js";
+import { buildGateway } from "../src/gateway/app.js";
+import { deliverDue, RETRY_AFTER_MS, signature, type Send } from "../src/gateway/webhooks.js";
+import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
+import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
+
+const SECRET = gatewayConfig().secret;
+
+test("a webhook signature is an HMAC over the timestamp and the exact body", () => {
+  const expected = createHmac("sha256", "whsec_x").update('1700000000.{"a":1}').digest("hex");
+  assert.equal(signature("whsec_x", 1_700_000_000, '{"a":1}'), `t=1700000000,v1=${expected}`);
+});
+
+test("webhooks get only their account's chosen events, signed, retried on failure, and refused for non-public URLs", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, drop } = await migratedSchema();
+  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: null, delegation: null });
+  try {
+    const user = await signedInAccount(pool);
+    const other = await signedInAccount(pool);
+    for (const url of ["http://hooks.example/x", "https://10.0.0.1/x", "https://hooks.example:8443/x"]) {
+      const refused = await app.inject({ method: "POST", url: "/api/webhooks", headers: user.headers, payload: { url, format: "whale", events: ["wallet.frozen"] } });
+      assert.equal(refused.statusCode, 400, url);
+    }
+    const created = await app.inject({ method: "POST", url: "/api/webhooks", headers: user.headers, payload: { url: "https://hooks.example/whale", format: "whale", events: ["wallet.frozen", "mcp.denied"] } });
+    assert.equal(created.statusCode, 201);
+    const { id, secret } = created.json();
+    assert.match(secret, /^whsec_/);
+    assert.equal(JSON.stringify((await pool.query("SELECT * FROM webhooks")).rows).includes(secret), false);
+    const slack = (await app.inject({ method: "POST", url: "/api/webhooks", headers: user.headers, payload: { url: "https://hooks.slack.example/T1", format: "slack", events: ["mcp.denied"] } })).json();
+
+    await audit(pool, { accountId: user.accountId, actor: "user", action: "wallet.frozen" });
+    await audit(pool, { accountId: user.accountId, actor: "agent", action: "mcp.denied", detail: { reason: "chain outside limits" } });
+    await audit(pool, { accountId: user.accountId, actor: "user", action: "policy.narrowed" });
+    await audit(pool, { accountId: other.accountId, actor: "user", action: "wallet.frozen" });
+    const queued = await pool.query("SELECT webhook_id FROM webhook_deliveries");
+    assert.equal(queued.rows.length, 3);
+
+    const sent: { url: string; headers: Record<string, string>; body: string }[] = [];
+    let status = 200;
+    const send: Send = async (url, init) => {
+      sent.push({ url, headers: init.headers, body: init.body });
+      return { status, body: "" };
+    };
+    let clock = Date.now();
+    assert.equal(await deliverDue(pool, SECRET, send, clock), 3);
+    const signed = sent.find((entry) => entry.url === "https://hooks.example/whale" && entry.body.includes("wallet.frozen"));
+    assert.ok(signed);
+    const timestamp = Number(/t=(\d+)/.exec(signed.headers["whale-signature"] ?? "")?.[1]);
+    assert.equal(signed.headers["whale-signature"], signature(secret, timestamp, signed.body));
+    const slackBody = sent.find((entry) => entry.url === "https://hooks.slack.example/T1");
+    assert.deepEqual(JSON.parse(slackBody?.body ?? "{}"), { text: "Whale · mcp.denied: chain outside limits" });
+    assert.equal(await deliverDue(pool, SECRET, send, clock), 0);
+
+    status = 500;
+    assert.equal((await app.inject({ method: "POST", url: `/api/webhooks/${id}/test`, headers: user.headers, payload: {} })).statusCode, 202);
+    clock = Date.now() + 1_000;
+    assert.equal(await deliverDue(pool, SECRET, send, clock), 0);
+    for (const wait of RETRY_AFTER_MS.slice(0, -1)) {
+      clock += wait + 1;
+      assert.equal(await deliverDue(pool, SECRET, send, clock), 0);
+    }
+    clock += (RETRY_AFTER_MS.at(-1) ?? 0) + 1;
+    await deliverDue(pool, SECRET, send, clock);
+    const test = await pool.query("SELECT attempts, gave_up_at IS NOT NULL AS gave_up, last_status FROM webhook_deliveries d JOIN audit_events e ON e.id = d.event_id WHERE e.action = 'webhook.test'");
+    assert.deepEqual(test.rows[0], { attempts: 6, gave_up: true, last_status: 500 });
+    const listed = (await app.inject({ method: "GET", url: "/api/webhooks", headers: user.headers })).json().webhooks.find((hook: { id: string }) => hook.id === id);
+    assert.deepEqual([listed.failures, listed.lastStatus], [6, 500]);
+
+    assert.equal((await app.inject({ method: "DELETE", url: `/api/webhooks/${id}`, headers: other.headers })).statusCode, 404);
+    assert.equal((await app.inject({ method: "POST", url: `/api/webhooks/${slack.id}/test`, headers: other.headers, payload: {} })).statusCode, 404);
+    assert.equal((await app.inject({ method: "DELETE", url: `/api/webhooks/${id}`, headers: user.headers })).statusCode, 204);
+  } finally {
+    await app.close();
+    await drop();
+  }
+});

@@ -40,6 +40,7 @@ async function submit(path: string, type: string, organizationId: string, parame
 export type Delegation = {
   subOrganizationId: string;
   rootCredentialId: string;
+  ownerUserId: string;
   delegateUser: unknown;
   delegateUserId: string | null;
   policies: unknown[] | null;
@@ -52,4 +53,31 @@ export function addDelegate(delegation: Delegation): Promise<unknown> {
 
 export function addPolicies(delegation: Delegation): Promise<unknown> {
   return submit("/public/v1/submit/create_policies", "ACTIVITY_TYPE_CREATE_POLICIES", delegation.subOrganizationId, { policies: delegation.policies ?? [] }, delegation.rootCredentialId);
+}
+
+const TRANSPORTS: Record<string, string> = {
+  internal: "AUTHENTICATOR_TRANSPORT_INTERNAL",
+  hybrid: "AUTHENTICATOR_TRANSPORT_HYBRID",
+  usb: "AUTHENTICATOR_TRANSPORT_USB",
+  nfc: "AUTHENTICATOR_TRANSPORT_NFC",
+  ble: "AUTHENTICATOR_TRANSPORT_BLE",
+};
+
+// A backup passkey only helps if Turnkey knows it too. The current owner passkey approves adding the new one to the
+// enclave's owner, so losing either device later still leaves a way in.
+export function addOwnerPasskey(
+  delegation: Delegation,
+  passkey: { name: string; challenge: string; credential: { id: string; response: { clientDataJSON: string; attestationObject: string; transports: string[] } } },
+): Promise<unknown> {
+  const authenticator = {
+    authenticatorName: passkey.name,
+    challenge: passkey.challenge,
+    attestation: {
+      credentialId: passkey.credential.id,
+      clientDataJson: passkey.credential.response.clientDataJSON,
+      attestationObject: passkey.credential.response.attestationObject,
+      transports: passkey.credential.response.transports.map((entry) => TRANSPORTS[entry]).filter((entry): entry is string => entry !== undefined),
+    },
+  };
+  return submit("/public/v1/submit/create_authenticators", "ACTIVITY_TYPE_CREATE_AUTHENTICATORS_V2", delegation.subOrganizationId, { userId: delegation.ownerUserId, authenticators: [authenticator] }, delegation.rootCredentialId);
 }
