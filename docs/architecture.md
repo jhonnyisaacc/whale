@@ -19,3 +19,7 @@ The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `tr
 ## Live signing
 
 `src/signing-policy.ts` is the last check before a signature. A live send needs screening, simulation, the spend reservation, and that policy. `src/aggregators/` races quotes. `src/executor.ts` is the swap state machine. `src/broadcast/` sends a signed transaction only after a caller has already chosen live mode. See [Fees and route choice](fees.md), [ADR 0001](adr/0001-turnkey-signer.md), and [ADR 0002](adr/0002-service-boundaries.md).
+
+## Hosted product
+
+The hosted control plane is accepted in [ADR 0003](adr/0003-hosted-control-plane.md). A public gateway holds accounts, agents, and the MCP endpoint. The executor stays private. Each wallet picks a signing level: a Turnkey enclave owned by the user's passkey, a self-hosted Rust signer, or a smart account with a session key. Hosted live signing stays closed until a staging run passes.
