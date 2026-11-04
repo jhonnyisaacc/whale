@@ -85,6 +85,16 @@ test("every package.json pins every dependency, the root pins the package manage
   }
 });
 
+test("the Rust signer pins every crate exactly and commits its lockfile", () => {
+  const manifest = read("signer/Cargo.toml");
+  const dependencies = manifest.split("[dependencies]")[1] ?? "";
+  const lines = dependencies.split("\n").filter((line) => /^[a-z0-9_-]+ = /.test(line));
+  assert.ok(lines.length > 0);
+  for (const line of lines) assert.match(line, /"=\d+\.\d+\.\d+"/, line);
+  assert.equal(existsSync(path("signer/Cargo.lock")), true, "Cargo.lock is committed");
+  assert.match(read("signer/rust-toolchain.toml"), /channel = "\d+\.\d+\.\d+"/);
+});
+
 test("workflows pin every action and service image, and install only from the lockfile", () => {
   const found = workflows();
   assert.ok(found.length > 0);
