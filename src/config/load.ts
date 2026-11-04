@@ -87,6 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("MAX_SLIPPAGE_BPS exceeds SLIPPAGE_HARD_MAX_BPS");
   }
   const manifest = env.WALLET_DEPLOYMENT_MANIFEST_JSON ? parseDeploymentManifest(JSON.parse(env.WALLET_DEPLOYMENT_MANIFEST_JSON) as unknown) : null;
+  if (manifest?.version === 2) throw new Error("WALLET_DEPLOYMENT_MANIFEST_JSON version 2 is closed");
   const legacyRouters = routerAllowlist(env);
   if (manifest && env.ROUTER_ALLOWLIST_JSON && JSON.stringify(manifestRouters(manifest)) !== JSON.stringify(legacyRouters)) {
     throw new Error("WALLET_DEPLOYMENT_MANIFEST_JSON and ROUTER_ALLOWLIST_JSON disagree on routers");

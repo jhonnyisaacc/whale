@@ -82,3 +82,10 @@ test("config exposes the support map", () => {
   assert.equal(config.supportByChain.monad, "disabled");
   assert.equal(config.supportByChain.base, "live");
 });
+
+test("version 2 does not boot until a signer enforces its caps", () => {
+  const base = { EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456" };
+  const v2 = { version: 2, chains: ["solana"], maxUsdPerTrade: "1", dailyUsdCap: "1" };
+  assert.throws(() => loadConfig({ ...base, WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(v2) }), /version 2 is closed/);
+  assert.throws(() => loadConfig({ ...base, WHALE_BROADCAST: "true", WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(v2) }), /version 2 is closed/);
+});
