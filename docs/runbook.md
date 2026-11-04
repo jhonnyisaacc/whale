@@ -137,6 +137,21 @@ Two routes freeze, with no passkey needed:
 
 The Turnkey policy of an enclave wallet stays as rendered at activation. A widening that adds an EVM chain changes the app policy only, and Turnkey keeps refusing that chain until the delegation is rendered again under the user's passkey.
 
+### Approvals and activity
+
+A hosted `swap` is priced from its quote: net output plus fee and gas.
+- Above the agent's effective per-transaction cap, it is refused, even if approved.
+- Above the wallet's `approvalAboveUsd`, or when it cannot be priced, it returns `approval_required` with an approval id, and the agent calls again later with the same `idempotencyKey`.
+
+A `transfer` asks for approval whenever the wallet has a threshold, because it has no quote to price it.
+
+The owner sees pending approvals at `GET /api/approvals?status=pending`:
+- Approving needs a passkey step-up for `{ kind: "approval.approve", approvalId, command }`.
+- Denying needs none.
+- An approval lasts an hour and is spent by one retry of the exact command. The same `idempotencyKey` with a different command is refused.
+
+`GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.
