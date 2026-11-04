@@ -98,14 +98,49 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const state = await deps.turnkey.readSubOrganization(wallet.turnkey_sub_org_id);
     const delegate = state.users.find((user) => user.apiPublicKeys.some((key) => key.toLowerCase() === deps.delegation?.delegatePublicKey));
     const policy = walletPolicySchema.parse(wallet.document);
+    const delegation = deps.delegation;
+    const { turnkey_wallet_id: turnkeyWalletId, solana } = wallet;
+    const expected = (delegateUserId: string) => expectedPolicies({ delegateUserId, walletId: turnkeyWalletId, solanaAddress: solana, policy, config: delegation });
+    // After a policy change the enclave can drift from the wallet policy. The browser replaces every policy that names
+    // Whale's delegate with the freshly rendered set, under the owner's passkey.
+    const inSync =
+      delegate !== undefined &&
+      wallet.turnkey_owner_user_id !== null &&
+      wallet.root_credential_id !== null &&
+      !("problems" in verifyDelegation(state, { ownerUserId: wallet.turnkey_owner_user_id, rootCredentialId: wallet.root_credential_id, delegatePublicKey: delegation.delegatePublicKey, expected }));
     return {
+      inSync,
+      delegatePolicyIds: delegate ? state.policies.filter((entry) => entry.policyId && entry.consensus.includes(delegate.userId)).map((entry) => entry.policyId as string) : [],
       subOrganizationId: wallet.turnkey_sub_org_id,
       rootCredentialId: wallet.root_credential_id,
       ownerUserId: wallet.turnkey_owner_user_id,
       delegateUser: { userName: DELEGATE_USER_NAME, apiKeys: [{ apiKeyName: "whale-executor", publicKey: deps.delegation.delegatePublicKey, curveType: "API_KEY_CURVE_P256" }], authenticators: [], oauthProviders: [], userTags: [] },
       delegateUserId: delegate?.userId ?? null,
-      policies: delegate ? expectedPolicies({ delegateUserId: delegate.userId, walletId: wallet.turnkey_wallet_id, solanaAddress: wallet.solana, policy, config: deps.delegation }) : null,
+      policies: delegate ? expected(delegate.userId) : null,
     };
+  });
+
+  app.post("/api/wallets/:id/enclave/resync", { config: perMinute(10) }, async (request, reply) => {
+    const session = await requireSession(pool, request, reply);
+    if (!session) return reply;
+    if (!deps.turnkey || !deps.delegation) return reply.code(503).send({ error: "enclave_unavailable" });
+    const delegation = deps.delegation;
+    const params = walletParam.safeParse(request.params);
+    const wallet = params.success ? await enclaveWallet(pool, session.accountId, params.data.id) : null;
+    if (!wallet || wallet.status !== "active" || !wallet.turnkey_sub_org_id || !wallet.turnkey_wallet_id || !wallet.turnkey_owner_user_id || !wallet.root_credential_id || !wallet.solana) {
+      return reply.code(404).send({ error: "not_found" });
+    }
+    const { turnkey_wallet_id: turnkeyWalletId, solana } = wallet;
+    const policy = walletPolicySchema.parse(wallet.document);
+    const verdict = verifyDelegation(await deps.turnkey.readSubOrganization(wallet.turnkey_sub_org_id), {
+      ownerUserId: wallet.turnkey_owner_user_id,
+      rootCredentialId: wallet.root_credential_id,
+      delegatePublicKey: delegation.delegatePublicKey,
+      expected: (delegateUserId) => expectedPolicies({ delegateUserId, walletId: turnkeyWalletId, solanaAddress: solana, policy, config: delegation }),
+    });
+    if ("problems" in verdict) return reply.code(409).send({ error: "delegation_not_safe", problems: verdict.problems });
+    await audit(pool, { accountId: session.accountId, walletId: wallet.id, actor: "user", action: "wallet.delegation_resynced" });
+    return { walletId: wallet.id, inSync: true };
   });
 
   app.post("/api/wallets/:id/enclave/confirm", { config: perMinute(10) }, async (request, reply) => {

@@ -107,7 +107,7 @@ test("an enclave wallet gets its passkey as Turnkey root, then activates only af
     state.users.push({ userId: delegateUserId, userName: "whale-delegate", credentialIds: [], apiPublicKeys: [DELEGATE_KEY] });
     const after = (await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/enclave/delegation`, headers: user.headers })).json();
     assert.equal(after.delegateUserId, delegateUserId);
-    state.policies = after.policies;
+    state.policies = after.policies.map((entry: object, index: number) => ({ ...entry, policyId: `p${index}` }));
     state.rootUserIds.push(delegateUserId);
     assert.match(JSON.stringify((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/enclave/confirm`, headers: user.headers, payload: {} })).json().problems), /must not be root/);
     state.rootUserIds.pop();
@@ -118,6 +118,17 @@ test("an enclave wallet gets its passkey as Turnkey root, then activates only af
 
     const other = await signedInAccount(pool);
     assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/enclave/confirm`, headers: other.headers, payload: {} })).statusCode, 404);
+
+    const synced = (await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/enclave/delegation`, headers: user.headers })).json();
+    assert.deepEqual([synced.inSync, synced.delegatePolicyIds], [true, ["p0", "p1"]]);
+    await pool.query(`UPDATE policies SET document = jsonb_set(document, '{chains}', '["base", "arbitrum", "solana", "ethereum"]')`);
+    const drifted = (await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/enclave/delegation`, headers: user.headers })).json();
+    assert.equal(drifted.inSync, false);
+    assert.match(JSON.stringify(drifted.policies), /eth\.tx\.chain_id == 1 /);
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/enclave/resync`, headers: user.headers, payload: {} })).statusCode, 409);
+    state.policies = drifted.policies.map((entry: object, index: number) => ({ ...entry, policyId: `q${index}` }));
+    const resynced = await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/enclave/resync`, headers: user.headers, payload: {} });
+    assert.deepEqual(resynced.json(), { walletId: wallet.id, inSync: true });
   } finally {
     await app.close();
     await drop();

@@ -38,6 +38,8 @@ async function submit(path: string, type: string, organizationId: string, parame
 }
 
 export type Delegation = {
+  inSync: boolean;
+  delegatePolicyIds: string[];
   subOrganizationId: string;
   rootCredentialId: string;
   ownerUserId: string;
@@ -79,4 +81,8 @@ export function addOwnerPasskey(
     },
   };
   return submit("/public/v1/submit/create_authenticators", "ACTIVITY_TYPE_CREATE_AUTHENTICATORS_V2", delegation.subOrganizationId, { userId: delegation.ownerUserId, authenticators: [authenticator] }, delegation.rootCredentialId);
+}
+
+export function deletePolicies(delegation: Delegation): Promise<unknown> {
+  return submit("/public/v1/submit/delete_policies", "ACTIVITY_TYPE_DELETE_POLICIES", delegation.subOrganizationId, { policyIds: delegation.delegatePolicyIds }, delegation.rootCredentialId);
 }
