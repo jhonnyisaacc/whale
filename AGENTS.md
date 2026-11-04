@@ -12,6 +12,7 @@ Multichain wallet for AI agents. EVM and Solana. Dry-run is the default. Live si
 - `src/executor/` holds withdraw and quote planning. `src/executor.ts` holds the execute state machine.
 - `src/executor-server.ts` is the HTTP entry. There is no resolver.
 - `src/signing-policy.ts` is the last check before any signature. A change here is a security change.
+- `src/db/` runs the numbered SQL files in `migrations/`. A shipped migration never changes. Add the next number instead.
 
 ## Rules an agent cannot infer
 
