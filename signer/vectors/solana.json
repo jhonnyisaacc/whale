@@ -1,0 +1,76 @@
+{
+  "seed": "2222222222222222222222222222222222222222222222222222222222222222",
+  "own": "Bow1CGKGDB9mNxeWdw85E2aCthQ1oZX4oFEe7fYT17ew",
+  "cases": [
+    {
+      "name": "sol transfer to a listed destination",
+      "job": {
+        "id": "sol transfer to a listed destination",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDAwAFAkANAwADAAkD6AMAAAAAAAACAgABDAIAAABAQg8AAAAAAA=="
+      },
+      "expect": "signed",
+      "signature": "3soqqYWGdctF11V5tDp3xCAm6EHScUFvhrcgUkpGkggtNmhCXPkBhS7E3WJkecqMmN3gi1GUKgoHdgd1jsdobe8G"
+    },
+    {
+      "name": "sol transfer to a stranger",
+      "job": {
+        "id": "sol transfer to a stranger",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwREREREREREREREREREREREREREREREREREREREREREQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgIAAQwCAAAAAQAAAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "listed destination"
+    },
+    {
+      "name": "a second required signer",
+      "job": {
+        "id": "a second required signer",
+        "kind": "solana",
+        "message": "AgACBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwREREREREREREREREREREREREREREREREREREREREREQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgIAAQwCAAAAAQAAAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "only signer"
+    },
+    {
+      "name": "a program the policy does not list",
+      "job": {
+        "id": "a program the policy does not list",
+        "kind": "solana",
+        "message": "AQABAqCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwREREREREREREREREREREREREREREREREREREREREREQJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEBAQABAQ=="
+      },
+      "expect": "refused",
+      "reason": "does not list"
+    },
+    {
+      "name": "priority above the cap",
+      "job": {
+        "id": "priority above the cap",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkCAwAFAsBcFQADAAkDgJaYAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "priority fees"
+    },
+    {
+      "name": "a jupiter v0 swap with a lookup table",
+      "job": {
+        "id": "a jupiter v0 swap with a lookup table",
+        "kind": "solana",
+        "message": "gAEAAgOgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AR51VvyMcBu7nTFbs5oFQf9sbLeo/T5D7a4QAEWsDZoAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMCAAUC4JMEAAIACQNkAAAAAAAAAAEDAAMECOUXy5d6460qAQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHAgECAA=="
+      },
+      "expect": "signed",
+      "signature": "53pJ89GS7vgMSKgVgGnYnPzmyzMH8S4tCKazKTxgR17yeMy4TC3SCHp4fHAkzHqQj3V2h7qC2fN1vnUyQb2aC78x"
+    },
+    {
+      "name": "a transfer whose destination comes from a lookup table",
+      "job": {
+        "id": "a transfer whose destination comes from a lookup table",
+        "kind": "solana",
+        "message": "gAEAAQKgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAQIAAgwCAAAABQAAAAAAAAABBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+      },
+      "expect": "refused",
+      "reason": "lookup table"
+    }
+  ]
+}
