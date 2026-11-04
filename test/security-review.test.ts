@@ -338,11 +338,13 @@ test("keystore headers are authenticated, buffers zero, and the passphrase promp
 test("the image digest is pinned and jayson can load its json parser", () => {
   const docker = readFileSync(new URL("../../Dockerfile", import.meta.url), "utf8");
   assert.match(docker, /node:22-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9/);
-  assert.match(docker, /npm ci --ignore-scripts/);
-  assert.match(docker, /npm ci --omit=dev --ignore-scripts/);
-  const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { overrides?: { uuid?: string; "stream-json"?: string } };
-  assert.equal(pkg.overrides?.uuid, "11.1.1");
-  execFileSync(process.execPath, ["-e", "require('jayson/lib/utils')"], { cwd: new URL("../..", import.meta.url) });
+  assert.match(docker, /RUN pnpm install --frozen-lockfile\n/);
+  assert.match(docker, /RUN pnpm install --frozen-lockfile --prod/);
+  const workspace = readFileSync(new URL("../../pnpm-workspace.yaml", import.meta.url), "utf8");
+  assert.match(workspace, /^  jayson>uuid: 11\.1\.1$/m);
+  assert.match(workspace, /^  jayson>stream-json: 3\.7\.0$/m);
+  const loadJayson = "require('node:module').createRequire(require.resolve('@solana/web3.js'))('jayson/lib/utils')";
+  execFileSync(process.execPath, ["-e", loadJayson], { cwd: new URL("../..", import.meta.url) });
 });
 
 test("jupiter quotes with the slippage left after impact and refuses a quote without a minimum", async () => {

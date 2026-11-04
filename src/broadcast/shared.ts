@@ -25,9 +25,9 @@ export const allowanceSchema = z
   .object({
     issues: z.object({ allowance: z.object({ spender: z.string(), actual: z.string() }).nullish() }).optional(),
   })
-  .passthrough();
+  .loose();
 
-export const lifiApprovalSchema = z.object({ estimate: z.object({ approvalAddress: z.string().min(1) }) }).passthrough();
+export const lifiApprovalSchema = z.object({ estimate: z.object({ approvalAddress: z.string().min(1) }) }).loose();
 
 export type EvmCall = { from: Hex; to: Hex; data: Hex; value: bigint };
 

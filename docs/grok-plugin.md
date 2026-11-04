@@ -4,7 +4,7 @@ The wallet ships as a Grok plugin named `rocket`. The manifest sits in `.grok-pl
 
 ## Tools
 
-An MCP server runs from `dist/src/mcp-server.js` over stdio. It holds no keys and signs nothing. Start it with `npm run start:mcp`.
+An MCP server runs from `dist/src/mcp-server.js` over stdio. It holds no keys and signs nothing. Start it with `pnpm run start:mcp`.
 
 | Tool | What it does | Broadcast |
 | --- | --- | --- |
@@ -20,12 +20,12 @@ An MCP server runs from `dist/src/mcp-server.js` over stdio. It holds no keys an
 Build the wallet. Start the executor, then start MCP.
 
 ```bash
-npm run build
-npm run start:executor
-npm run start:mcp
+pnpm run build
+pnpm run start:executor
+pnpm run start:mcp
 ```
 
-`npm run start:cli` runs `node dist/src/cli.js` for the same command names. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read the executor. The default URL in `.mcp.json` is `http://127.0.0.1:8788`.
+`pnpm run start:cli` runs `node dist/src/cli.js` for the same command names. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read the executor. The default URL in `.mcp.json` is `http://127.0.0.1:8788`.
 
 Leave `WHALE_BROADCAST` unset. If `LISTING_TRADER_LIVE` is set, boot throws. If `WITHDRAW_ENABLED` is set, boot throws. `POST /withdraw` is absent.
 

@@ -16,7 +16,8 @@ Multichain wallet for AI agents. EVM and Solana. Dry-run is the default. Live si
 ## Rules an agent cannot infer
 
 - Keep every file at or under about 5,000 tokens. Split by feature. Keep the old import path as a barrel.
-- Run `npm run check` before a PR. It runs the file-size ratchet, the import boundaries, the build, and the tests.
+- Run `pnpm run check` before a PR. It runs the file-size ratchet, the import boundaries, the build, and the tests.
+- Use pnpm, never npm or yarn. Install with `pnpm install --frozen-lockfile`. Do not weaken `pnpm-workspace.yaml`. `test/supply-chain.test.ts` pins it. A new dependency needs a reason in the PR.
 - Never ask a user or an agent for a seed phrase or a private key. Never print one.
 - Amounts cross boundaries in the smallest unit. A decimal string is a display value only.
 - A live send needs screening, simulation, the spend reservation, and the signing policy. Do not add a path that skips one.
@@ -24,4 +25,4 @@ Multichain wallet for AI agents. EVM and Solana. Dry-run is the default. Live si
 
 ## Verify
 
-`npm run check` in this directory. See `feature-map.md` for what each feature check proves.
+`pnpm run check` in this directory. See `feature-map.md` for what each feature check proves.

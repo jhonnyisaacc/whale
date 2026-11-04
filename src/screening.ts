@@ -36,13 +36,13 @@ const goplusSchema = z
             buy_tax: z.string().optional(),
             sell_tax: z.string().optional(),
           })
-          .passthrough(),
+          .loose(),
       )
       .optional(),
   })
-  .passthrough();
+  .loose();
 
-const blockaidSchema = z.object({ result_type: z.enum(["Benign", "Warning", "Malicious", "Spam"]) }).passthrough();
+const blockaidSchema = z.object({ result_type: z.enum(["Benign", "Warning", "Malicious", "Spam"]) }).loose();
 
 type Verdict = "allow" | "deny";
 type Outcome = Verdict | "unavailable";

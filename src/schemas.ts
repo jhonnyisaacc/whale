@@ -21,7 +21,7 @@ const poolSchema = z
     priceUsd: z.number().nullable(),
     baseDecimals: z.number().nullable(),
   })
-  .passthrough();
+  .loose();
 
 const pairMapSchema = z.object({
   pools: z.array(poolSchema),
@@ -58,7 +58,7 @@ const holdingSchema = z.object({
     .refine((value) => value === undefined || chainByKey(value) !== undefined, { message: "unknown chain" }),
 }).superRefine((holding, ctx) => {
   const message = nativeHoldingError(holding);
-  if (message) ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+  if (message) ctx.addIssue({ code: "custom", message });
 });
 
 export const intentSchema = z.object({
