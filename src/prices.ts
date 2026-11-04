@@ -27,7 +27,7 @@ function coingeckoPlatform(chainKey: string): string | null {
 
 export type PriceOf = (holding: Holding) => number | null;
 
-const NATIVE_COINGECKO_ID: Record<string, string> = {
+export const NATIVE_COINGECKO_ID: Record<string, string> = {
   ETH: "ethereum",
   SOL: "solana",
   BNB: "binancecoin",
