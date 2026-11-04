@@ -86,6 +86,25 @@ A replayed code, or a refresh token presented after rotation, revokes every OAut
 
 A sensitive action asks for a step-up. `POST /api/passkeys/step-up` with `{ action }` returns a challenge bound to the SHA-256 of that action. The route that performs the action recomputes the hash and calls `verifyStepUp`, so an assertion approves that one action once. A counter that does not move forward is refused, unless the authenticator never counts, which is the case for synced passkeys.
 
+### Enclave wallets
+
+An enclave wallet takes three steps. Each step reads or writes Turnkey, and none gives Whale root.
+
+1. `POST /api/wallets/:id/enclave/options`, then `POST /api/wallets/:id/enclave` with `{ credential, label }`. The gateway verifies the new passkey, then creates a Turnkey sub-organization:
+   - The only root user is `owner`, holding that passkey, with a quorum of one.
+   - Email, SMS, and OTP sign-in are disabled, so the passkey is the only way in.
+   - One HD wallet holds an EVM account and a Solana account.
+
+   The addresses are stored and the wallet stays `pending`.
+2. The browser, signed with the user's passkey, adds the delegate user and the policies that `GET /api/wallets/:id/enclave/delegation` returns. The delegate holds the executor's API key (`TURNKEY_DELEGATE_API_PUBLIC_KEY`). The policies are `turnkeyPolicyDocument` scoped to that user, the sub-organization's wallet, and the EVM chains in the wallet policy.
+3. `POST /api/wallets/:id/enclave/confirm`. The gateway reads the sub-organization and activates the wallet only if all of these hold: the owner is the sole root and holds the registered passkey; exactly one user holds Whale's key, is not root, and holds nothing else; and the allow policies are exactly the rendered ones. Otherwise it answers `delegation_not_safe` with the problems, and writes an audit event.
+
+The gateway needs these variables:
+- `TURNKEY_PARENT_ORGANIZATION_ID`, `TURNKEY_PARENT_API_PUBLIC_KEY`, and `TURNKEY_PARENT_API_PRIVATE_KEY`. The parent key creates sub-organizations and can read them. It cannot sign inside one, because the sub-organization's only root is the user's passkey.
+- `TURNKEY_DELEGATE_API_PUBLIC_KEY`, and the same `ROUTER_ALLOWLIST_JSON` and `MAX_NATIVE_VALUE_WEI` the executor uses.
+
+Without these variables the enclave routes answer `enclave_unavailable`.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.

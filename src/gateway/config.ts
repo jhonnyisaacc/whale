@@ -66,5 +66,6 @@ export function executorFrom(env: NodeJS.ProcessEnv): { url: URL; token: string 
 }
 
 export function gatewaySecrets(config: GatewayConfig): string[] {
-  return [config.google.clientSecret, config.secret.toString("base64url"), config.databaseUrl, ...(config.executor ? [config.executor.token] : [])];
+  const candidates = [process.env.TURNKEY_PARENT_API_PRIVATE_KEY ?? "", config.google.clientSecret, config.secret.toString("base64url"), config.databaseUrl, config.executor?.token ?? ""];
+  return candidates.filter((item) => item.length >= 8);
 }
