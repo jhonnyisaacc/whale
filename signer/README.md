@@ -12,12 +12,20 @@ export WHALE_SIGNER_PASSPHRASE='at least twelve characters'
 ./target/release/whale-signer sign --keystore keystore.json --policy policy.json --ledger ledger.json < job.json
 ```
 
+To work with a hosted gateway, ask the dashboard for a connection code (it takes your passkey), then:
+
+```bash
+./target/release/whale-signer connect --keystore keystore.json --gateway https://<gateway> --wallet <wallet id> --code wreg_...
+./target/release/whale-signer serve --keystore keystore.json --gateway https://<gateway> --policy policy.json --ledger ledger.json
+```
+
+`connect` signs the registration text (wallet id plus code) with both keys. The EVM key uses EIP-191. The gateway checks both signatures before it takes these addresses, and stores the returned token next to the keystore with owner-only permissions. `serve` long-polls `/signer/v1/jobs` over https, so no inbound port is opened. It checks each job with the same code as `sign` and posts the decision back. `--once` handles at most one job, for testing.
+
 `init` refuses to overwrite a keystore. `sign` prints one JSON decision and exits:
 - 0 when it signed;
 - 3 when it refused;
 - 2 on a usage or file error.
 
-The connection to the gateway, an outbound long-poll, is the next step. Until then `sign` is the whole interface.
 
 ## Keystore
 

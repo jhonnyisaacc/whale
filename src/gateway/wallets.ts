@@ -4,8 +4,8 @@ import { DEFAULT_POLICY, walletPolicySchema, type WalletPolicy } from "./policy.
 
 export const LEVELS = ["enclave", "self_hosted", "smart_account"] as const;
 export type Level = (typeof LEVELS)[number];
-// A level is offered only once its signer exists. ADR 0003 keeps smart accounts out until the module record lands.
-export const AVAILABLE_LEVELS: readonly Level[] = ["enclave"];
+// A level is offered only once its signer exists. ADR 0004 keeps smart accounts out until its checks are done.
+export const AVAILABLE_LEVELS: readonly Level[] = ["enclave", "self_hosted"];
 export const MAX_WALLETS_PER_ACCOUNT = 10;
 
 export type WalletView = {

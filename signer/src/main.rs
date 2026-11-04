@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use whale_signer::{keystore, ledger, policy, run_job};
+use whale_signer::{evm, keystore, ledger, net, policy, run_job, solana};
 
 const USAGE: &str =
     "whale-signer <init|address|sign> --keystore FILE [--policy FILE] [--ledger FILE]
@@ -20,6 +20,30 @@ fn read_json(path: &PathBuf) -> Result<Value, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
     serde_json::from_str(&text).map_err(|_| format!("{} is not JSON", path.display()))
+}
+
+fn text_flag(args: &[String], name: &str) -> Option<String> {
+    args.windows(2)
+        .find(|pair| pair[0] == name)
+        .map(|pair| pair[1].clone())
+}
+
+fn token_file(args: &[String], keystore_path: &std::path::Path) -> PathBuf {
+    flag(args, "--token-file").unwrap_or_else(|| keystore_path.with_extension("token"))
+}
+
+// The token lets the gateway hand this signer work, so it gets the same care as the keystore: owner-only on Unix.
+fn write_private(path: &PathBuf, contents: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options
+        .open(path)
+        .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+    file.write_all(contents.as_bytes())
+        .map_err(|error| format!("cannot write {}: {error}", path.display()))
 }
 
 fn passphrase() -> Result<String, String> {
@@ -73,6 +97,78 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             } else {
                 ExitCode::from(3)
             })
+        }
+        "connect" => {
+            let gateway = net::Gateway::new(&text_flag(args, "--gateway").ok_or(USAGE)?)?;
+            let wallet = text_flag(args, "--wallet").ok_or(USAGE)?;
+            let code = text_flag(args, "--code").ok_or(USAGE)?;
+            let keys = keystore::open(&read_json(&keystore_path)?, &passphrase()?)?;
+            let message = net::registration_message(&wallet, &code);
+            let body = serde_json::json!({
+                "code": code,
+                "walletId": wallet,
+                "evmAddress": keystore::evm_address(&keys.evm),
+                "solanaAddress": keystore::solana_address(&keys.solana),
+                "evmSignature": evm::personal_sign(&message, &keys.evm),
+                "solanaSignature": bs58::encode(solana::sign(message.as_bytes(), &keys.solana)).into_string(),
+            });
+            let registered = gateway.register(&body)?;
+            let token = registered["token"]
+                .as_str()
+                .ok_or("the gateway returned no token")?;
+            let path = token_file(args, &keystore_path);
+            write_private(&path, token)?;
+            println!(
+                "{}",
+                serde_json::json!({ "signerId": registered["signerId"], "tokenFile": path.display().to_string() })
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        "serve" => {
+            let gateway = net::Gateway::new(&text_flag(args, "--gateway").ok_or(USAGE)?)?;
+            let policy = policy::Policy::parse(&read_json(
+                &flag(args, "--policy").ok_or("serve needs --policy")?,
+            )?)?;
+            let ledger_path = flag(args, "--ledger").ok_or("serve needs --ledger")?;
+            let token = std::fs::read_to_string(token_file(args, &keystore_path))
+                .map_err(|_| "no token file; run connect first")?;
+            let keys = keystore::open(&read_json(&keystore_path)?, &passphrase()?)?;
+            let once = args.iter().any(|arg| arg == "--once");
+            loop {
+                match gateway.next_job(token.trim(), if once { 0 } else { 25 }) {
+                    Ok(Some(job)) => {
+                        let outcome = run_job(
+                            &net::job_for_signer(&job),
+                            &policy,
+                            &keys,
+                            &ledger_path,
+                            &ledger::today(),
+                        );
+                        eprintln!(
+                            "{}",
+                            serde_json::json!({ "job": job["id"], "decision": outcome["decision"], "reasons": outcome["reasons"] })
+                        );
+                        if let Err(error) = gateway.answer(
+                            token.trim(),
+                            job["id"].as_str().unwrap_or_default(),
+                            &outcome,
+                        ) {
+                            eprintln!("{error}");
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        eprintln!("{error}");
+                        if once {
+                            return Err(error);
+                        }
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                    }
+                }
+                if once {
+                    return Ok(ExitCode::SUCCESS);
+                }
+            }
         }
         _ => Err(USAGE.to_string()),
     }
