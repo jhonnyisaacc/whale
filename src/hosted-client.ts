@@ -11,12 +11,14 @@ export class WhaleToolError extends Error {
   }
 }
 
-const LOCAL = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
 export function mcpEndpoint(gatewayUrl: string): string {
-  const base = gatewayUrl.replace(/\/+$/, "");
-  if (!base.startsWith("https://") && !LOCAL.test(base)) throw new Error("the gateway URL must be https (http only for localhost)");
-  return `${base}/mcp`;
+  const url = new URL(gatewayUrl);
+  const local = url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname);
+  if (url.protocol !== "https:" && !local) throw new Error("the gateway URL must be https (http only for localhost)");
+  if (url.username || url.password || url.search || url.hash) throw new Error("the gateway URL must not carry credentials, a query, or a fragment");
+  return new URL("/mcp", url.origin).toString();
 }
 
 export function createHostedClient(options: HostedClientOptions) {
