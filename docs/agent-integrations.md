@@ -30,3 +30,18 @@ Install this directory as a Codex plugin, or copy `agents/codex/rocket-wallet.to
 ## Security
 
 No host integration adds a money path. Every host reaches the same executor. `swap` and `transfer` stay dry-run in the MCP server. A live executor still requires `WHALE_BROADCAST` set to `true`, plus Turnkey, screening, simulation, the spend reservation, and the signing policy. No integration asks for a seed phrase or a key.
+
+## Hosted gateway
+
+A hosted Whale exposes one MCP endpoint, `https://<gateway>/mcp`. A client that supports MCP OAuth needs only the URL: on first use it opens the consent page, the user signs in with Google, picks a wallet and the agent's limits, and the client gets its own tokens. A client without OAuth uses an agent API key from the dashboard (`Authorization: Bearer whale_...`).
+
+| Client | Configuration |
+| --- | --- |
+| Claude Code | `claude mcp add --transport http whale https://<gateway>/mcp`. Add `--header "Authorization: Bearer whale_..."` to use a key instead of OAuth. |
+| Cursor | `~/.cursor/mcp.json`: `{ "mcpServers": { "whale": { "url": "https://<gateway>/mcp" } } }`, plus `"headers"` for a key |
+| VS Code | `.vscode/mcp.json`: `{ "servers": { "whale": { "type": "http", "url": "https://<gateway>/mcp" } } }` |
+| OpenAI Agents SDK | `MCPServerStreamableHttp(params={"url": "https://<gateway>/mcp", "headers": {"Authorization": "Bearer whale_..."}})` |
+| Stdio-only clients | Run `node dist/src/mcp-server.js` with `WHALE_GATEWAY_URL` and `WHALE_API_KEY` set. The local server then forwards every message to the gateway instead of using local tools |
+| A bot written in TypeScript | `createHostedClient({ gatewayUrl, apiKey })` from this package: `walletStatus`, `networkCosts`, `quote`, `swap`, `transfer`, `x402Quote`, or `call(tool, args)`. It has no dependencies |
+
+Every path reaches the same tools under the same agent limits, wallet policy, approvals, and audit trail. Hosted sends are dry-run until hosted live opens.
