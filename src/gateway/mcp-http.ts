@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
-import { authenticateApiKey, type AgentContext } from "./agents.js";
+import { authenticateBearer, type AgentContext } from "./agents.js";
 import type { GatewayConfig } from "./config.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { callHostedTool, HOSTED_TOOLS } from "./mcp-tools.js";
@@ -30,7 +30,8 @@ function challenge(config: GatewayConfig, reply: FastifyReply, error?: string) {
 
 export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; executor: ExecutorClient | null; authenticate?: BearerAuth }): void {
   const { config, pool } = deps;
-  const authenticate: BearerAuth = deps.authenticate ?? ((token) => authenticateApiKey(pool, token));
+  const resource = new URL("/mcp", config.publicUrl).toString();
+  const authenticate: BearerAuth = deps.authenticate ?? ((token) => authenticateBearer(pool, token, resource));
   const limited = {
     rateLimit: { max: 120, timeWindow: "1 minute", keyGenerator: (request: FastifyRequest) => createHash("sha256").update(bearer(request) || request.ip).digest("hex") },
   };
