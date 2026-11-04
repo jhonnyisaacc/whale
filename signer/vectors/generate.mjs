@@ -3,6 +3,7 @@
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import bs58 from "bs58";
+import { PublicKey } from "@solana/web3.js";
 import { encodeFunctionData, maxUint256, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -66,7 +67,13 @@ const solanaKey = createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" })
 const solanaOwn = createPublicKey(solanaKey).export({ format: "der", type: "spki" }).subarray(12);
 const SYSTEM = Buffer.alloc(32);
 const COMPUTE = Buffer.from(bs58.decode("ComputeBudget111111111111111111111111111111"));
-const JUPITER = Buffer.from(bs58.decode("JUP6LkbZbjS1jKKwapdHNy74zcZ3tSUQ8ccNmVnJJxP"));
+const JUPITER_ID = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
+const JUPITER = Buffer.from(bs58.decode(JUPITER_ID));
+const TOKEN_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+const ATA_ID = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const ata = (owner, mint, program) => Buffer.from(PublicKey.findProgramAddressSync([new PublicKey(owner).toBuffer(), new PublicKey(program).toBuffer(), new PublicKey(mint).toBuffer()], new PublicKey(ATA_ID))[0].toBytes());
 const SOL_DEST = Buffer.alloc(32, 0x33);
 const STRANGER = Buffer.alloc(32, 0x44);
 const short = (value) => Buffer.from([value]);
@@ -84,13 +91,40 @@ const transfer = (system, to, lamports) => ix(system, [0, to], Buffer.concat([u3
 const price = (compute, micro) => ix(compute, [], Buffer.concat([Buffer.from([3]), u64(micro)]));
 const limit = (compute, units) => ix(compute, [], Buffer.concat([Buffer.from([2]), u32(units)]));
 const keys = [solanaOwn, SOL_DEST, SYSTEM, COMPUTE];
+
+// route: token program, authority, source, destination, optional destination, mint, platform fee, event authority, program.
+function jupiterCases() {
+  const ownUsdc = ata(solanaOwn, USDC_MINT, TOKEN_ID);
+  const strangerUsdc = ata(STRANGER, USDC_MINT, TOKEN_ID);
+  const routeMessage = ({ authority = solanaOwn, destination = ownUsdc, fee = JUPITER, discriminator = "e517cb977ae3ad2a" } = {}) => {
+    const routeKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_ID)), Buffer.alloc(32, 0x51), destination, Buffer.from(bs58.decode(USDC_MINT)), Buffer.alloc(32, 0x52), JUPITER, COMPUTE];
+    if (!authority.equals(solanaOwn)) routeKeys.push(authority);
+    if (!fee.equals(JUPITER)) routeKeys.push(fee);
+    const index = (key) => routeKeys.findIndex((entry) => entry.equals(key));
+    const accounts = [1, index(authority), 2, 3, 6, 4, index(fee), 5, 6];
+    return message({ keys: routeKeys, instructions: [limit(7, 300_000), price(7, 100), ix(6, accounts, Buffer.concat([Buffer.from(discriminator, "hex"), Buffer.alloc(16, 1)]))] });
+  };
+  // shared_accounts_route: authority at 2, destination at 6, output mint at 8, platform fee at 9.
+  const ownUsdc2022 = ata(solanaOwn, USDC_MINT, TOKEN_2022_ID);
+  const sharedKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_2022_ID)), Buffer.alloc(32, 0x61), Buffer.alloc(32, 0x62), Buffer.alloc(32, 0x63), Buffer.alloc(32, 0x64), ownUsdc2022, Buffer.alloc(32, 0x65), Buffer.from(bs58.decode(USDC_MINT)), JUPITER, COMPUTE];
+  const shared = message({ keys: sharedKeys, instructions: [ix(9, [1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 1, 9, 9], Buffer.concat([Buffer.from("c1209b3341d69c81", "hex"), Buffer.alloc(8, 2)]))] });
+  return [
+    ["a jupiter route into this wallet's USDC account", routeMessage(), "signed"],
+    ["a jupiter shared route into this wallet's Token-2022 account", shared, "signed"],
+    ["a jupiter route into someone else's account", routeMessage({ destination: strangerUsdc }), "refused", "not this wallet's"],
+    ["a jupiter route with a platform fee", routeMessage({ fee: Buffer.alloc(32, 0x77) }), "refused", "platform fee"],
+    ["a jupiter route signed for another authority", routeMessage({ authority: STRANGER }), "refused", "authority"],
+    ["a jupiter instruction that is not an exact-in route", routeMessage({ discriminator: "0102030405060708" }), "refused", "exact-in"],
+  ];
+}
 const solanaCases = [
   ["sol transfer to a listed destination", message({ keys, instructions: [limit(3, 200_000), price(3, 1_000), transfer(2, 1, 1_000_000)] }), "signed"],
   ["sol transfer to a stranger", message({ keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "listed destination"],
   ["a second required signer", message({ signers: 2, keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "only signer"],
   ["a program the policy does not list", message({ keys: [solanaOwn, STRANGER], instructions: [ix(1, [0], Buffer.from([1]))] }), "refused", "does not list"],
   ["priority above the cap", message({ keys, instructions: [limit(3, 1_400_000), price(3, 10_000_000)] }), "refused", "priority fees"],
-  ["a jupiter v0 swap with a lookup table", message({ version: 0, keys: [solanaOwn, JUPITER, COMPUTE], instructions: [limit(2, 300_000), price(2, 100), ix(1, [0, 3, 4], Buffer.from("e517cb977ae3ad2a", "hex"))], lookups: [{ key: Buffer.alloc(32, 7), writable: [1, 2] }] }), "signed"],
+  ["a jupiter route that reads its accounts from a lookup table", message({ version: 0, keys: [solanaOwn, JUPITER, COMPUTE], instructions: [limit(2, 300_000), price(2, 100), ix(1, [0, 3, 4], Buffer.from("e517cb977ae3ad2a", "hex"))], lookups: [{ key: Buffer.alloc(32, 7), writable: [1, 2] }] }), "refused", "lookup table"],
+  ...jupiterCases(),
   ["a transfer whose destination comes from a lookup table", message({ version: 0, keys: [solanaOwn, SYSTEM], instructions: [ix(1, [0, 2], Buffer.concat([u32(2), u64(5)]))], lookups: [{ key: Buffer.alloc(32, 7), writable: [1] }] }), "refused", "lookup table"],
 ];
 const solana = solanaCases.map(([name, bytes, expect, reason]) => ({
@@ -111,7 +145,7 @@ const policy = {
     dailyLimits: { [`8453:${USDC}`]: "10000000", "8453:native": "5000000000000000" },
   },
   solana: {
-    programs: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tSUQ8ccNmVnJJxP"],
+    programs: [JUPITER_ID],
     destinations: [bs58.encode(SOL_DEST)],
     maxPriorityLamports: "100000",
     dailyLimits: { "solana:native": "2000000000" },
@@ -121,5 +155,11 @@ writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);
 const registration = "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31\ncode:wreg_example";
 const personalSign = { message: registration, signature: await account.signMessage({ message: registration }) };
 writeFileSync(`${out}evm.json`, `${JSON.stringify({ evmKey: EVM_KEY, own, personalSign, cases: evm }, null, 2)}\n`);
-writeFileSync(`${out}solana.json`, `${JSON.stringify({ seed: SOLANA_SEED.toString("hex"), own: bs58.encode(solanaOwn), cases: solana }, null, 2)}\n`);
+const atas = [
+  [bs58.encode(solanaOwn), USDC_MINT, TOKEN_ID],
+  [bs58.encode(solanaOwn), USDC_MINT, TOKEN_2022_ID],
+  [bs58.encode(solanaOwn), "So11111111111111111111111111111111111111112", TOKEN_ID],
+  [bs58.encode(STRANGER), USDC_MINT, TOKEN_ID],
+].map(([owner, mint, program]) => ({ owner, mint, program, address: bs58.encode(ata(owner, mint, program)) }));
+writeFileSync(`${out}solana.json`, `${JSON.stringify({ seed: SOLANA_SEED.toString("hex"), own: bs58.encode(solanaOwn), atas, cases: solana }, null, 2)}\n`);
 console.log(`wrote ${evm.length} evm and ${solana.length} solana vectors for ${own} and ${bs58.encode(solanaOwn)}`);
