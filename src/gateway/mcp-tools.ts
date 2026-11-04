@@ -5,6 +5,7 @@ import type { HostedCommand } from "../hosted-commands.js";
 import { audit } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
 import type { ExecutorClient } from "./executor-client.js";
+import { planSend } from "./mcp-sends.js";
 import { effectiveLimits, type WalletPolicy } from "./policy.js";
 import type { WalletView } from "./wallets.js";
 
@@ -18,8 +19,8 @@ export const HOSTED_TOOLS = [
   { name: "deposit_address", description: "Return the wallet address to fund on a chain. Moves no money.", inputSchema: { type: "object", properties: { chain }, required: ["chain"], additionalProperties: false } },
   { name: "balance", description: "Read the wallet's native balance on a chain. Moves no money.", inputSchema: { type: "object", properties: { chain }, required: ["chain"], additionalProperties: false } },
   { name: "quote", description: "Quote a same-chain swap from the wallet. Moves no money.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 } }, required: ["chain", "sellToken", "buyToken", "sellAmount"], additionalProperties: false } },
-  { name: "swap", description: "Plan a swap and return the route it would take. Checks this agent's chains and actions and the wallet's slippage and token list, not its USD limits. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 }, idempotencyKey: key }, required: ["chain", "sellToken", "buyToken", "sellAmount", "idempotencyKey"], additionalProperties: false } },
-  { name: "transfer", description: "Plan a transfer to an address on the wallet's destination list. Checks this agent's chains and actions and the wallet's token list, not its USD limits. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, token, to: { type: "string", description: "A destination the wallet owner listed in the dashboard." }, amount, idempotencyKey: key }, required: ["chain", "token", "to", "amount", "idempotencyKey"], additionalProperties: false } },
+  { name: "swap", description: "Plan a swap and return the route it would take. Checks this agent's chains, actions, and per-transaction cap and the wallet's slippage and token list. Above the owner's approval threshold, or when it cannot be priced, it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 }, idempotencyKey: key }, required: ["chain", "sellToken", "buyToken", "sellAmount", "idempotencyKey"], additionalProperties: false } },
+  { name: "transfer", description: "Plan a transfer to an address on the wallet's destination list. Checks this agent's chains and actions and the wallet's token list, not its USD limits. When the owner set an approval threshold it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, token, to: { type: "string", description: "A destination the wallet owner listed in the dashboard." }, amount, idempotencyKey: key }, required: ["chain", "token", "to", "amount", "idempotencyKey"], additionalProperties: false } },
 ] as const;
 
 const swapArgs = z.object({ chain: z.string(), sellToken: z.string(), buyToken: z.string(), sellAmount: z.string(), slippageBps: z.number().int().optional(), idempotencyKey: z.string().optional() }).strict();
@@ -118,7 +119,6 @@ export async function callHostedTool(env: ToolEnv, name: string, args: unknown):
     return { ok: false, error: denied };
   }
   if (!env.executor) return { ok: false, error: "quotes are not configured on this deployment" };
-  const value = await env.executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });
-  if (command.kind === "swap" || command.kind === "transfer") await audit(env.pool, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey } });
-  return { ok: true, value };
+  if (command.kind === "swap" || command.kind === "transfer") return planSend(env.pool, env.executor, agent, name, command);
+  return { ok: true, value: await env.executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command }) };
 }
