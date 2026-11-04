@@ -8,6 +8,7 @@ import { registerMcpRoutes } from "./mcp-http.js";
 import { registerAuthRoutes } from "./routes-auth.js";
 import { registerEnclaveRoutes } from "./enclave.js";
 import { registerApprovalRoutes } from "./routes-approvals.js";
+import { registerSignerRoutes } from "./routes-signers.js";
 import { registerOAuthRoutes } from "./routes-oauth.js";
 import { delegationFromEnv, turnkeyParentFromEnv, type DelegationConfig, type TurnkeyParent } from "./turnkey.js";
 import { registerPasskeyRoutes } from "./routes-passkeys.js";
@@ -28,6 +29,7 @@ export type GatewayDeps = {
   turnkey?: TurnkeyParent | null;
   delegation?: DelegationConfig | null;
   webDir?: string;
+  signerPollMs?: number;
 };
 
 export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> {
@@ -40,6 +42,7 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   registerPasskeyRoutes(app, { config: deps.config, pool: deps.pool, now });
   registerPolicyRoutes(app, { config: deps.config, pool: deps.pool, now: deps.now });
   registerApprovalRoutes(app, { config: deps.config, pool: deps.pool, now });
+  registerSignerRoutes(app, { config: deps.config, pool: deps.pool, now, ...(deps.signerPollMs ? { pollMs: deps.signerPollMs } : {}) });
   registerEnclaveRoutes(app, {
     config: deps.config,
     pool: deps.pool,

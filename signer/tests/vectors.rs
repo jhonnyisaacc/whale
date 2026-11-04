@@ -314,3 +314,13 @@ fn a_token_account_created_for_this_wallet_also_counts_its_rent_against_the_nati
     );
     let _ = std::fs::remove_file(ledger);
 }
+
+#[test]
+fn personal_sign_matches_viem() {
+    let evm = load("evm.json");
+    let message = evm["personalSign"]["message"].as_str().unwrap();
+    assert_eq!(
+        whale_signer::evm::personal_sign(message, &keys().evm),
+        evm["personalSign"]["signature"].as_str().unwrap()
+    );
+}

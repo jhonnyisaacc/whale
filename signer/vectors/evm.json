@@ -1,6 +1,10 @@
 {
   "evmKey": "0x1111111111111111111111111111111111111111111111111111111111111111",
   "own": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+  "personalSign": {
+    "message": "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31\ncode:wreg_example",
+    "signature": "0xffa09af792359f2fd0b5241156d547649b1988c17770096bfd39617fa7f8407c2b6f174114bdf74bf387bea6301991c33cfb9ebc5a06db9c763e2117d438ba411b"
+  },
   "cases": [
     {
       "name": "kyber simple swap to this wallet",

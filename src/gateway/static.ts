@@ -14,7 +14,7 @@ const TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
   ".json": "application/json",
 };
-const SERVER_PREFIXES = ["/api/", "/auth/", "/oauth/", "/mcp", "/.well-known/", "/health"];
+const SERVER_PREFIXES = ["/api/", "/auth/", "/oauth/", "/mcp", "/.well-known/", "/health", "/signer/"];
 
 // The dashboard loads only its own files. Passkey ceremonies run against this origin, and the delegation step talks to
 // Turnkey's API directly, so that is the one outside origin it may reach.

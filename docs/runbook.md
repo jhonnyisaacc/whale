@@ -164,6 +164,24 @@ The owner sees pending approvals at `GET /api/approvals?status=pending`:
 
 `GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else.
 
+### Self-hosted signers
+
+A `self_hosted` wallet starts `pending`. The dashboard asks for a passkey step-up, `{ kind: "signer.register", walletId }`, and then `POST /api/wallets/:id/signer/code` returns a ten-minute code. A passkey is required because whoever registers decides the wallet's deposit addresses. On the user's machine, `whale-signer connect` posts both addresses and both proofs to `POST /signer/v1/register`.
+
+The gateway accepts the registration only if all of these hold:
+- The code is unused, unexpired, and for this wallet. It is spent on the first try, right or wrong.
+- The EIP-191 signature recovers the EVM address.
+- The ed25519 signature verifies under the Solana address.
+
+It then stores the addresses, activates the wallet, and returns a signer token `wsig_...` once.
+
+`whale-signer serve` long-polls `GET /signer/v1/jobs?wait=25` with that token and answers on `POST /signer/v1/jobs/:id/result`:
+- A job is leased for 60 seconds. An unanswered lease goes back to the queue.
+- A frozen wallet's signer still authenticates but gets no work.
+- A revoked signer gets 401.
+
+Nothing creates signing jobs while hosted live is closed. `enqueueJob` is what the live path will call.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.
