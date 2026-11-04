@@ -314,3 +314,23 @@ fn a_token_account_created_for_this_wallet_also_counts_its_rent_against_the_nati
     );
     let _ = std::fs::remove_file(ledger);
 }
+
+#[test]
+fn associated_token_addresses_match_web3() {
+    let solana = load("solana.json");
+    let ata = whale_signer::solana::key("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
+    for case in solana["atas"].as_array().unwrap() {
+        let key = |name: &str| whale_signer::solana::key(case[name].as_str().unwrap()).unwrap();
+        let derived = whale_signer::pda::associated_token_address(
+            &key("owner"),
+            &key("mint"),
+            &key("program"),
+            &ata,
+        )
+        .unwrap();
+        assert_eq!(
+            bs58::encode(derived).into_string(),
+            case["address"].as_str().unwrap()
+        );
+    }
+}

@@ -1,6 +1,32 @@
 {
   "seed": "2222222222222222222222222222222222222222222222222222222222222222",
   "own": "Bow1CGKGDB9mNxeWdw85E2aCthQ1oZX4oFEe7fYT17ew",
+  "atas": [
+    {
+      "owner": "Bow1CGKGDB9mNxeWdw85E2aCthQ1oZX4oFEe7fYT17ew",
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "address": "3RFAFPQaRKXQaoXiPxEciUViHe6MLxfh6ERj6kX3eBs5"
+    },
+    {
+      "owner": "Bow1CGKGDB9mNxeWdw85E2aCthQ1oZX4oFEe7fYT17ew",
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "address": "BTVuyBh2VYwdvHTH2mECNNbkBR6Qpr7Grwoc8mdtkoca"
+    },
+    {
+      "owner": "Bow1CGKGDB9mNxeWdw85E2aCthQ1oZX4oFEe7fYT17ew",
+      "mint": "So11111111111111111111111111111111111111112",
+      "program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "address": "2RvZbM6Se3ED5AAtbLo9cpTHbKRZ2wBzZ6Ggwt9V81E4"
+    },
+    {
+      "owner": "5bV6jUfhDHCQVA1WfKBUnXUsboJgoKgkzkKcxr3joew5",
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "address": "7mABnVhK8aRK3tPUtAYvY4gGyzYazfLwsXbHyBCmLX5d"
+    }
+  ],
   "cases": [
     {
       "name": "sol transfer to a listed destination",
@@ -93,14 +119,14 @@
       "reason": "priority fees"
     },
     {
-      "name": "a jupiter v0 swap with a lookup table",
+      "name": "a jupiter route that reads its accounts from a lookup table",
       "job": {
-        "id": "a jupiter v0 swap with a lookup table",
+        "id": "a jupiter route that reads its accounts from a lookup table",
         "kind": "solana",
         "message": "gAEAAgOgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMCAAUC4JMEAAIACQNkAAAAAAAAAAEDAAMECOUXy5d6460qAQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHAgECAA=="
       },
       "expect": "refused",
-      "reason": "no instruction rule"
+      "reason": "lookup table"
     },
     {
       "name": "a v0 sol transfer with a lookup table",
@@ -111,6 +137,66 @@
       },
       "expect": "signed",
       "signature": "4NxyDanuEs61tthnv2uqyGgbQgbg9uJxxLWuetWmvvqFHfNXbpxZydDcpT25yMnSqUNySB6GD9o14hHQcxewaUFk"
+    },
+    {
+      "name": "a jupiter route into this wallet's USDC account",
+      "job": {
+        "id": "a jupiter route into this wallet's USDC account",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQ=="
+      },
+      "expect": "signed",
+      "signature": "32pyvex8M1qRZ8SiDZQJzGjVXT8gwqxiKg4dgBW16RszQDhobkM62gvzMueAkx2RaXoVJB8mR7BpNtfZcLnbm2Vf"
+    },
+    {
+      "name": "a jupiter shared route into this wallet's Token-2022 account",
+      "job": {
+        "id": "a jupiter shared route into this wallet's Token-2022 account",
+        "kind": "solana",
+        "message": "AQAKC6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324e51j94YQl285GzN2rYa/E2DuQ0n/r35KNihi/xhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZJteqaFqu6n2Syu3XxmI4SG6QuZmT2FQ0FiRVuIAjUlvZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWXG+nrzvtutOj1l82qryXQxsbvkwtL24OR8pgIDRS9dYQR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEJDQECAAMEBQYHCAkBCQkQwSCbM0HWnIECAgICAgICAg=="
+      },
+      "expect": "signed",
+      "signature": "5KRKP1hdc6A1PQqYPrTHgsb5iY4cHMJaJ3Fz3aXeCFEptyRiTgCEHnK8mWkCNL4VDYuHCVfx1ukDP4ujuaytLP7m"
+    },
+    {
+      "name": "a jupiter route into someone else's account",
+      "job": {
+        "id": "a jupiter route into someone else's account",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUWR2EFCilM6NNxa7CZfWQqIEMmaRRnul+F/bqN18sn9cxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQ=="
+      },
+      "expect": "refused",
+      "reason": "not this wallet's"
+    },
+    {
+      "name": "a jupiter route with a platform fee",
+      "job": {
+        "id": "a jupiter route with a platform fee",
+        "kind": "solana",
+        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBAAIDBgQIBQYY5RfLl3rjrSoBAQEBAQEBAQEBAQEBAQEB"
+      },
+      "expect": "refused",
+      "reason": "platform fee"
+    },
+    {
+      "name": "a jupiter route signed for another authority",
+      "job": {
+        "id": "a jupiter route signed for another authority",
+        "kind": "solana",
+        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAABERERERERERERERERERERERERERERERERERERERERERAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBCAIDBgQGBQYY5RfLl3rjrSoBAQEBAQEBAQEBAQEBAQEB"
+      },
+      "expect": "refused",
+      "reason": "authority"
+    },
+    {
+      "name": "a jupiter instruction that is not an exact-in route",
+      "job": {
+        "id": "a jupiter instruction that is not an exact-in route",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGAECAwQFBgcIAQEBAQEBAQEBAQEBAQEBAQ=="
+      },
+      "expect": "refused",
+      "reason": "exact-in"
     },
     {
       "name": "a transfer whose destination comes from a lookup table",

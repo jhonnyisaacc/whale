@@ -69,7 +69,14 @@ Every Solana transaction also pays its fee from the wallet. The 5000 lamport sig
 
 A rule that needs an account loaded from an address lookup table refuses.
 
-A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.
+A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked.
+
+Jupiter v6, when listed in `solana.programs`, is decoded the way the app signing policy decodes it. Only the four exact-in routes pass, and each one must meet three conditions:
+- the transfer authority is this wallet;
+- the platform fee account is unset;
+- every destination is this wallet's wrapped SOL account, or its associated token account for the output mint under Token or Token-2022.
+
+The signer derives those addresses itself, with the runtime's program-derived-address search.
 
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom.
 

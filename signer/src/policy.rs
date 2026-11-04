@@ -38,7 +38,97 @@ const COMPUTE_BUDGET: &str = "ComputeBudget111111111111111111111111111111";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+const JUPITER: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+// Jupiter v6 exact-in routes, from the published IDL, as the app signing policy reads them: (discriminator,
+// authority slot, destination slots, mint slot, platform fee slot). Exact-out and newer routes are refused.
+const JUPITER_ROUTES: [([u8; 8], usize, &[usize], usize, usize); 4] = [
+    (
+        [0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a],
+        1,
+        &[3, 4],
+        5,
+        6,
+    ),
+    (
+        [0x96, 0x56, 0x47, 0x74, 0xa7, 0x5d, 0x0e, 0x68],
+        1,
+        &[3, 4],
+        5,
+        6,
+    ),
+    (
+        [0xc1, 0x20, 0x9b, 0x33, 0x41, 0xd6, 0x9c, 0x81],
+        2,
+        &[6],
+        8,
+        9,
+    ),
+    (
+        [0xe6, 0x79, 0x8f, 0x50, 0x77, 0x9f, 0x6a, 0xaa],
+        2,
+        &[6],
+        8,
+        9,
+    ),
+];
+
+fn known(text: &str) -> [u8; 32] {
+    solana::key(text).expect("a built-in program id is valid base58")
+}
+
+// The swap's output must land in this wallet: its wrapped SOL account or its associated token account for the output
+// mint, under Token or Token-2022. The optional second destination may be left as the Jupiter program id (unset).
+fn jupiter_route(
+    data: &[u8],
+    account: &dyn Fn(usize) -> Option<[u8; 32]>,
+    own: [u8; 32],
+) -> Result<(), String> {
+    let jupiter = known(JUPITER);
+    let discriminator = data.get(..8).ok_or("jupiter instruction is too short")?;
+    let (_, authority, destinations, mint, fee) = JUPITER_ROUTES
+        .iter()
+        .find(|(known, ..)| known.as_slice() == discriminator)
+        .ok_or("this Jupiter instruction is not an exact-in route")?;
+    let read = |slot: usize| {
+        account(slot).ok_or_else(|| {
+            format!("jupiter account {slot} comes from a lookup table, so it cannot be checked")
+        })
+    };
+    if read(*authority)? != own {
+        return Err("the Jupiter transfer authority is not this wallet".into());
+    }
+    if read(*fee)? != jupiter {
+        return Err("the Jupiter platform fee account is set".into());
+    }
+    let mint = read(*mint)?;
+    let ata = known(ASSOCIATED_TOKEN);
+    let mut owned = vec![crate::pda::associated_token_address(
+        &own,
+        &known(WSOL_MINT),
+        &known(TOKEN),
+        &ata,
+    )];
+    for program in [TOKEN, TOKEN_2022] {
+        owned.push(crate::pda::associated_token_address(
+            &own,
+            &mint,
+            &known(program),
+            &ata,
+        ));
+    }
+    for (position, slot) in destinations.iter().enumerate() {
+        let destination = read(*slot)?;
+        if position > 0 && destination == jupiter {
+            continue;
+        }
+        if !owned.contains(&Some(destination)) {
+            return Err("the Jupiter swap pays a token account that is not this wallet's".into());
+        }
+    }
+    Ok(())
+}
 const JITO_TIPS: [&str; 8] = [
     "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
     "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
@@ -468,6 +558,10 @@ impl Policy {
                         "solana:native".into(),
                         MAX_TOKEN_ACCOUNT_RENT_LAMPORTS,
                     );
+                }
+            } else if program_name == JUPITER {
+                if let Err(reason) = jupiter_route(data, &account, own) {
+                    refuse(&mut decision, &reason);
                 }
             } else {
                 refuse(
