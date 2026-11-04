@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
@@ -30,22 +30,26 @@ export const PAGE_CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
-// Hashed asset names never change content, so they cache for a year. The page itself is never cached, so a deploy
-// reaches every browser on its next load.
+// The build output is fixed for the life of the process, so it is read once at boot and served from memory: a request
+// never touches the file system. Hashed asset names never change content, so they cache for a year. The page itself
+// is never cached, so a deploy reaches every browser on its next load.
 export function registerStatic(app: FastifyInstance, dir: string = WEB_DIST_DIR): boolean {
   const index = path.join(dir, "index.html");
   if (!existsSync(index)) return false;
   const page = readFileSync(index);
-  const assets = path.join(dir, "assets");
+  const assetsDir = path.join(dir, "assets");
+  const assets = new Map<string, { type: string; body: Buffer }>();
+  if (existsSync(assetsDir)) {
+    for (const entry of readdirSync(assetsDir, { withFileTypes: true })) {
+      const type = TYPES[path.extname(entry.name)];
+      if (entry.isFile() && type && /^[A-Za-z0-9._-]+$/.test(entry.name)) assets.set(entry.name, { type, body: readFileSync(path.join(assetsDir, entry.name)) });
+    }
+  }
 
   app.get("/assets/:file", async (request, reply) => {
-    const file = (request.params as { file: string }).file;
-    if (!/^[A-Za-z0-9._-]+$/.test(file)) return reply.code(404).send({ error: "not_found" });
-    const full = path.join(assets, file);
-    if (!full.startsWith(assets + path.sep) || !existsSync(full) || !statSync(full).isFile()) return reply.code(404).send({ error: "not_found" });
-    const type = TYPES[path.extname(file)];
-    if (!type) return reply.code(404).send({ error: "not_found" });
-    return reply.header("content-type", type).header("cache-control", "public, max-age=31536000, immutable").send(readFileSync(full));
+    const asset = assets.get((request.params as { file: string }).file);
+    if (!asset) return reply.code(404).send({ error: "not_found" });
+    return reply.header("content-type", asset.type).header("cache-control", "public, max-age=31536000, immutable").send(asset.body);
   });
 
   app.setNotFoundHandler(async (request, reply) => {
