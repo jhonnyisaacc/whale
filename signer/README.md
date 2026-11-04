@@ -67,7 +67,12 @@ The instruction rules:
 
 A rule that needs an account loaded from an address lookup table refuses.
 
-Programs in `solana.programs`, such as Jupiter, are trusted with this wallet's signature. Their instructions are not decoded yet, so a Jupiter swap's destination is not checked here.
+Jupiter v6, when listed in `solana.programs`, is decoded the way the app signing policy decodes it. Only the four exact-in routes pass, and each one must meet three conditions:
+- the transfer authority is this wallet;
+- the platform fee account is unset;
+- every destination is this wallet's wrapped SOL account, or its associated token account for the output mint under Token or Token-2022.
+
+The signer derives those addresses itself, with the runtime's program-derived-address search. Any other program in `solana.programs` is trusted with this wallet's signature without being decoded.
 
 The daily totals live in `--ledger`, keyed by UTC day. The file is replaced atomically, and it moves only after a signature exists.
 

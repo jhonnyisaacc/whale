@@ -34,6 +34,105 @@ const COMPUTE_BUDGET: &str = "ComputeBudget111111111111111111111111111111";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+const JUPITER: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
+const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+// Jupiter v6 exact-in routes, from the published IDL, as the app signing policy reads them. Exact-out and newer routes
+// are refused.
+struct JupiterRoute {
+    discriminator: [u8; 8],
+    authority: usize,
+    destinations: &'static [usize],
+    mint: usize,
+    fee: usize,
+}
+
+const JUPITER_ROUTES: [JupiterRoute; 4] = [
+    JupiterRoute {
+        discriminator: [0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a],
+        authority: 1,
+        destinations: &[3, 4],
+        mint: 5,
+        fee: 6,
+    },
+    JupiterRoute {
+        discriminator: [0x96, 0x56, 0x47, 0x74, 0xa7, 0x5d, 0x0e, 0x68],
+        authority: 1,
+        destinations: &[3, 4],
+        mint: 5,
+        fee: 6,
+    },
+    JupiterRoute {
+        discriminator: [0xc1, 0x20, 0x9b, 0x33, 0x41, 0xd6, 0x9c, 0x81],
+        authority: 2,
+        destinations: &[6],
+        mint: 8,
+        fee: 9,
+    },
+    JupiterRoute {
+        discriminator: [0xe6, 0x79, 0x8f, 0x50, 0x77, 0x9f, 0x6a, 0xaa],
+        authority: 2,
+        destinations: &[6],
+        mint: 8,
+        fee: 9,
+    },
+];
+
+fn known(text: &str) -> [u8; 32] {
+    solana::key(text).expect("a built-in program id is valid base58")
+}
+
+// The swap's output must land in this wallet: its wrapped SOL account or its associated token account for the output
+// mint, under Token or Token-2022. The optional second destination may be left as the Jupiter program id (unset).
+fn jupiter_route(
+    data: &[u8],
+    account: &dyn Fn(usize) -> Option<[u8; 32]>,
+    own: [u8; 32],
+) -> Result<(), String> {
+    let jupiter = known(JUPITER);
+    let discriminator = data.get(..8).ok_or("jupiter instruction is too short")?;
+    let route = JUPITER_ROUTES
+        .iter()
+        .find(|route| route.discriminator.as_slice() == discriminator)
+        .ok_or("this Jupiter instruction is not an exact-in route")?;
+    let read = |slot: usize| {
+        account(slot).ok_or_else(|| {
+            format!("jupiter account {slot} comes from a lookup table, so it cannot be checked")
+        })
+    };
+    if read(route.authority)? != own {
+        return Err("the Jupiter transfer authority is not this wallet".into());
+    }
+    if read(route.fee)? != jupiter {
+        return Err("the Jupiter platform fee account is set".into());
+    }
+    let mint = read(route.mint)?;
+    let ata = known(ASSOCIATED_TOKEN);
+    let mut owned = vec![crate::pda::associated_token_address(
+        &own,
+        &known(WSOL_MINT),
+        &known(TOKEN),
+        &ata,
+    )];
+    for program in [TOKEN, TOKEN_2022] {
+        owned.push(crate::pda::associated_token_address(
+            &own,
+            &mint,
+            &known(program),
+            &ata,
+        ));
+    }
+    for (position, slot) in route.destinations.iter().enumerate() {
+        let destination = read(*slot)?;
+        if position > 0 && destination == jupiter {
+            continue;
+        }
+        if !owned.contains(&Some(destination)) {
+            return Err("the Jupiter swap pays a token account that is not this wallet's".into());
+        }
+    }
+    Ok(())
+}
 // The eight Jito tip accounts, as the app signing policy lists them.
 const JITO_TIPS: [&str; 8] = [
     "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
@@ -386,6 +485,10 @@ impl Policy {
                         "an associated token account must be funded by this wallet for itself or a listed destination",
                     );
                 }
+            } else if program_name == JUPITER
+                && let Err(reason) = jupiter_route(data, &account, own)
+            {
+                refuse(&mut decision, &reason);
             }
         }
         let priority = unit_price.saturating_mul(unit_limit) / 1_000_000 + tipped;
