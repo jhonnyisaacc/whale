@@ -1,3 +1,6 @@
+packages:
+  - web
+
 # test/supply-chain.test.ts fails if any of these settings is removed or weakened.
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true

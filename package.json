@@ -20,7 +20,7 @@
     "policy:turnkey": "tsc -p tsconfig.json && node scripts/write-turnkey-policy.mjs",
     "check:size": "node scripts/check-file-size.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
-    "check": "node scripts/check-file-size.mjs && node scripts/check-boundaries.mjs && tsc -p tsconfig.json && node --test dist/test/*.test.js",
+    "check": "node scripts/check-file-size.mjs && node scripts/check-boundaries.mjs && tsc -p tsconfig.json && node --test dist/test/*.test.js && pnpm --filter @whale/web run build",
     "start:mcp": "node dist/src/mcp-server.js",
     "smoke": "tsc -p tsconfig.json && node scripts/smoke-entrypoints.mjs",
     "canary": "tsc -p tsconfig.json && node dist/src/canary.js",
