@@ -52,7 +52,7 @@ Whale's delegated credential is one P-256 API key per deployment. It lives only 
 
 #### `smart_account`
 
-The user's key owns the account. Whale holds a session key whose permissions an audited on-chain module enforces: allowed targets and selectors, spending limits per period, value limits, and expiry. Whale writes no account or module contract. The module choice needs its own record before code: ERC-7579 smart sessions on EVM, Squads spending limits on Solana. Until that record lands, the level is listed as unavailable.
+The user's key owns the account. Whale holds a session key whose permissions an audited on-chain module enforces: allowed targets and selectors, spending limits per period, value limits, and expiry. Whale writes no account or module contract. The module choice is [ADR 0004](0004-smart-account-level.md). Until its verification steps are done, the level is listed as unavailable.
 
 ### Identity
 
