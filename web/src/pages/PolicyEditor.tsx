@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, describe, type Policy, type Wallet } from "../api.js";
 import { stepUp } from "../stepup.js";
+import { addPolicies, deletePolicies, type Delegation } from "../turnkey.js";
 
 type Pending = { id: string; document: Policy; requestedAt: string; effectiveAt: string } | null;
 
@@ -11,15 +12,39 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [destination, setDestination] = useState({ family: "evm" as "evm" | "solana", address: "", label: "" });
+  const [drift, setDrift] = useState(false);
+  const enclave = wallet.level === "enclave" && wallet.status === "active";
 
   const loadPending = () =>
     api<{ pending: Pending }>(`/api/wallets/${wallet.id}/policy/pending`)
       .then((reply) => setPending(reply.pending))
       .catch((caught: unknown) => setError(describe(caught)));
+  const checkDrift = () =>
+    enclave
+      ? api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`)
+          .then((delegation) => setDrift(!delegation.inSync))
+          .catch(() => undefined)
+      : Promise.resolve();
   useEffect(() => {
     setDraft(wallet.policy);
     void loadPending();
+    void checkDrift();
   }, [wallet.id, wallet.policyVersion]);
+
+  // The enclave keeps the Turnkey policy it was given. After a change, the owner's passkey swaps Whale's policies for
+  // the freshly rendered set, and the gateway reads Turnkey back before it calls them in sync.
+  const resync = async () => {
+    setError(null);
+    try {
+      const delegation = await api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`);
+      if (delegation.delegatePolicyIds.length > 0) await deletePolicies(delegation);
+      await addPolicies(delegation);
+      await api(`/api/wallets/${wallet.id}/enclave/resync`, { method: "POST", body: {} });
+      setDrift(false);
+    } catch (caught) {
+      setError(describe(caught));
+    }
+  };
 
   const toggle = <T extends string>(list: T[], item: T): T[] => (list.includes(item) ? list.filter((entry) => entry !== item) : [...list, item]);
 
@@ -59,6 +84,12 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
   return (
     <div className="card stack">
       <h2>Policy · version {wallet.policyVersion}</h2>
+      {drift ? (
+        <div className="notice row">
+          <span>The enclave's Turnkey policy no longer matches this policy. Until you update it, Turnkey keeps the old rules.</span>
+          <button onClick={() => void resync()}>Update with passkey</button>
+        </div>
+      ) : null}
       {pending ? (
         <div className="notice row">
           <span>A loosening waits until {new Date(pending.effectiveAt).toLocaleString()}.</span>
