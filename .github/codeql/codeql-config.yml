@@ -1,0 +1,9 @@
+name: whale
+queries:
+  - uses: security-extended
+query-filters:
+  # Whale stores no human password: sign-in is Google and wallet ownership is a passkey. Every stored secret is a
+  # 256-bit random token (API keys, sessions, OAuth codes and tokens). SHA-256 is the right hash for those, and a
+  # slow password hash would only add latency to every MCP call. See docs/adr/0003-hosted-control-plane.md.
+  - exclude:
+      id: js/insufficient-password-hash
