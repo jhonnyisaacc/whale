@@ -105,6 +105,23 @@ The gateway needs these variables:
 
 Without these variables the enclave routes answer `enclave_unavailable`.
 
+### Policy changes and freezing
+
+`PUT /api/wallets/:id/policy` takes `{ baseVersion, document, assertion? }`. A stale `baseVersion` answers 409.
+
+- **Narrowing** applies at once and supersedes any widening still waiting.
+- **Widening** without an assertion answers 428. The client asks `POST /api/passkeys/step-up` for `{ kind: "policy.widen", walletId, baseVersion, document }`, signs it, and sends the assertion. The change then waits 24 hours, and `DELETE /api/wallets/:id/policy/pending` cancels it.
+
+Each gateway sweeps due changes once a minute. A change applies only on the version it was approved against. Otherwise it is marked superseded.
+
+Two routes freeze, with no passkey needed:
+- `POST /api/wallets/:id/freeze` stops every agent of that wallet at once.
+- `POST /api/account/freeze` freezes every wallet of the account. The account itself stays usable, so the owner can still sign in and unfreeze.
+
+`POST /api/wallets/:id/unfreeze` needs a step-up for `{ kind: "wallet.unfreeze", walletId }`.
+
+The Turnkey policy of an enclave wallet stays as rendered at activation. A widening that adds an EVM chain changes the app policy only, and Turnkey keeps refusing that chain until the delegation is rendered again under the user's passkey.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.
