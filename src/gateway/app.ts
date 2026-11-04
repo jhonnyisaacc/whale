@@ -4,6 +4,7 @@ import { gatewaySecrets, type GatewayConfig } from "./config.js";
 import { googleKeys, type KeySource } from "./google.js";
 import { gatewayApp } from "./http.js";
 import { registerAuthRoutes } from "./routes-auth.js";
+import { registerWalletRoutes } from "./routes-wallets.js";
 
 export type GatewayDeps = {
   config: GatewayConfig;
@@ -20,5 +21,6 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   const app = await gatewayApp(deps.config, { logger: deps.logger ?? true, secrets: gatewaySecrets(deps.config) });
   app.get("/health", async () => ({ ok: true }));
   registerAuthRoutes(app, { config: deps.config, pool: deps.pool, fetchImpl, keys: deps.keys ?? googleKeys(fetchImpl, now), now });
+  registerWalletRoutes(app, deps.pool);
   return app;
 }
