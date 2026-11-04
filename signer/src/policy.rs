@@ -37,37 +37,45 @@ const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const JUPITER: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
-// Jupiter v6 exact-in routes, from the published IDL, as the app signing policy reads them: (discriminator,
-// authority slot, destination slots, mint slot, platform fee slot). Exact-out and newer routes are refused.
-const JUPITER_ROUTES: [([u8; 8], usize, &[usize], usize, usize); 4] = [
-    (
-        [0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a],
-        1,
-        &[3, 4],
-        5,
-        6,
-    ),
-    (
-        [0x96, 0x56, 0x47, 0x74, 0xa7, 0x5d, 0x0e, 0x68],
-        1,
-        &[3, 4],
-        5,
-        6,
-    ),
-    (
-        [0xc1, 0x20, 0x9b, 0x33, 0x41, 0xd6, 0x9c, 0x81],
-        2,
-        &[6],
-        8,
-        9,
-    ),
-    (
-        [0xe6, 0x79, 0x8f, 0x50, 0x77, 0x9f, 0x6a, 0xaa],
-        2,
-        &[6],
-        8,
-        9,
-    ),
+// Jupiter v6 exact-in routes, from the published IDL, as the app signing policy reads them. Exact-out and newer routes
+// are refused.
+struct JupiterRoute {
+    discriminator: [u8; 8],
+    authority: usize,
+    destinations: &'static [usize],
+    mint: usize,
+    fee: usize,
+}
+
+const JUPITER_ROUTES: [JupiterRoute; 4] = [
+    JupiterRoute {
+        discriminator: [0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a],
+        authority: 1,
+        destinations: &[3, 4],
+        mint: 5,
+        fee: 6,
+    },
+    JupiterRoute {
+        discriminator: [0x96, 0x56, 0x47, 0x74, 0xa7, 0x5d, 0x0e, 0x68],
+        authority: 1,
+        destinations: &[3, 4],
+        mint: 5,
+        fee: 6,
+    },
+    JupiterRoute {
+        discriminator: [0xc1, 0x20, 0x9b, 0x33, 0x41, 0xd6, 0x9c, 0x81],
+        authority: 2,
+        destinations: &[6],
+        mint: 8,
+        fee: 9,
+    },
+    JupiterRoute {
+        discriminator: [0xe6, 0x79, 0x8f, 0x50, 0x77, 0x9f, 0x6a, 0xaa],
+        authority: 2,
+        destinations: &[6],
+        mint: 8,
+        fee: 9,
+    },
 ];
 
 fn known(text: &str) -> [u8; 32] {
@@ -83,22 +91,22 @@ fn jupiter_route(
 ) -> Result<(), String> {
     let jupiter = known(JUPITER);
     let discriminator = data.get(..8).ok_or("jupiter instruction is too short")?;
-    let (_, authority, destinations, mint, fee) = JUPITER_ROUTES
+    let route = JUPITER_ROUTES
         .iter()
-        .find(|(known, ..)| known.as_slice() == discriminator)
+        .find(|route| route.discriminator.as_slice() == discriminator)
         .ok_or("this Jupiter instruction is not an exact-in route")?;
     let read = |slot: usize| {
         account(slot).ok_or_else(|| {
             format!("jupiter account {slot} comes from a lookup table, so it cannot be checked")
         })
     };
-    if read(*authority)? != own {
+    if read(route.authority)? != own {
         return Err("the Jupiter transfer authority is not this wallet".into());
     }
-    if read(*fee)? != jupiter {
+    if read(route.fee)? != jupiter {
         return Err("the Jupiter platform fee account is set".into());
     }
-    let mint = read(*mint)?;
+    let mint = read(route.mint)?;
     let ata = known(ASSOCIATED_TOKEN);
     let mut owned = vec![crate::pda::associated_token_address(
         &own,
@@ -114,7 +122,7 @@ fn jupiter_route(
             &ata,
         ));
     }
-    for (position, slot) in destinations.iter().enumerate() {
+    for (position, slot) in route.destinations.iter().enumerate() {
         let destination = read(*slot)?;
         if position > 0 && destination == jupiter {
             continue;
@@ -477,10 +485,10 @@ impl Policy {
                         "an associated token account must be funded by this wallet for itself or a listed destination",
                     );
                 }
-            } else if program_name == JUPITER {
-                if let Err(reason) = jupiter_route(data, &account, own) {
-                    refuse(&mut decision, &reason);
-                }
+            } else if program_name == JUPITER
+                && let Err(reason) = jupiter_route(data, &account, own)
+            {
+                refuse(&mut decision, &reason);
             }
         }
         let priority = unit_price.saturating_mul(unit_limit) / 1_000_000 + tipped;
