@@ -6,7 +6,9 @@ import { executorClient, type ExecutorClient } from "./executor-client.js";
 import { gatewayApp } from "./http.js";
 import { registerMcpRoutes } from "./mcp-http.js";
 import { registerAuthRoutes } from "./routes-auth.js";
+import { registerEnclaveRoutes } from "./enclave.js";
 import { registerOAuthRoutes } from "./routes-oauth.js";
+import { delegationFromEnv, turnkeyParentFromEnv, type DelegationConfig, type TurnkeyParent } from "./turnkey.js";
 import { registerPasskeyRoutes } from "./routes-passkeys.js";
 import { registerWalletRoutes } from "./routes-wallets.js";
 import type { MetadataFetch } from "./oauth-clients.js";
@@ -20,6 +22,8 @@ export type GatewayDeps = {
   logger?: boolean;
   executor?: ExecutorClient | null;
   fetchDocument?: MetadataFetch;
+  turnkey?: TurnkeyParent | null;
+  delegation?: DelegationConfig | null;
 };
 
 export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> {
@@ -30,6 +34,12 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   registerAuthRoutes(app, { config: deps.config, pool: deps.pool, fetchImpl, keys: deps.keys ?? googleKeys(fetchImpl, now), now });
   registerWalletRoutes(app, deps.pool);
   registerPasskeyRoutes(app, { config: deps.config, pool: deps.pool });
+  registerEnclaveRoutes(app, {
+    config: deps.config,
+    pool: deps.pool,
+    turnkey: deps.turnkey !== undefined ? deps.turnkey : turnkeyParentFromEnv(process.env),
+    delegation: deps.delegation !== undefined ? deps.delegation : delegationFromEnv(process.env),
+  });
   registerOAuthRoutes(app, { config: deps.config, pool: deps.pool, now, ...(deps.fetchDocument ? { fetchDocument: deps.fetchDocument } : {}) });
   registerMcpRoutes(app, { config: deps.config, pool: deps.pool, executor: deps.executor ?? (deps.config.executor ? executorClient(deps.config.executor, fetchImpl) : null) });
   return app;
