@@ -1,8 +1,6 @@
-import { lookup } from "node:dns/promises";
-import { request } from "node:https";
-import { BlockList, isIP } from "node:net";
 import type pg from "pg";
 import { z } from "zod";
+import { publicHttpsUrl, safeRequest } from "./safe-https.js";
 
 export type OAuthClient = { id: string; kind: "registered" | "metadata_document"; name: string; redirectUris: string[] };
 
@@ -45,83 +43,19 @@ const metadataSchema = z
   .object({ client_id: z.string(), client_name: z.string().trim().min(1).max(128), redirect_uris: z.array(z.string()).min(1).max(5) })
   .loose();
 
-// Two lists: Node matches an IPv4 address against IPv6 rules too, so a mapped-range rule would block every IPv4 address.
-const blocked4 = new BlockList();
-const blocked6 = new BlockList();
-for (const [network, prefix] of [
-  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
-  ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 3],
-] as const) blocked4.addSubnet(network, prefix, "ipv4");
-for (const [network, prefix] of [["::", 127], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["64:ff9b::", 96]] as const) blocked6.addSubnet(network, prefix, "ipv6");
-
-export function publicAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) return !blocked4.check(address, "ipv4");
-  if (family !== 6) return false;
-  // IPv4-mapped IPv6 reaches the IPv4 host behind it. Refuse the whole range rather than decode it.
-  if (address.toLowerCase().startsWith("::ffff:")) return false;
-  return !blocked6.check(address, "ipv6");
-}
+export { publicAddress } from "./safe-https.js";
 
 export function metadataUrlAllowed(raw: string): boolean {
-  try {
-    const url = new URL(raw);
-    return url.protocol === "https:" && url.pathname.length > 1 && !url.hash && !url.username && !url.password && (url.port === "" || url.port === "443") && isIP(url.hostname.replace(/^\[|\]$/g, "")) === 0;
-  } catch {
-    return false;
-  }
+  return publicHttpsUrl(raw) && new URL(raw).pathname.length > 1;
 }
 
 export type MetadataFetch = (url: string) => Promise<string>;
 
-// The connection uses the address this lookup checked, so a DNS answer that flips to a private address after the
-// check (rebinding) never reaches the socket. No redirects, a size cap, and a short timeout.
-export const fetchMetadataDocument: MetadataFetch = (raw) =>
-  new Promise((resolve, reject) => {
-    const url = new URL(raw);
-    const req = request(
-      url,
-      {
-        method: "GET",
-        headers: { accept: "application/json" },
-        timeout: 5_000,
-        // Node asks for every address when it races IPv4 and IPv6, and for one address otherwise.
-        lookup: (hostname, options, callback) => {
-          lookup(hostname, { all: true })
-            .then((addresses) => {
-              if (addresses.length === 0 || addresses.some((entry) => !publicAddress(entry.address))) {
-                callback(new Error("client metadata host resolves to a private address"), "", 4);
-              } else if (options.all) {
-                callback(null, addresses);
-              } else {
-                const first = addresses[0] as { address: string; family: number };
-                callback(null, first.address, first.family);
-              }
-            })
-            .catch((error: Error) => callback(error, "", 4));
-        },
-      },
-      (response) => {
-        if (response.statusCode !== 200) {
-          response.resume();
-          reject(new Error(`client metadata answered ${response.statusCode}`));
-          return;
-        }
-        let size = 0;
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => {
-          size += chunk.byteLength;
-          if (size > METADATA_MAX_BYTES) req.destroy(new Error("client metadata is too large"));
-          else chunks.push(chunk);
-        });
-        response.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-        response.on("error", reject);
-      },
-    );
-    req.on("timeout", () => req.destroy(new Error("client metadata timed out")));
-    req.on("error", reject);
-    req.end();
-  });
+export const fetchMetadataDocument: MetadataFetch = async (raw) => {
+  const response = await safeRequest(raw, { method: "GET", headers: { accept: "application/json" }, maxBytes: METADATA_MAX_BYTES, timeoutMs: 5_000 });
+  if (response.status !== 200) throw new Error(`client metadata answered ${response.status}`);
+  return response.body;
+};
 
 export async function registerClient(pool: pg.Pool, id: string, body: z.infer<typeof registrationSchema>): Promise<OAuthClient | string> {
   if (!body.redirect_uris.every(redirectUriAllowed)) return "a redirect_uri must be https, a loopback http address, or an app scheme";
