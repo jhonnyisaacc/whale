@@ -2,7 +2,9 @@ import type { FastifyInstance } from "fastify";
 import type pg from "pg";
 import { gatewaySecrets, type GatewayConfig } from "./config.js";
 import { googleKeys, type KeySource } from "./google.js";
+import { executorClient, type ExecutorClient } from "./executor-client.js";
 import { gatewayApp } from "./http.js";
+import { registerMcpRoutes } from "./mcp-http.js";
 import { registerAuthRoutes } from "./routes-auth.js";
 import { registerWalletRoutes } from "./routes-wallets.js";
 
@@ -13,6 +15,7 @@ export type GatewayDeps = {
   keys?: KeySource;
   now?: () => number;
   logger?: boolean;
+  executor?: ExecutorClient | null;
 };
 
 export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> {
@@ -22,5 +25,6 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   app.get("/health", async () => ({ ok: true }));
   registerAuthRoutes(app, { config: deps.config, pool: deps.pool, fetchImpl, keys: deps.keys ?? googleKeys(fetchImpl, now), now });
   registerWalletRoutes(app, deps.pool);
+  registerMcpRoutes(app, { config: deps.config, pool: deps.pool, executor: deps.executor ?? (deps.config.executor ? executorClient(deps.config.executor, fetchImpl) : null) });
   return app;
 }

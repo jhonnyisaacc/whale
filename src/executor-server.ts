@@ -6,6 +6,7 @@ import { createBalanceCache, holdingFitsChain, type BalanceCache, type BalanceRe
 import { resolveTokenDecimals } from "./token-decimals.js";
 import { createExecutorState, execute, restoreSpent, type ExecutorDeps, type ExecutorState } from "./executor.js";
 import { chainReader } from "./executor-server/chain-reader.js";
+import { hostedServiceToken, registerHostedRoutes } from "./executor-server/hosted.js";
 import { closeWithdrawPools } from "./withdraw-journal.js";
 import { latencyLog } from "./latency.js";
 import { anyTokenMatches, bearerOf, buildApp, mutatingLimit, shutdown } from "./http.js";
@@ -162,6 +163,8 @@ export async function createExecutorApp(
     await notify(config, report, secrets);
     return report;
   });
+  const hostedToken = hostedServiceToken(process.env, config.executorAuthTokens);
+  if (hostedToken) registerHostedRoutes(app, { token: hostedToken });
   void holdings;
   void fetchImpl;
   app.post("/rebalance", guard, async (request, reply) => {
@@ -196,7 +199,7 @@ async function main(): Promise<void> {
   }
   const holdingsParsed = holdingsSchema.safeParse(JSON.parse(process.env.WALLET_HOLDINGS_JSON ?? "[]"));
   if (!holdingsParsed.success) throw new Error("WALLET_HOLDINGS_JSON is invalid");
-  const secrets = [...signerSecrets, ...configSecrets(config)].filter((item) => item.length >= 8);
+  const secrets = [...signerSecrets, ...configSecrets(config), process.env.HOSTED_SERVICE_TOKEN ?? ""].filter((item) => item.length >= 8);
   const logger = createLogger(secrets);
   const releaseLock = config.databaseUrl ? await acquireExecutorLock(config.databaseUrl, () => process.exit(1)) : null;
   const state = createExecutorState();

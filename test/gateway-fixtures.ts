@@ -13,6 +13,7 @@ export function gatewayConfig(): GatewayConfig {
     google: { clientId: CLIENT_ID, clientSecret: "google-secret" },
     secret: Buffer.alloc(32, 3),
     trustProxyHops: 0,
+    executor: null,
   };
 }
 
