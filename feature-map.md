@@ -13,3 +13,4 @@ Each row names a feature and the check that proves it. Add a row when a feature 
 | No file grows past the agent budget | `node scripts/check-file-size.mjs` |
 | Layers keep their import rules | `node scripts/check-boundaries.mjs` |
 | Migrations apply once under a lock, refuse a changed file, and the tenant schema refuses cross-account links | `pnpm test` with `TEST_DATABASE_URL`. `test/migrate.test.ts` and `test/tenancy-pg.test.ts` cover it. CI runs Postgres. |
+| Google sign-in verifies the ID token, keys the account by subject, and opens a hashed, expiring session; cross-origin posts get 403 | `pnpm test`. `test/gateway-auth.test.ts`, and `test/gateway-pg.test.ts` with `TEST_DATABASE_URL`. `pnpm run smoke` boots the gateway. |

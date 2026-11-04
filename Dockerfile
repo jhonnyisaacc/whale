@@ -17,6 +17,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 RUN pnpm install --frozen-lockfile --prod && rm -rf /root/.cache /root/.local/share/pnpm
 COPY --from=build /app/dist ./dist
+COPY migrations ./migrations
 USER node
 EXPOSE 8080
 CMD ["node", "dist/src/executor-server.js"]
