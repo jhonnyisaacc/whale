@@ -7,6 +7,7 @@ import type { AgentContext } from "./agents.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { planSend } from "./mcp-sends.js";
 import { effectiveLimits, type WalletPolicy } from "./policy.js";
+import { x402Quote, type Fetch402 } from "./x402.js";
 import type { WalletView } from "./wallets.js";
 
 const amount = { type: "string", description: "Positive integer in the token's smallest unit (wei, lamports, 6-decimal USDC units)." };
@@ -21,13 +22,16 @@ export const HOSTED_TOOLS = [
   { name: "quote", description: "Quote a same-chain swap from the wallet. Moves no money.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 } }, required: ["chain", "sellToken", "buyToken", "sellAmount"], additionalProperties: false } },
   { name: "swap", description: "Plan a swap and return the route it would take. Checks this agent's chains, actions, and per-transaction and daily USD caps, the wallet's daily USD cap, and the wallet's slippage and token list. Above the owner's approval threshold, or whenever Whale cannot price what it sells, it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 }, idempotencyKey: key }, required: ["chain", "sellToken", "buyToken", "sellAmount", "idempotencyKey"], additionalProperties: false } },
   { name: "transfer", description: "Plan a transfer to an address on the wallet's destination list. Checks this agent's chains and actions and the wallet's token list, not its USD limits. When the owner set an approval threshold it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, token, to: { type: "string", description: "A destination the wallet owner listed in the dashboard." }, amount, idempotencyKey: key }, required: ["chain", "token", "to", "amount", "idempotencyKey"], additionalProperties: false } },
+  { name: "network_costs", description: "Estimate what a swap and a transfer cost right now on each chain this agent may use, cheapest first. Moves no money.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "x402_quote", description: "Read an x402 paid resource's payment challenge and say which option this agent could pay within its limits. Pays nothing.", inputSchema: { type: "object", properties: { url: { type: "string", description: "The https URL that answers 402 Payment Required." } }, required: ["url"], additionalProperties: false } },
 ] as const;
 
+const x402Args = z.object({ url: z.string().url().max(512) }).strict();
 const swapArgs = z.object({ chain: z.string(), sellToken: z.string(), buyToken: z.string(), sellAmount: z.string(), slippageBps: z.number().int().optional(), idempotencyKey: z.string().optional() }).strict();
 const transferArgs = z.object({ chain: z.string(), token: z.string(), to: z.string(), amount: z.string(), idempotencyKey: z.string() }).strict();
 const chainArgs = z.object({ chain: z.string() }).strict();
 
-export type ToolEnv = { pool: pg.Pool; agent: AgentContext; wallet: WalletView; executor: ExecutorClient | null };
+export type ToolEnv = { pool: pg.Pool; agent: AgentContext; wallet: WalletView; executor: ExecutorClient | null; fetch402?: Fetch402 };
 export type ToolOutcome = { ok: true; value: unknown } | { ok: false; error: string };
 
 function family(chainKey: string): "evm" | "solana" | null {
@@ -108,6 +112,18 @@ export async function callHostedTool(env: ToolEnv, name: string, args: unknown):
     if (!parsed.success) return { ok: false, error: "arguments do not match the tool schema" };
     const address = addressOf(env.wallet, parsed.data.chain);
     return address ? { ok: true, value: { chain: parsed.data.chain, address } } : { ok: false, error: "this wallet has no address on that chain yet. Finish wallet setup in the dashboard" };
+  }
+  if (name === "x402_quote") {
+    const parsed = x402Args.safeParse(args);
+    if (!parsed.success) return { ok: false, error: "arguments do not match the tool schema" };
+    return { ok: true, value: await x402Quote(parsed.data.url, agent, env.fetch402) };
+  }
+  if (name === "network_costs") {
+    if (!env.executor) return { ok: false, error: "network costs are not configured on this deployment" };
+    const chainKeys = effectiveLimits(agent.limits, agent.policy).chains;
+    if (chainKeys.length === 0) return { ok: false, error: "this agent has no chain left inside the wallet policy" };
+    const reply = (await env.executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command: { kind: "costs", chainKeys } })) as { networks?: { chainKey: string }[] };
+    return { ok: true, value: { ...reply, cheapest: reply.networks?.[0]?.chainKey ?? null } };
   }
   if (!HOSTED_TOOLS.some((tool) => tool.name === name)) return { ok: false, error: `unknown tool ${name}` };
   const command = commandFor(name, args, env.wallet, agent);

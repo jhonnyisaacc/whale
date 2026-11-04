@@ -18,7 +18,10 @@ export const hostedCommandSchema = z.discriminatedUnion("kind", [
 ]);
 export type HostedCommand = z.infer<typeof hostedCommandSchema>;
 
-export const hostedRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), command: hostedCommandSchema }).strict();
+export const costsCommandSchema = z.object({ kind: z.literal("costs"), chainKeys: z.array(chainKey).min(1).max(16) }).strict();
+export type CostsCommand = z.infer<typeof costsCommandSchema>;
+
+export const hostedRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), command: z.union([hostedCommandSchema, costsCommandSchema]) }).strict();
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
 
 function asset(key: string, tokenAddress: string): Asset {

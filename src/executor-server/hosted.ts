@@ -4,6 +4,7 @@ import { run } from "../commands.js";
 import { hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
 import { bearerOf } from "../bearer.js";
 import { anyTokenMatches } from "../http.js";
+import { cachedNetworkCosts, envCostReaders, type CostReaders } from "../network-costs.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
 
@@ -29,8 +30,9 @@ async function defaultDeps(command: WalletCommand): Promise<CommandDeps> {
 
 // Only quote and balance readers reach run(). A hosted swap is a quote reported as the swap that would happen,
 // so nothing on this route can sign or post.
-export function registerHostedRoutes(app: FastifyInstance, options: { token: string; depsFor?: (command: WalletCommand) => Promise<CommandDeps> }): void {
+export function registerHostedRoutes(app: FastifyInstance, options: { token: string; depsFor?: (command: WalletCommand) => Promise<CommandDeps>; costReaders?: CostReaders }): void {
   const depsFor = options.depsFor ?? defaultDeps;
+  const costReaders = options.costReaders ?? envCostReaders(process.env);
   const perAccount = app.createRateLimit({ max: 600, timeWindow: "1 minute", keyGenerator: (request) => (request.body as HostedRequest).accountId });
   app.post("/hosted/commands", { config: { rateLimit: false } }, async (request, reply) => {
     if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });
@@ -38,6 +40,7 @@ export function registerHostedRoutes(app: FastifyInstance, options: { token: str
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
     const limit = await perAccount(request);
     if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate limit" });
+    if (parsed.data.command.kind === "costs") return { kind: "costs", networks: await cachedNetworkCosts(parsed.data.command.chainKeys, costReaders) };
     const command = walletCommandOf(parsed.data.command);
     const deps = await depsFor(command);
     const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });
