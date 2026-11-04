@@ -100,6 +100,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const policy = walletPolicySchema.parse(wallet.document);
     return {
       subOrganizationId: wallet.turnkey_sub_org_id,
+      rootCredentialId: wallet.root_credential_id,
       delegateUser: { userName: DELEGATE_USER_NAME, apiKeys: [{ apiKeyName: "whale-executor", publicKey: deps.delegation.delegatePublicKey, curveType: "API_KEY_CURVE_P256" }], authenticators: [], oauthProviders: [], userTags: [] },
       delegateUserId: delegate?.userId ?? null,
       policies: delegate ? expectedPolicies({ delegateUserId: delegate.userId, walletId: wallet.turnkey_wallet_id, solanaAddress: wallet.solana, policy, config: deps.delegation }) : null,
