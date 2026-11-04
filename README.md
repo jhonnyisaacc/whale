@@ -43,7 +43,7 @@ pnpm install --frozen-lockfile
 pnpm run check
 ```
 
-`pnpm run check` runs the file-size ratchet, the import boundaries, the TypeScript build, and the unit tests. It needs Node 22.12 or later. Corepack picks the pnpm version pinned in `package.json`. Tests use fakes. They do not acquire market data and they do not broadcast.
+`pnpm run check` runs the file-size ratchet, the import boundaries, the TypeScript build, and the unit tests. It needs Node 22.12 or later. Corepack picks the pnpm version pinned in `package.json`. Tests use fakes. They do not acquire market data and they do not broadcast. Set `TEST_DATABASE_URL` to a Postgres you can drop schemas in to run the database tests too. CI does. Each run uses its own schema.
 
 ## Still open
 

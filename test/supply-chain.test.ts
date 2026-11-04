@@ -65,7 +65,7 @@ test("package.json pins every dependency and the package manager, and runs no li
   }
 });
 
-test("workflows pin every action to a commit and install only from the lockfile", () => {
+test("workflows pin every action and service image, and install only from the lockfile", () => {
   const found = workflows();
   assert.ok(found.length > 0);
   for (const { name, text } of found) {
@@ -75,6 +75,9 @@ test("workflows pin every action to a commit and install only from the lockfile"
     }
     for (const line of text.split("\n").filter((entry) => entry.includes("pnpm install"))) {
       assert.match(line, /--frozen-lockfile/, `${name}: ${line.trim()}`);
+    }
+    for (const line of text.split("\n").filter((entry) => /^\s*image:/.test(entry))) {
+      assert.match(line, /image: [\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}$/, `${name}: ${line.trim()}`);
     }
     const checkouts = text.match(/uses: actions\/checkout@/g)?.length ?? 0;
     const sealed = text.match(/persist-credentials: false/g)?.length ?? 0;
