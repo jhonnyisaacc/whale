@@ -2,6 +2,7 @@ pub mod abi;
 pub mod evm;
 pub mod keystore;
 pub mod ledger;
+pub mod net;
 pub mod policy;
 pub mod rlp;
 pub mod solana;

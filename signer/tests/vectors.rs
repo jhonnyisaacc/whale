@@ -137,3 +137,13 @@ fn a_sealed_keystore_opens_only_with_its_passphrase() {
     assert!(keystore::open(&sealed, "wrong horse battery").is_err());
     assert!(keystore::seal(&keys, "short").is_err());
 }
+
+#[test]
+fn personal_sign_matches_viem() {
+    let evm = load("evm.json");
+    let message = evm["personalSign"]["message"].as_str().unwrap();
+    assert_eq!(
+        whale_signer::evm::personal_sign(message, &keys().evm),
+        evm["personalSign"]["signature"].as_str().unwrap()
+    );
+}
