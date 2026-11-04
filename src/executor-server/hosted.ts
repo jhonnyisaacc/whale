@@ -3,6 +3,7 @@ import type { CommandDeps, WalletCommand, WalletResult } from "../commands.js";
 import { run } from "../commands.js";
 import { hostedRequestSchema, walletCommandOf } from "../hosted-commands.js";
 import { anyTokenMatches, bearerOf, perMinute } from "../http.js";
+import { cachedNetworkCosts, envCostReaders, type CostReaders } from "../network-costs.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
 
@@ -28,12 +29,14 @@ async function defaultDeps(command: WalletCommand): Promise<CommandDeps> {
 
 // Only quote and balance readers reach run(). A hosted swap is a quote reported as the swap that would happen,
 // so nothing on this route can sign or post.
-export function registerHostedRoutes(app: FastifyInstance, options: { token: string; depsFor?: (command: WalletCommand) => Promise<CommandDeps> }): void {
+export function registerHostedRoutes(app: FastifyInstance, options: { token: string; depsFor?: (command: WalletCommand) => Promise<CommandDeps>; costReaders?: CostReaders }): void {
   const depsFor = options.depsFor ?? defaultDeps;
+  const costReaders = options.costReaders ?? envCostReaders(process.env);
   app.post("/hosted/commands", { config: perMinute(600) }, async (request, reply) => {
     if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });
     const parsed = hostedRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+    if (parsed.data.command.kind === "costs") return { kind: "costs", networks: await cachedNetworkCosts(parsed.data.command.chainKeys, costReaders) };
     const command = walletCommandOf(parsed.data.command);
     const deps = await depsFor(command);
     const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });
