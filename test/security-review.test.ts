@@ -337,7 +337,9 @@ test("keystore headers are authenticated, buffers zero, and the passphrase promp
 
 test("the image digest is pinned and jayson can load its json parser", () => {
   const docker = readFileSync(new URL("../../Dockerfile", import.meta.url), "utf8");
-  assert.match(docker, /node:22-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9/);
+  const images = docker.match(/^FROM .+$/gm) ?? [];
+  assert.equal(images.length, 2);
+  for (const image of images) assert.match(image, /^FROM node:22-bookworm-slim@sha256:[0-9a-f]{64}( AS \w+)?$/);
   assert.match(docker, /RUN pnpm install --frozen-lockfile\n/);
   assert.match(docker, /RUN pnpm install --frozen-lockfile --prod/);
   const workspace = readFileSync(new URL("../../pnpm-workspace.yaml", import.meta.url), "utf8");
