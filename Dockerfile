@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
+FROM node:22-bookworm-slim@sha256:6042915a8b58012e6699f998ed96bca43ec9d8582447bdb68bc2445d0fafeb79 AS build
 WORKDIR /app
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
@@ -9,7 +9,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN pnpm exec tsc -p tsconfig.json
 
-FROM node:22-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370
+FROM node:22-bookworm-slim@sha256:6042915a8b58012e6699f998ed96bca43ec9d8582447bdb68bc2445d0fafeb79
 WORKDIR /app
 ENV NODE_ENV=production COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
