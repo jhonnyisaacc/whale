@@ -1,14 +1,22 @@
 import { Connection } from "@solana/web3.js";
 import { createPublicClient, fallback, http, type PublicClient } from "viem";
 
+const fetchIgnoringRetryAfter: typeof fetch = async (input, init) => {
+  const response = await fetch(input, init);
+  if (!response.headers.has("retry-after")) return response;
+  const headers = new Headers(response.headers);
+  headers.delete("retry-after");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+};
+
 export function rpcTransport(url: string) {
-  return http(url, { retryCount: 0, timeout: 1_500 });
+  return http(url, { retryCount: 0, timeout: 1_500, fetchFn: fetchIgnoringRetryAfter });
 }
 
 export function readTransport(urls: readonly string[]) {
   const [only] = urls;
   if (urls.length === 1 && only) return rpcTransport(only);
-  return fallback(urls.map(rpcTransport), { rank: false, retryCount: 0 });
+  return fallback(urls.map(rpcTransport), { rank: false });
 }
 
 const evmClients = new Map<string, PublicClient>();
