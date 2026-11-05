@@ -1,3 +1,4 @@
+import { urlSecretForms } from "../redact.js";
 import type { AppConfig } from "./types.js";
 
 export function sendBoundMs(config: Pick<AppConfig, "confirmTimeoutMs" | "firmTimeoutMs">): number {
@@ -32,8 +33,8 @@ export function configSecrets(config: AppConfig): string[] {
     config.adminToken,
     config.notifierUrl,
     config.databaseUrl,
-    ...Object.values(config.rpcUrlsByChainKey).flat(),
-    ...Object.values(config.mevRpcByChainId),
+    ...Object.values(config.rpcUrlsByChainKey).flat().flatMap(urlSecretForms),
+    ...Object.values(config.mevRpcByChainId).flatMap(urlSecretForms),
   ].filter((item): item is string => typeof item === "string" && item.length >= 8);
 }
 
