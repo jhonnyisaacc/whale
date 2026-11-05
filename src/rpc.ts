@@ -8,7 +8,7 @@ export function rpcTransport(url: string) {
 export function readTransport(urls: readonly string[]) {
   const [only] = urls;
   if (urls.length === 1 && only) return rpcTransport(only);
-  return fallback(urls.map(rpcTransport), { rank: false });
+  return fallback(urls.map(rpcTransport), { rank: false, retryCount: 0 });
 }
 
 const evmClients = new Map<string, PublicClient>();
