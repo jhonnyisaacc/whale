@@ -43,9 +43,21 @@ export function zeroLoadedSecrets(): void {
   tracked.length = 0;
 }
 
+export function urlSecretForms(url: string): string[] {
+  try {
+    const parsed = new URL(url);
+    const normalized = parsed.href;
+    parsed.username = "";
+    parsed.password = "";
+    return [url, normalized, parsed.href];
+  } catch {
+    return [url];
+  }
+}
+
 export function redactText(input: string, secrets: readonly string[] = []): string {
   let text = input;
-  for (const secret of secrets) {
+  for (const secret of [...secrets].sort((left, right) => right.length - left.length)) {
     if (secret.length >= 8) text = text.split(secret).join("[redacted]");
   }
   return text.replace(CREDENTIAL_URL, "[redacted]").replace(HEX_KEY, "[redacted]").replace(BASE58_SECRET, "[redacted]");
