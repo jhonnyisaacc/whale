@@ -70,3 +70,20 @@ test("the tenant schema refuses cross-account links and history rewrites", { ski
     await drop();
   }
 });
+
+test("one EVM address belongs to one wallet whatever its case, while Solana addresses stay case-sensitive", { skip: !url }, async () => {
+  const { config, client, drop } = await freshSchema();
+  try {
+    await migrate(config, MIGRATIONS_DIR);
+    const account = (await client.query<{ id: string }>("INSERT INTO accounts DEFAULT VALUES RETURNING id")).rows[0]?.id;
+    const wallet = async () => (await client.query<{ id: string }>("INSERT INTO wallets (account_id, label, level) VALUES ($1, 'w', 'self_hosted') RETURNING id", [account])).rows[0]?.id;
+    const first = await wallet();
+    const second = await wallet();
+    const address = "0xAbCdEf0123456789aBcDeF0123456789AbCdEf01";
+    await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2), ($1, 'solana', 'AbcSolana')", [first, address]);
+    await assert.rejects(client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2)", [second, address.toLowerCase()]), /duplicate key/);
+    await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'solana', 'abcsolana')", [second]);
+  } finally {
+    await drop();
+  }
+});
