@@ -21,6 +21,7 @@ CREATE TABLE oauth_requests (
   expires_at timestamptz NOT NULL,
   decided_at timestamptz
 );
+CREATE INDEX oauth_requests_expires_idx ON oauth_requests (expires_at);
 
 CREATE TABLE oauth_codes (
   code_hash bytea PRIMARY KEY CHECK (length(code_hash) = 32),
@@ -33,7 +34,11 @@ CREATE TABLE oauth_codes (
   expires_at timestamptz NOT NULL,
   used_at timestamptz
 );
+CREATE INDEX oauth_codes_expires_idx ON oauth_codes (expires_at);
+CREATE INDEX oauth_codes_request_idx ON oauth_codes (request_id);
 
 ALTER TABLE agents ADD COLUMN oauth_client_id text REFERENCES oauth_clients (id);
 ALTER TABLE agent_credentials ADD COLUMN audience text;
+ALTER TABLE agent_credentials ADD COLUMN rotated_at timestamptz;
 ALTER TABLE agent_credentials ADD CONSTRAINT agent_credentials_oauth_audience CHECK (kind = 'api_key' OR audience IS NOT NULL);
+CREATE INDEX agent_credentials_oauth_expires_idx ON agent_credentials (expires_at) WHERE kind <> 'api_key';

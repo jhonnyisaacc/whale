@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import type { CommandDeps, WalletCommand, WalletResult } from "../commands.js";
 import { run } from "../commands.js";
-import { hostedRequestSchema, walletCommandOf } from "../hosted-commands.js";
-import { anyTokenMatches, bearerOf, perMinute } from "../http.js";
+import { hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
+import { bearerOf } from "../bearer.js";
+import { anyTokenMatches } from "../http.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
 
@@ -13,7 +14,7 @@ export type HostedReply =
 // The gateway's token can only reach this route. It is a different secret from the executor bearer, so a gateway
 // compromise cannot call /execute or /rebalance.
 export function hostedServiceToken(env: NodeJS.ProcessEnv, executorTokens: readonly string[]): string | null {
-  const token = env[HOSTED_TOKEN_ENV];
+  const token = env[HOSTED_TOKEN_ENV]?.trim();
   if (token === undefined) return null;
   if (token.length < 32) throw new Error(`${HOSTED_TOKEN_ENV} must be at least 32 characters`);
   if (executorTokens.includes(token)) throw new Error(`${HOSTED_TOKEN_ENV} must differ from EXECUTOR_AUTH_TOKEN`);
@@ -30,10 +31,13 @@ async function defaultDeps(command: WalletCommand): Promise<CommandDeps> {
 // so nothing on this route can sign or post.
 export function registerHostedRoutes(app: FastifyInstance, options: { token: string; depsFor?: (command: WalletCommand) => Promise<CommandDeps> }): void {
   const depsFor = options.depsFor ?? defaultDeps;
-  app.post("/hosted/commands", { config: perMinute(600) }, async (request, reply) => {
+  const perAccount = app.createRateLimit({ max: 600, timeWindow: "1 minute", keyGenerator: (request) => (request.body as HostedRequest).accountId });
+  app.post("/hosted/commands", { config: { rateLimit: false } }, async (request, reply) => {
     if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });
     const parsed = hostedRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+    const limit = await perAccount(request);
+    if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate limit" });
     const command = walletCommandOf(parsed.data.command);
     const deps = await depsFor(command);
     const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });

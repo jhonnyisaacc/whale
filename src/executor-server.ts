@@ -9,7 +9,8 @@ import { chainReader } from "./executor-server/chain-reader.js";
 import { hostedServiceToken, registerHostedRoutes } from "./executor-server/hosted.js";
 import { closeWithdrawPools } from "./withdraw-journal.js";
 import { latencyLog } from "./latency.js";
-import { anyTokenMatches, bearerOf, buildApp, mutatingLimit, shutdown } from "./http.js";
+import { bearerOf } from "./bearer.js";
+import { anyTokenMatches, buildApp, mutatingLimit, shutdown } from "./http.js";
 import { fetchHyperliquidMid, quoteHop } from "./clients.js";
 import { redactError, zeroLoadedSecrets } from "./redact.js";
 import { broadcastRoute, lookupAgedTx } from "./broadcast.js";
@@ -199,7 +200,7 @@ async function main(): Promise<void> {
   }
   const holdingsParsed = holdingsSchema.safeParse(JSON.parse(process.env.WALLET_HOLDINGS_JSON ?? "[]"));
   if (!holdingsParsed.success) throw new Error("WALLET_HOLDINGS_JSON is invalid");
-  const secrets = [...signerSecrets, ...configSecrets(config), process.env.HOSTED_SERVICE_TOKEN ?? ""].filter((item) => item.length >= 8);
+  const secrets = [...signerSecrets, ...configSecrets(config), process.env.HOSTED_SERVICE_TOKEN?.trim() ?? ""].filter((item) => item.length >= 8);
   const logger = createLogger(secrets);
   const releaseLock = config.databaseUrl ? await acquireExecutorLock(config.databaseUrl, () => process.exit(1)) : null;
   const state = createExecutorState();
