@@ -144,3 +144,42 @@ test("a closed account cannot sign in and an idle session expires", { skip: !TES
     await drop();
   }
 });
+
+test("a cross-origin POST is refused however the cookie-route path is encoded", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, drop, start } = await gatewayWithGoogle();
+  let probed = 0;
+  app.post("/api/probe", async () => {
+    probed += 1;
+    return { ok: true };
+  });
+  try {
+    const session = await signedIn(app, start);
+    const paths = ["/auth/logout", "/api/probe"].flatMap((path) => {
+      const [, prefix, rest] = path.split("/") as [string, string, string];
+      return [
+        path,
+        `/%${prefix.charCodeAt(0).toString(16)}${prefix.slice(1)}/${rest}`,
+        `/${prefix}/%${rest.charCodeAt(0).toString(16)}${rest.slice(1)}`,
+        `/${prefix}%2F${rest}`,
+        `/${prefix}%2f${rest}`,
+        `//${prefix}/${rest}`,
+        `/${prefix}//${rest}`,
+        `/${prefix.toUpperCase()}/${rest}`,
+        `/${prefix[0]?.toUpperCase()}${prefix.slice(1)}/${rest}`,
+        `${path}?x=1`,
+        `${path}/`,
+      ];
+    });
+    for (const url of paths) {
+      const reply = await app.inject({ method: "POST", url, headers: { cookie: `__Host-whale_session=${session}`, origin: "https://evil.example" } });
+      assert.ok(reply.statusCode === 403 || reply.statusCode === 404, `${url} answered ${reply.statusCode}`);
+    }
+    assert.equal(probed, 0);
+    const me = await app.inject({ method: "GET", url: "/%61pi/me", headers: { cookie: `__Host-whale_session=${session}` } });
+    assert.equal(me.statusCode, 200);
+    assert.equal(me.headers["cache-control"], "no-store");
+  } finally {
+    await app.close();
+    await drop();
+  }
+});
