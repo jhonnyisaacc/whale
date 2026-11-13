@@ -94,7 +94,11 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
         },
       });
     } catch (error) {
-      await pool.query("UPDATE wallets SET root_credential_id = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [wallet.id, root.credentialId]);
+      const credentialId = root.credentialId;
+      await inTransaction(pool, async (client) => {
+        const released = await client.query("UPDATE wallets SET root_credential_id = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [wallet.id, credentialId]);
+        if (released.rowCount === 1) await client.query("DELETE FROM passkeys WHERE credential_id = $1 AND account_id = $2", [credentialId, session.accountId]);
+      });
       throw error;
     }
     const recorded = await pool.query(

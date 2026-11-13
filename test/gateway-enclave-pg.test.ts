@@ -189,6 +189,28 @@ test("a failure after Turnkey creates the sub-organization still leaves it recor
   }
 });
 
+test("after Turnkey fails, the same passkey can be submitted again on a fresh challenge without a step-up", { skip: !TEST_DATABASE_URL }, async () => {
+  const gateway = await enclaveGateway();
+  const { app, user, fake } = gateway;
+  try {
+    const walletId = await gateway.newWallet();
+    const authenticator = softAuthenticator(RP);
+    const submit = async () => {
+      const options = (await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: user.headers, payload: {} })).json();
+      assert.deepEqual(options.excludeCredentials, []);
+      return app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave`, headers: user.headers, payload: { credential: authenticator.register(options.challenge), label: "Mac" } });
+    };
+    fake.faults.failNextCreate = true;
+    assert.equal((await submit()).statusCode, 500);
+    const retried = await submit();
+    assert.equal(retried.statusCode, 201, retried.body);
+    assert.equal(fake.created.length, 1);
+    assert.equal((await gateway.trackedSubOrgs()).length, 1);
+  } finally {
+    await gateway.close();
+  }
+});
+
 test("reading the delegation is rate limited per route", { skip: !TEST_DATABASE_URL }, async () => {
   const gateway = await enclaveGateway();
   try {
