@@ -22,6 +22,32 @@ export function sellUsd(command: Extract<HostedCommand, { kind: "swap" }>): numb
   return Number(BigInt(command.sellAmount)) / 10 ** asset.decimals;
 }
 
+type Priced = { usd: number; day: string };
+
+async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, idempotencyKey: string, priced: Priced): Promise<string | null> {
+  const totals = await client.query<{ agent: number; wallet: number }>(
+    `SELECT COALESCE(SUM(usd) FILTER (WHERE agent_id = $2), 0)::float8 AS agent, COALESCE(SUM(usd), 0)::float8 AS wallet
+     FROM agent_spends WHERE wallet_id = $1 AND day = $3::date AND NOT (agent_id = $2 AND idempotency_key = $4)`,
+    [agent.walletId, agent.agentId, priced.day, idempotencyKey],
+  );
+  const spent = totals.rows[0] ?? { agent: 0, wallet: 0 };
+  const agentCap = effectiveLimits(agent.limits, agent.policy).dailyUsd;
+  if (spent.agent + priced.usd > agentCap) return `the swap would take today's total to about ${usd(spent.agent + priced.usd)}, above this agent's ${usd(agentCap)} daily cap`;
+  if (spent.wallet + priced.usd > agent.policy.dailyUsd) return `the swap would take today's total to about ${usd(spent.wallet + priced.usd)}, above the wallet's ${usd(agent.policy.dailyUsd)} daily cap`;
+  return null;
+}
+
+async function recordSpend(client: pg.ClientBase, agent: AgentContext, idempotencyKey: string, priced: Priced): Promise<string | null> {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent_spends:${agent.walletId}`]);
+  const refused = await dailyRefusal(client, agent, idempotencyKey, priced);
+  if (refused) return refused;
+  await client.query(
+    "INSERT INTO agent_spends (agent_id, idempotency_key, account_id, wallet_id, usd, day) VALUES ($1, $2, $3, $4, $5, $6::date) ON CONFLICT (agent_id, idempotency_key) DO NOTHING",
+    [agent.agentId, idempotencyKey, agent.accountId, agent.walletId, priced.usd, priced.day],
+  );
+  return null;
+}
+
 export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: AgentContext, tool: string, command: Send): Promise<SendOutcome> {
   const scope = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, actor: "agent" as const };
   const deny = async (reason: string): Promise<SendOutcome> => {
@@ -44,21 +70,27 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (approval === "pending") return { ok: true, value: { status: "approval_pending", reason: "the owner has not answered yet. Call again later with the same idempotencyKey" } };
   const approved = approval === "approved";
   const threshold = agent.policy.approvalAboveUsd;
+  let priced: Priced | null = null;
   if (command.kind === "transfer" && !approved && threshold !== null) return ask(null, "transfers out need the owner's approval");
   if (command.kind === "swap") {
     const estimate = sellUsd(command);
     const cap = effectiveLimits(agent.limits, agent.policy).maxTxUsd;
     if (estimate !== null && estimate > cap) return deny(`the swap sells about ${usd(estimate)}, above this agent's ${usd(cap)} per-transaction cap`);
+    priced = estimate === null ? null : { usd: estimate, day: new Date().toISOString().slice(0, 10) };
+    const overDaily = priced ? await dailyRefusal(pool, agent, command.idempotencyKey, priced) : null;
+    if (overDaily) return deny(overDaily);
     if (!approved && threshold !== null && (estimate === null || estimate > threshold)) {
       return ask(estimate, estimate === null ? "the swap sells a token Whale cannot price" : `the swap sells about ${usd(estimate)}, above the ${usd(threshold)} approval threshold`);
     }
   }
 
   const value = await executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });
-  const recorded = await inTransaction(pool, async (client) => {
-    if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) return false;
+  const refused = await inTransaction(pool, async (client) => {
+    const overDaily = priced ? await recordSpend(client, agent, command.idempotencyKey, priced) : null;
+    if (overDaily) return overDaily;
+    if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) return "this approval was already used. Ask again with a new idempotencyKey";
     await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
-    return true;
+    return null;
   });
-  return recorded ? { ok: true, value } : deny("this approval was already used. Ask again with a new idempotencyKey");
+  return refused ? deny(refused) : { ok: true, value };
 }

@@ -16,7 +16,7 @@ const usdc = (dollars: number) => String(Math.round(dollars * 1_000_000));
 
 type Reply = { isError: boolean; text: string; body: Record<string, unknown> | null };
 
-async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?: number }) {
+async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?: number; walletDailyUsd?: number }) {
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
   const failures: Error[] = [];
@@ -34,7 +34,7 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const walletId = "walletId" in created ? created.walletId : "";
   await pool.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2)", [walletId, OWN]);
   const policy = await pool.query("SELECT document FROM policies WHERE wallet_id = $1", [walletId]);
-  await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify({ ...policy.rows[0].document, actions: ["swap", "transfer"], approvalAboveUsd: options.approvalAboveUsd })]);
+  await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify({ ...policy.rows[0].document, actions: ["swap", "transfer"], approvalAboveUsd: options.approvalAboveUsd, ...(options.walletDailyUsd ? { dailyUsd: options.walletDailyUsd } : {}) })]);
   const agent = await createAgent(pool, { accountId: user.accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap", "transfer"], maxTxUsd: 20, dailyUsd: 40 } });
   if ("refused" in agent) throw new Error(agent.refused);
   const authenticator = softAuthenticator({ rpId: "whale.example", origin: ORIGIN });
@@ -42,8 +42,8 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const added = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: authenticator.register(registration.challenge), label: "Mac" } });
   assert.equal(added.statusCode, 201);
 
-  const call = async (name: string, args: Record<string, unknown>): Promise<Reply> => {
-    const response = await app.inject({ method: "POST", url: "/mcp", headers: { authorization: `Bearer ${agent.apiKey}`, accept: "application/json, text/event-stream" }, payload: { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } } });
+  const call = async (name: string, args: Record<string, unknown>, apiKey = agent.apiKey): Promise<Reply> => {
+    const response = await app.inject({ method: "POST", url: "/mcp", headers: { authorization: `Bearer ${apiKey}`, accept: "application/json, text/event-stream" }, payload: { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } } });
     const result = response.json().result as { isError: boolean; content: { text: string }[] };
     const text = result.content[0]?.text ?? "";
     let body: Record<string, unknown> | null = null;
@@ -54,13 +54,14 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
     }
     return { isError: result.isError, text, body };
   };
-  const swap = (key: string, dollars: number, sellToken = USDC) => call("swap", { chain: "base", sellToken, buyToken: sellToken === USDC ? WETH : USDC, sellAmount: sellToken === USDC ? usdc(dollars) : "1000000000000000000", idempotencyKey: key });
+  const swap = (key: string, dollars: number, sellToken = USDC, apiKey = agent.apiKey) =>
+    call("swap", { chain: "base", sellToken, buyToken: sellToken === USDC ? WETH : USDC, sellAmount: sellToken === USDC ? usdc(dollars) : "1000000000000000000", idempotencyKey: key }, apiKey);
   const approve = async (approvalId: string) => {
     const approval = (await app.inject({ method: "GET", url: "/api/approvals", headers: user.headers })).json().approvals.find((entry: { id: string }) => entry.id === approvalId);
     const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "approval.approve", approvalId, command: approval.command } } })).json();
     return app.inject({ method: "POST", url: `/api/approvals/${approvalId}/approve`, headers: user.headers, payload: { assertion: authenticator.assert(stepUp.challenge) } });
   };
-  return { app, pool, user, sent, failures, call, swap, approve, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, user, walletId, sent, failures, call, swap, approve, drop: async () => (await app.close(), await drop()) };
 }
 
 test("a swap is priced by what it sells, so a bad quote cannot slip a large sell past the cap or the threshold", { skip: !TEST_DATABASE_URL }, async () => {
@@ -117,6 +118,27 @@ test("an executor failure leaves the approval for the retry, and a spent approva
     const pending = (await app.inject({ method: "GET", url: "/api/approvals?status=pending", headers: user.headers })).json().approvals;
     assert.deepEqual(pending, []);
     assert.equal(sent.length, 1);
+  } finally {
+    await drop();
+  }
+});
+
+test("an agent's swaps stop at its daily cap, and the wallet's daily cap covers all its agents", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, user, walletId, swap, drop } = await harness({ approvalAboveUsd: null, walletDailyUsd: 50 });
+  try {
+    const statuses: unknown[] = [];
+    for (let index = 1; index <= 6; index += 1) {
+      const reply = await swap(`daily-${index}`, 9.99);
+      statuses.push(reply.isError ? reply.text : reply.body?.status);
+    }
+    assert.deepEqual(statuses.slice(0, 4), ["would_swap", "would_swap", "would_swap", "would_swap"]);
+    for (const refused of statuses.slice(4)) assert.match(String(refused), /above this agent's 40\.00 USD daily cap/);
+    assert.equal((await swap("daily-1", 9.99)).body?.status, "would_swap", "a retry of a counted swap is not counted twice");
+
+    const other = await createAgent(pool, { accountId: user.accountId, walletId, name: "other", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 20, dailyUsd: 40 } });
+    if ("refused" in other) throw new Error(other.refused);
+    assert.equal((await swap("other-1", 9.99, USDC, other.apiKey)).body?.status, "would_swap");
+    assert.match((await swap("other-2", 9.99, USDC, other.apiKey)).text, /above the wallet's 50\.00 USD daily cap/);
   } finally {
     await drop();
   }

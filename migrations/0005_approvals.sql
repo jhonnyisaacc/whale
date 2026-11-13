@@ -19,3 +19,16 @@ CREATE TABLE approvals (
   UNIQUE (agent_id, idempotency_key)
 );
 CREATE INDEX approvals_pending_idx ON approvals (account_id, status, created_at DESC);
+CREATE TABLE agent_spends (
+  agent_id uuid NOT NULL,
+  idempotency_key text NOT NULL,
+  account_id uuid NOT NULL,
+  wallet_id uuid NOT NULL,
+  usd double precision NOT NULL CHECK (usd >= 0),
+  day date NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (agent_id, idempotency_key),
+  FOREIGN KEY (wallet_id, account_id) REFERENCES wallets (id, account_id),
+  FOREIGN KEY (agent_id, account_id) REFERENCES agents (id, account_id)
+);
+CREATE INDEX agent_spends_wallet_day_idx ON agent_spends (wallet_id, day);

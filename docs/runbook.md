@@ -151,6 +151,7 @@ The Turnkey policy of an enclave wallet stays as rendered at activation. A widen
 
 A hosted `swap` is priced by what it sells. A USDC, USDT, or USDB sell counts one dollar per token. Any other sell token cannot be priced yet. The quote's output is never used, because price impact or slippage can make it far smaller than what leaves the wallet.
 - Above the agent's effective per-transaction cap, it is refused, even if approved.
+- A priced swap that would take the agent's total for the UTC day above its effective daily cap is refused, even if approved. So is one that would take the wallet's total, across all its agents, above the wallet's daily cap. A swap counts once it is planned, and a retry with the same `idempotencyKey` does not count again.
 - Above the wallet's `approvalAboveUsd`, or when it cannot be priced, it returns `approval_required` with an approval id, and the agent calls again later with the same `idempotencyKey`.
 
 A `transfer` asks for approval whenever the wallet has a threshold, because it has no quote to price it.
