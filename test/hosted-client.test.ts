@@ -41,3 +41,10 @@ test("a key that cannot be a header value is refused before any request, without
   }
   assert.equal(called, false);
 });
+
+test("a gateway URL that does not parse is refused without echoing it", () => {
+  const secret = "whale_aaaaaaaaaaaa_SECRETSECRET";
+  for (const make of [() => mcpEndpoint(secret), () => createHostedClient({ gatewayUrl: secret, apiKey: "https://whale.example" }), () => createBridge({ gatewayUrl: secret, apiKey: "https://whale.example" })]) {
+    assert.throws(make, (error: Error) => error instanceof TypeError && error.message === "the gateway URL is not a URL" && !JSON.stringify(Object.entries(error)).includes("SECRET") && !String(error.cause ?? "").includes("SECRET"));
+  }
+});

@@ -29,7 +29,8 @@ async function refusal(response: Response): Promise<{ code: number; message: str
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export function mcpEndpoint(gatewayUrl: string): string {
-  const url = new URL(gatewayUrl);
+  const url = URL.parse(gatewayUrl);
+  if (!url) throw new TypeError("the gateway URL is not a URL");
   const local = url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname);
   if (url.protocol !== "https:" && !local) throw new Error("the gateway URL must be https (http only for localhost)");
   if (url.username || url.password || url.search || url.hash) throw new Error("the gateway URL must not carry credentials, a query, or a fragment");
