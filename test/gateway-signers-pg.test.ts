@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
+import { request } from "node:http";
+import { setTimeout as sleep } from "node:timers/promises";
 import test from "node:test";
 import bs58 from "bs58";
 import { privateKeyToAccount } from "viem/accounts";
@@ -162,6 +164,26 @@ test("a refusal with many long reasons is stored, trimmed, and not handed out ag
     assert.deepEqual(stored.result.reasons, reasons.slice(0, 20).map((reason) => reason.slice(0, 300)));
     signer.clock.now += LEASE_MS + 1;
     assert.equal((await signer.pull()).statusCode, 204);
+  } finally {
+    await signer.close();
+  }
+});
+
+test("a long-poll whose client hung up does not lease the next job to it", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner({ signerPollMs: 20 });
+  try {
+    const address = await signer.app.listen({ host: "127.0.0.1", port: 0 });
+    const hungUp = request(`${address}/signer/v1/jobs?wait=25`, { headers: signer.auth });
+    hungUp.on("error", () => {});
+    hungUp.end();
+    await sleep(100);
+    hungUp.destroy();
+    await sleep(50);
+    const jobId = await enqueueJob(signer.pool, { accountId: signer.user.accountId, walletId: signer.walletId, kind: "evm", payload: {}, ttlMs: 10 * 60_000 }, signer.clock.now);
+    await sleep(200);
+    const pulled = await signer.pull();
+    assert.equal(pulled.statusCode, 200, "the job is still queued for a live signer");
+    assert.equal(pulled.json().id, jobId);
   } finally {
     await signer.close();
   }

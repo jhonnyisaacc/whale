@@ -69,6 +69,7 @@ export function registerSignerRoutes(app: FastifyInstance, deps: { config: Gatew
     const wait = Math.min(MAX_WAIT_S, Math.max(0, Number((request.query as { wait?: string }).wait ?? "0") || 0));
     const deadline = Date.now() + wait * 1000;
     for (;;) {
+      if (request.raw.socket.destroyed) return reply.code(204).send();
       const job = await leaseJob(pool, signer, now());
       if (job) return reply.header("cache-control", "no-store").send(job);
       if (Date.now() + pollMs > deadline) return reply.code(204).send();
