@@ -59,6 +59,14 @@ export async function registerSigner(pool: pg.Pool, input: Registration, now = D
     const message = registrationMessage(input.walletId, input.code);
     if (!(await provesEvm(message, input.evmAddress, input.evmSignature))) return "the EVM signature does not prove the EVM address";
     if (!provesSolana(message, input.solanaAddress, input.solanaSignature)) return "the Solana signature does not prove the Solana address";
+    await client.query("SELECT 1 FROM wallets WHERE id = $1 FOR UPDATE", [row.wallet_id]);
+    const existing = await client.query("SELECT 1 FROM signers WHERE wallet_id = $1", [row.wallet_id]);
+    if ((existing.rowCount ?? 0) > 0) return "this wallet already has a signer";
+    const taken = await client.query("SELECT 1 FROM wallet_addresses WHERE (family = 'evm' AND lower(address) = lower($1)) OR (family = 'solana' AND address = $2)", [
+      input.evmAddress,
+      input.solanaAddress,
+    ]);
+    if ((taken.rowCount ?? 0) > 0) return "these keys already belong to another wallet";
     const signerId = randomBytes(8).toString("hex");
     const secret = randomBytes(32).toString("base64url");
     await client.query("INSERT INTO signers (id, account_id, wallet_id, token_hash, evm_address, solana_address) VALUES ($1, $2, $3, $4, $5, $6)", [

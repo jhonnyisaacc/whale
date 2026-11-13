@@ -85,7 +85,7 @@ test("a self-hosted signer registers with a passkey-issued code and proofs of bo
   }
 });
 
-async function registeredSigner(options: { signerPollMs?: number } = {}) {
+async function registeredSigner(options: { signerPollMs?: number; spareCode?: boolean } = {}) {
   const { pool, drop } = await migratedSchema();
   const clock = { now: Date.now() };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: null, delegation: null, now: () => clock.now, signerPollMs: options.signerPollMs ?? 10 });
@@ -101,6 +101,7 @@ async function registeredSigner(options: { signerPollMs?: number } = {}) {
   const issueCode = async (walletId: string) =>
     (await app.inject({ method: "POST", url: `/api/wallets/${walletId}/signer/code`, headers: user.headers, payload: { assertion: await approve(signerCodeAction(walletId)) } })).json().code as string;
   const walletId = await newWallet("home");
+  const spareCode = options.spareCode ? await issueCode(walletId) : null;
   const registered = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, await issueCode(walletId)) });
   assert.equal(registered.statusCode, 201, registered.body);
   const auth = { authorization: `Bearer ${registered.json().token as string}` };
@@ -111,7 +112,7 @@ async function registeredSigner(options: { signerPollMs?: number } = {}) {
     await app.close();
     await drop();
   };
-  return { app, pool, clock, user, approve, newWallet, issueCode, walletId, auth, pull, answer, status, close };
+  return { app, pool, clock, user, approve, newWallet, issueCode, walletId, spareCode, auth, pull, answer, status, close };
 }
 
 test("a self-hosted wallet with a registered signer comes back active after a freeze and unfreeze", { skip: !TEST_DATABASE_URL }, async () => {
@@ -126,6 +127,23 @@ test("a self-hosted wallet with a registered signer comes back active after a fr
     const pulled = await signer.pull();
     assert.equal(pulled.statusCode, 200, pulled.body);
     assert.equal(pulled.json().id, jobId);
+  } finally {
+    await signer.close();
+  }
+});
+
+test("a second registration for a wallet, or the same keys on another wallet, is refused rather than failing", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner({ spareCode: true });
+  try {
+    const { app, walletId } = signer;
+    const again = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, signer.spareCode as string) });
+    assert.equal(again.statusCode, 400, again.body);
+    assert.match(again.json().detail, /already has a signer/);
+    const other = await signer.newWallet("office");
+    const reused = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(other, await signer.issueCode(other)) });
+    assert.equal(reused.statusCode, 400, reused.body);
+    assert.match(reused.json().detail, /another wallet/);
+    assert.equal(await signer.status(other), "pending");
   } finally {
     await signer.close();
   }
