@@ -63,6 +63,7 @@ export function executorFrom(env: NodeJS.ProcessEnv): { url: URL; token: string 
   if (!raw) return null;
   const url = new URL(raw);
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("HOSTED_EXECUTOR_URL must be http or https");
+  if (/[?#]/.test(url.href)) throw new Error("HOSTED_EXECUTOR_URL must not carry a query or fragment, because the gateway appends /hosted/commands to its path");
   const token = required(env, "HOSTED_SERVICE_TOKEN");
   if (token.length < 32) throw new Error("HOSTED_SERVICE_TOKEN must be at least 32 characters");
   return { url, token };
