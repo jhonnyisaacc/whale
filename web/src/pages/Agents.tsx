@@ -20,6 +20,9 @@ export function Agents({ wallet }: { wallet: Wallet }) {
   useEffect(() => {
     void load();
   }, [wallet.id]);
+  useEffect(() => {
+    setLimits(limitsFrom(wallet.policy));
+  }, [wallet.id, wallet.policyVersion]);
 
   const act = async (work: () => Promise<{ apiKey?: string } | undefined>) => {
     setError(null);
