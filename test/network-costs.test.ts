@@ -92,3 +92,20 @@ test("an x402 challenge becomes a plan: the cheapest option that fits, and nothi
   assert.equal((await x402Quote("https://odd.example", fits, async () => ({ status: 402, body: "pay me" }))).status, "unreadable");
   assert.equal((await x402Quote("https://down.example", fits, async () => Promise.reject(new Error("host resolves to a private address")))).status, "unreadable");
 });
+
+test("an x402 option that names no amount is refused, never planned as a free payment", async () => {
+  const challenge = {
+    x402Version: 1,
+    accepts: [
+      { scheme: "exact", network: "base", asset: BASE_USDC, payTo: "0x6" },
+      { scheme: "exact", network: "base", amount: "0", asset: BASE_USDC, payTo: "0x7" },
+      { scheme: "exact", network: "base", maxAmountRequired: "50000", asset: BASE_USDC, payTo: "0x8" },
+    ],
+  };
+  const quote = await x402Quote("https://paid.example/data", fits, async () => ({ status: 402, body: JSON.stringify(challenge) }));
+  assert.equal(quote.status, "plan");
+  if (quote.status !== "plan") return;
+  assert.deepEqual(quote.options.map((entry) => entry.verdict), ["refused", "refused", "fits"]);
+  assert.match(quote.options[0]?.reasons.join("; ") ?? "", /names no amount/);
+  assert.equal(quote.best?.payTo, "0x8");
+});
