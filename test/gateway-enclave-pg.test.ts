@@ -21,7 +21,7 @@ function fakeTurnkey() {
   const orgs = new Map<string, SubOrgState>();
   const created: { challenge: string; credentialId: string; name: string; org: CreatedSubOrg }[] = [];
   const activities = new Map<string, { outcome: CreateOutcome; land: () => void }>();
-  const faults: { nextCreate: Fault | null; createDelayMs: number; findDelayMs: number; gate: Promise<void> | null; pollFails: boolean } = { nextCreate: null, createDelayMs: 0, findDelayMs: 0, gate: null, pollFails: false };
+  const faults: { nextCreate: Fault | null; createDelayMs: number; findDelayMs: number; gate: Promise<void> | null; pollFails: boolean; lookupTruncated: boolean } = { nextCreate: null, createDelayMs: 0, findDelayMs: 0, gate: null, pollFails: false, lookupTruncated: false };
   const landed = (input: Parameters<TurnkeyParent["submitSubOrganization"]>[0]): CreatedSubOrg => {
     const ownerUserId = randomUUID();
     const n = created.length;
@@ -62,7 +62,8 @@ function fakeTurnkey() {
     },
     async findSubOrganizations(rootCredentialId) {
       await new Promise((resolve) => setTimeout(resolve, faults.findDelayMs));
-      return created.filter((entry) => entry.credentialId === rootCredentialId).map((entry) => entry.org);
+      if (faults.lookupTruncated) return { state: "truncated" };
+      return { state: "listed", found: created.filter((entry) => entry.credentialId === rootCredentialId).map((entry) => entry.org) };
     },
     async readSubOrganization(id) {
       const state = orgs.get(id);
@@ -352,6 +353,28 @@ test("a claim whose create was never recorded is freed only when Turnkey has not
     assert.deepEqual(removed.rows, [{ reason: "unrecorded_create_never_landed" }]);
     assert.equal(fake.created.length, 1);
     assert.deepEqual(await gateway.trackedSubOrgs(), [fake.created[0]?.org.subOrganizationId]);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("a day-old unrecorded claim is kept when Turnkey's lookup page is full", { skip: !TEST_DATABASE_URL }, async () => {
+  const gateway = await enclaveGateway();
+  const { app, user, fake, pool } = gateway;
+  try {
+    const walletId = await gateway.newWallet();
+    const options = (await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: user.headers, payload: {} })).json();
+    const credential = softAuthenticator(RP).register(options.challenge);
+    await pool.query("INSERT INTO passkeys (credential_id, account_id, public_key, label) VALUES ($1, $2, $3, 'Mac')", [credential.id, user.accountId, Buffer.from("stale")]);
+    await pool.query("UPDATE wallets SET root_credential_id = $2, root_claimed_at = now() - interval '25 hours' WHERE id = $1", [walletId, credential.id]);
+    fake.faults.lookupTruncated = true;
+    const answered = await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave`, headers: user.headers, payload: { credential, label: "Mac" } });
+    assert.deepEqual([answered.statusCode, answered.json()], [409, { error: "enclave_conflict" }]);
+    const claim = (await pool.query("SELECT root_credential_id FROM wallets WHERE id = $1", [walletId])).rows[0]?.root_credential_id;
+    assert.equal(claim, credential.id);
+    assert.equal((await pool.query("SELECT 1 FROM passkeys WHERE credential_id = $1", [credential.id])).rowCount, 1);
+    assert.equal((await pool.query("SELECT 1 FROM audit_events WHERE action = 'passkey.removed'")).rowCount, 0);
+    assert.equal(fake.created.length, 0);
   } finally {
     await gateway.close();
   }

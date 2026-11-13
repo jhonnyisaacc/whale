@@ -104,9 +104,26 @@ test("the lookup asks Turnkey by credential id and keeps only sub-organizations 
     "/public/v1/query/list_wallet_accounts": () => ({ status: 200, json: { accounts: [{ address: "0xabc", addressFormat: "ADDRESS_FORMAT_ETHEREUM" }, { address: "So1", addressFormat: "ADDRESS_FORMAT_SOLANA" }] } }),
   });
   try {
-    assert.deepEqual(await api.parent.findSubOrganizations("cred-1"), [{ subOrganizationId: "sub-1", walletId: "w-sub-1", ownerUserId: "owner-sub-1", evm: "0xabc", solana: "So1" }]);
+    assert.deepEqual(await api.parent.findSubOrganizations("cred-1"), { state: "listed", found: [{ subOrganizationId: "sub-1", walletId: "w-sub-1", ownerUserId: "owner-sub-1", evm: "0xabc", solana: "So1" }] });
     const lookup = api.hits.find((hit) => hit.path === "/public/v1/query/list_suborgs");
     assert.deepEqual([lookup?.body.filterType, lookup?.body.filterValue], ["CREDENTIAL_ID", "cred-1"]);
+  } finally {
+    await api.close();
+  }
+});
+
+test("a lookup that fills Turnkey's largest page is reported as truncated, whatever the page holds", async () => {
+  const ids = Array.from({ length: 100 }, (_, n) => `sub-${n}`);
+  const api = await fakeTurnkeyApi({
+    "/public/v1/query/list_suborgs": () => ({ status: 200, json: { organizationIds: ids } }),
+    "/public/v1/query/list_wallets": (body) => ({ status: 200, json: { wallets: [{ walletId: `w-${String(body.organizationId)}`, walletName: "whale" }] } }),
+    "/public/v1/query/get_organization_configs": () => ({ status: 200, json: { configs: { quorum: { threshold: 1, userIds: ["owner"] } } } }),
+    "/public/v1/query/list_users": () => ({ status: 200, json: { users: [{ userId: "owner", userName: "owner", authenticators: [{ credentialId: "cred-other" }], apiKeys: [] }] } }),
+  });
+  try {
+    assert.deepEqual(await api.parent.findSubOrganizations("cred-1"), { state: "truncated" });
+    const lookup = api.hits.find((hit) => hit.path === "/public/v1/query/list_suborgs");
+    assert.deepEqual(lookup?.body.paginationOptions, { limit: "100" });
   } finally {
     await api.close();
   }

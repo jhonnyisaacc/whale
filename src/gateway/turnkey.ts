@@ -12,12 +12,14 @@ export type SubOrgState = {
   policies: { policyName: string; effect: string; consensus: string; condition: string }[];
 };
 
+export type SubOrgLookup = { state: "listed"; found: CreatedSubOrg[] } | { state: "truncated" };
+
 export type CreateOutcome = { state: "completed"; created: CreatedSubOrg } | { state: "failed"; status: string } | { state: "pending" };
 
 export type TurnkeyParent = {
   submitSubOrganization(input: { name: string; authenticator: RootAuthenticator }): Promise<{ activityId: string; outcome: CreateOutcome }>;
   subOrganizationActivity(activityId: string, polls: number): Promise<CreateOutcome>;
-  findSubOrganizations(rootCredentialId: string): Promise<CreatedSubOrg[]>;
+  findSubOrganizations(rootCredentialId: string): Promise<SubOrgLookup>;
   readSubOrganization(subOrganizationId: string): Promise<SubOrgState>;
 };
 
@@ -39,6 +41,7 @@ const REFUSED_GRPC_CODES = new Set([3, 5, 7, 8, 9, 16]);
 const UNREACHABLE_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"]);
 const FAILED_ACTIVITY = new Set(["ACTIVITY_STATUS_FAILED", "ACTIVITY_STATUS_REJECTED"]);
 const POLL_INTERVAL_MS = 1000;
+const LOOKUP_PAGE = 100;
 
 function connectCodes(error: Error): unknown[] {
   const cause = error.cause as { code?: unknown; errors?: { code?: unknown }[] } | undefined;
@@ -206,7 +209,8 @@ export function turnkeyParentFromEnv(env: NodeJS.ProcessEnv): TurnkeyParent | nu
     },
     async findSubOrganizations(rootCredentialId) {
       const api = await client();
-      const { organizationIds } = await api.getSubOrgIds({ filterType: "CREDENTIAL_ID", filterValue: rootCredentialId });
+      const { organizationIds } = await api.getSubOrgIds({ filterType: "CREDENTIAL_ID", filterValue: rootCredentialId, paginationOptions: { limit: String(LOOKUP_PAGE) } });
+      if (organizationIds.length >= LOOKUP_PAGE) return { state: "truncated" };
       const found = await Promise.all(
         organizationIds.map(async (subOrganizationId): Promise<CreatedSubOrg | null> => {
           const [{ wallets }, { configs }, { users }] = await Promise.all([
@@ -225,7 +229,7 @@ export function turnkeyParentFromEnv(env: NodeJS.ProcessEnv): TurnkeyParent | nu
           return { subOrganizationId, walletId: wallet.walletId, ownerUserId, evm, solana };
         }),
       );
-      return found.filter((entry): entry is CreatedSubOrg => entry !== null);
+      return { state: "listed", found: found.filter((entry): entry is CreatedSubOrg => entry !== null) };
     },
     async readSubOrganization(subOrganizationId) {
       const api = await client();

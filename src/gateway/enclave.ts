@@ -93,9 +93,9 @@ async function settleClaim(pool: pg.Pool, turnkey: TurnkeyParent | null, account
   if (!turnkey) return "enclave_in_progress";
   if (wallet.turnkey_activity_id) return applyOutcome(pool, accountId, wallet.id, credentialId, await turnkey.subOrganizationActivity(wallet.turnkey_activity_id, 1).catch((error: unknown) => outcomeUnknown(log, error)));
   if (!wallet.lease_expired) return "enclave_in_progress";
-  const found = await turnkey.findSubOrganizations(credentialId);
-  if (found.length > 1) return "enclave_conflict";
-  if (found[0]) return applyOutcome(pool, accountId, wallet.id, credentialId, { state: "completed", created: found[0] });
+  const lookup = await turnkey.findSubOrganizations(credentialId);
+  if (lookup.state === "truncated" || lookup.found.length > 1) return "enclave_conflict";
+  if (lookup.found[0]) return applyOutcome(pool, accountId, wallet.id, credentialId, { state: "completed", created: lookup.found[0] });
   if (!wallet.unrecorded_claim_expired) return "enclave_in_progress";
   await releaseClaim(pool, accountId, wallet.id, credentialId, "unrecorded_create_never_landed");
   return "free";
