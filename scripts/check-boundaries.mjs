@@ -7,7 +7,6 @@ const rules = [
   { from: /^(config|aggregators|broadcast|executor)\//, ban: /-server\.js"/, why: "engines import no HTTP server module" },
   { from: /^config\//, ban: /from "\.\.\/(broadcast|executor|managed-signer)/, why: "config imports no signing or sending module" },
   { from: /^db\//, ban: /from "\.\.\/(broadcast|executor|aggregators|managed-signer|signer|.*-server)/, why: "the database layer imports no engine, signer, or server module" },
-  { from: /^db\//, ban: /from "\.\.\/(broadcast|executor|aggregators|managed-signer|signer|.*-server)/, why: "the database layer imports no engine, signer, or server module" },
 ];
 
 function files(dir, base = "") {
