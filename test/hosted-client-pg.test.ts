@@ -49,7 +49,7 @@ test("the hosted client and the stdio bridge reach the same tools under the same
     assert.deepEqual(listed.result.tools, await client.tools());
     assert.equal(await bridge({ jsonrpc: "2.0", method: "notifications/initialized" } as { id?: undefined }), null);
     const down = createBridge({ gatewayUrl: "https://whale.example", apiKey, fetchImpl: (async () => Promise.reject(new Error("connect ECONNREFUSED"))) as typeof fetch });
-    assert.deepEqual(await down({ jsonrpc: "2.0", id: 7, method: "ping" } as { id: number }), { jsonrpc: "2.0", id: 7, error: { code: -32000, message: "connect ECONNREFUSED" } });
+    assert.deepEqual(await down({ jsonrpc: "2.0", id: 7, method: "ping" } as { id: number }), { jsonrpc: "2.0", id: 7, error: { code: -32000, message: "the Whale gateway is unreachable: connect ECONNREFUSED" } });
   } finally {
     await app.close();
     await drop();

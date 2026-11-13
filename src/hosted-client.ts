@@ -9,6 +9,11 @@ export class WhaleToolError extends Error {
   }
 }
 
+function unreachable(error: unknown): Error {
+  const cause = error instanceof Error && error.cause instanceof Error ? `: ${error.cause.message}` : "";
+  return new Error(`the Whale gateway is unreachable: ${error instanceof Error ? error.message : String(error)}${cause}`, { cause: error });
+}
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export function mcpEndpoint(gatewayUrl: string): string {
@@ -31,6 +36,8 @@ export function createHostedClient(options: HostedClientOptions) {
       headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${options.apiKey}`, "mcp-protocol-version": "2025-06-18" },
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
       signal: AbortSignal.timeout(options.timeoutMs ?? 20_000),
+    }).catch((error: unknown) => {
+      throw unreachable(error);
     });
     if (response.status === 401) throw new Error("the gateway refused this API key");
     if (!response.ok) throw new Error(`the gateway answered ${response.status}`);
@@ -78,7 +85,7 @@ export function createBridge(options: HostedClientOptions) {
       if (!response.ok) return { jsonrpc: "2.0", id: message.id ?? null, error: { code: -32000, message: `the Whale gateway answered ${response.status}` } };
       return (await response.json()) as unknown;
     } catch (error) {
-      return message.id === undefined ? null : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: error instanceof Error ? error.message : "the Whale gateway is unreachable" } };
+      return message.id === undefined ? null : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: unreachable(error).message } };
     }
   };
 }
