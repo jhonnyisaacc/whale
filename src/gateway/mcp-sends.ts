@@ -79,9 +79,8 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
     priced = estimate === null ? null : { usd: estimate, day: new Date().toISOString().slice(0, 10) };
     const overDaily = priced ? await dailyRefusal(pool, agent, command.idempotencyKey, priced) : null;
     if (overDaily) return deny(overDaily);
-    if (!approved && threshold !== null && (estimate === null || estimate > threshold)) {
-      return ask(estimate, estimate === null ? "the swap sells a token Whale cannot price" : `the swap sells about ${usd(estimate)}, above the ${usd(threshold)} approval threshold`);
-    }
+    if (!approved && estimate === null) return ask(null, "the swap sells a token Whale cannot price");
+    if (!approved && estimate !== null && threshold !== null && estimate > threshold) return ask(estimate, `the swap sells about ${usd(estimate)}, above the ${usd(threshold)} approval threshold`);
   }
 
   const value = await executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });

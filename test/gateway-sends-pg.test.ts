@@ -143,3 +143,17 @@ test("an agent's swaps stop at its daily cap, and the wallet's daily cap covers 
     await drop();
   }
 });
+
+test("with no approval threshold, a swap Whale cannot price still waits for the owner instead of skipping the caps", { skip: !TEST_DATABASE_URL }, async () => {
+  const { sent, swap, drop } = await harness({ approvalAboveUsd: null });
+  try {
+    const unpriced = await swap("weth-no-threshold", 0, WETH);
+    assert.equal(unpriced.isError, false);
+    assert.equal(unpriced.body?.status, "approval_required");
+    assert.equal(unpriced.body?.estimateUsd, null);
+    assert.equal((await swap("usdc-no-threshold", 5)).body?.status, "would_swap");
+    assert.equal(sent.length, 1);
+  } finally {
+    await drop();
+  }
+});
