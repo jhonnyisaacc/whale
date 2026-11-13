@@ -29,11 +29,11 @@ function countQueries(pool: pg.Pool) {
 
 const randomKey = () => `whale_${randomBytes(6).toString("hex")}_${randomBytes(32).toString("base64url").slice(0, 43)}`;
 
-async function harness(options: { approvalAboveUsd?: number | null; quoteUsd?: () => number | undefined } = {}) {
+async function harness(options: { approvalAboveUsd?: number | null } = {}) {
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
   const executor: ExecutorClient = {
-    run: async (request) => (sent.push(request), { kind: "swap", status: "would_swap", quote: { buyAmount: "42", feeUsd: 0, netOutputUsd: options.quoteUsd?.() } }),
+    run: async (request) => (sent.push(request), { kind: "swap", status: "would_swap", quote: { buyAmount: "42" } }),
   };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor, turnkey: null, delegation: null });
   const user = await signedInAccount(pool);
@@ -228,8 +228,7 @@ test("/mcp refuses an agent past its limit without querying the database", { ski
 });
 
 test("sends above the threshold wait for a passkey approval of that exact command, and the cap still refuses", { skip: !TEST_DATABASE_URL }, async () => {
-  let price: number | undefined = 15;
-  const { app, pool, user, sent, call, drop } = await harness({ approvalAboveUsd: 10, quoteUsd: () => price });
+  const { app, pool, user, sent, call, drop } = await harness({ approvalAboveUsd: 10 });
   try {
     const authenticator = softAuthenticator({ rpId: "whale.example", origin: ORIGIN });
     const options = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers: user.headers, payload: {} })).json();
@@ -258,8 +257,7 @@ test("sends above the threshold wait for a passkey approval of that exact comman
     const reused = JSON.parse((await call("swap", swap)).content[0].text);
     assert.equal(reused.status, "approval_required", "an approval is spent once; the same key asks again");
 
-    price = 25;
-    const tooBig = await call("swap", { ...swap, idempotencyKey: "swap-big-2" });
+    const tooBig = await call("swap", { ...swap, sellAmount: "25000000", idempotencyKey: "swap-big-2" });
     assert.match(tooBig.content[0].text, /above this agent's 20\.00 USD per-transaction cap/);
 
     const transfer = JSON.parse((await call("transfer", { chain: "base", token: USDC, to: COLD, amount: "1", idempotencyKey: "xfer-1" })).content[0].text);

@@ -25,16 +25,6 @@ export function approvalAction(approvalId: string, command: HostedCommand) {
   return { kind: "approval.approve", approvalId, command };
 }
 
-// A quote reports the bought side net of fees and gas. Adding them back gives the value leaving the wallet, which is
-// what the per-transaction cap and the approval threshold talk about.
-export function estimateUsd(plan: unknown): number | null {
-  if (typeof plan !== "object" || plan === null) return null;
-  const quote = (plan as { quote?: { netOutputUsd?: unknown; feeUsd?: unknown; gasUsd?: unknown } | null }).quote;
-  if (!quote || typeof quote.netOutputUsd !== "number" || !Number.isFinite(quote.netOutputUsd)) return null;
-  const extra = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
-  return quote.netOutputUsd + extra(quote.feeUsd) + extra(quote.gasUsd);
-}
-
 export async function requestApproval(
   pool: pg.Pool,
   agent: AgentContext,
@@ -64,14 +54,15 @@ export async function requestApproval(
 }
 
 // An approval is spent once, by the agent that asked, for the command it asked about.
-export async function consumeApproval(pool: pg.Pool, agent: AgentContext, idempotencyKey: string, command: HostedCommand, now = Date.now()): Promise<"used" | "pending" | "denied" | "expired" | "missing"> {
+export async function consumeApproval(pool: pg.Pool, agent: AgentContext, idempotencyKey: string, command: HostedCommand, now = Date.now()): Promise<"used" | "pending" | "denied" | "expired" | "missing" | "conflict"> {
   return inTransaction(pool, async (client) => {
     const found = await client.query<{ id: string; status: Approval["status"]; expires_at: Date; command: unknown }>(
       "SELECT id, status, expires_at, command FROM approvals WHERE agent_id = $1 AND idempotency_key = $2 FOR UPDATE",
       [agent.agentId, idempotencyKey],
     );
     const row = found.rows[0];
-    if (!row || bindingOf(row.command) !== bindingOf(command)) return "missing";
+    if (!row) return "missing";
+    if (bindingOf(row.command) !== bindingOf(command)) return "conflict";
     if (row.status === "approved") {
       await client.query("UPDATE approvals SET status = 'used' WHERE id = $1", [row.id]);
       return "used";
