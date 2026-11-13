@@ -20,7 +20,7 @@ export function Connect({ requestId }: { requestId: string }) {
     api<Request>(`/oauth/requests/${encodeURIComponent(requestId)}`)
       .then((reply) => {
         setRequest(reply);
-        setName(reply.client.name);
+        setName(reply.client.name.trim().slice(0, 64));
       })
       .catch(() => setError("This connection request expired or was already answered. Start again from your app."));
     api<Me>("/api/me")
