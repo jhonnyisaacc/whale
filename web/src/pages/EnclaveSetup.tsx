@@ -16,7 +16,6 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
   const [polling, setPolling] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const optionsUrl = `/api/wallets/${wallet.id}/enclave/options`;
 
   const created = () => {
     setPolling(false);
@@ -39,7 +38,7 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = (attempt: number) => {
       timer = setTimeout(() => {
-        api(optionsUrl, { method: "POST", body: {} }).then(
+        api(`/api/wallets/${wallet.id}/enclave/options`, { method: "POST", body: {} }).then(
           () => {
             if (stopped) return;
             setPolling(false);
@@ -60,7 +59,7 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
       stopped = true;
       clearTimeout(timer);
     };
-  }, [polling, optionsUrl]);
+  }, [polling, wallet.id]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -80,17 +79,16 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
       setNotice(null);
       try {
         setStatus("Waiting for your passkey…");
-        const options = await api<CreationOptions>(optionsUrl, { method: "POST", body: {} });
+        const options = await api<CreationOptions>(`/api/wallets/${wallet.id}/enclave/options`, { method: "POST", body: {} });
         const credential = await createPasskey(options);
         setStatus("Creating your enclave…");
-        const url = `/api/wallets/${wallet.id}/enclave`;
         const body = { credential, label };
-        await api(url, { method: "POST", body }).catch(async (caught: unknown) => {
+        await api(`/api/wallets/${wallet.id}/enclave`, { method: "POST", body }).catch(async (caught: unknown) => {
           if (!(caught instanceof ApiError) || enclaveOutcome(caught.status, caught.code) !== "step_up") throw caught;
           setStatus("Approve the new passkey with one you already have…");
           const assertion = await stepUp({ kind: "passkey.add", credentialId: credential.id });
           setStatus("Creating your enclave…");
-          return api(url, { method: "POST", body: { ...body, assertion } });
+          return api(`/api/wallets/${wallet.id}/enclave`, { method: "POST", body: { ...body, assertion } });
         });
         created();
       } catch (caught) {

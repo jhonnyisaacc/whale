@@ -22,19 +22,24 @@ function gatewayRoutes(): Set<string> {
   return routes;
 }
 
-function webCalls(): string[] {
+function webCalls(): { calls: string[]; unparsed: string[] } {
   const calls: string[] = [];
+  const unparsed: string[] = [];
   for (const source of sources(path.join(ROOT, "web", "src"), /\.tsx?$/)) {
-    for (const match of source.matchAll(/\bapi(?:<[^(]*?>)?\((["`])([^"`]+)\1(?:,\s*\{\s*method:\s*"(\w+)")?/g)) {
-      calls.push(shape(match[3] ?? "GET", match[2]!.split("?")[0]!));
+    for (const site of source.matchAll(/(?<!function )\bapi(?:<[^(]*?>)?\(/g)) {
+      const rest = source.slice(site.index);
+      const match = /^api(?:<[^(]*?>)?\((["`])([^"`]+)\1(?:,\s*\{\s*method:\s*"(\w+)")?/.exec(rest);
+      if (match) calls.push(shape(match[3] ?? "GET", match[2]!.split("?")[0]!));
+      else unparsed.push(rest.slice(0, 60));
     }
   }
-  return calls;
+  return { calls, unparsed };
 }
 
-test("every dashboard call with a literal path hits a route the gateway registers", () => {
+test("every dashboard call has a literal path that hits a route the gateway registers", () => {
   const routes = gatewayRoutes();
-  const calls = webCalls();
+  const { calls, unparsed } = webCalls();
+  assert.deepEqual(unparsed, []);
   assert.ok(calls.length >= 20, `found ${calls.length} dashboard calls`);
   assert.deepEqual(calls.filter((call) => !routes.has(call)), []);
 });
