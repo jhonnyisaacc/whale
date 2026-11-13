@@ -14,6 +14,8 @@ const WETH = "0x4200000000000000000000000000000000000006";
 const OWN = "0x9999999999999999999999999999999999999999";
 const COLD = "0x2222222222222222222222222222222222222222";
 
+const randomKey = () => `whale_${randomBytes(6).toString("hex")}_${randomBytes(32).toString("base64url").slice(0, 43)}`;
+
 async function harness() {
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
@@ -116,8 +118,7 @@ test("/mcp throttles one IP that rotates random keys and one agent that rotates 
     const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
     const rotatingKeys: number[] = [];
     for (let index = 0; index < 130; index += 1) {
-      const key = `whale_${randomBytes(6).toString("hex")}_${randomBytes(32).toString("base64url").slice(0, 43)}`;
-      const response = await app.inject({ method: "POST", url: "/mcp", remoteAddress: "203.0.113.7", headers: { authorization: `Bearer ${key}` }, payload: ping });
+      const response = await app.inject({ method: "POST", url: "/mcp", remoteAddress: "203.0.113.7", headers: { authorization: `Bearer ${randomKey()}` }, payload: ping });
       rotatingKeys.push(response.statusCode);
     }
     assert.deepEqual([...new Set(rotatingKeys.slice(0, 120))], [401]);
@@ -145,6 +146,28 @@ test("/mcp gives every tenant behind one egress IP its own budget", { skip: !TES
     for (let index = 0; index < 120; index += 1) first.push((await rpc(ping, {}, "34.1.2.3")).statusCode);
     assert.deepEqual([...new Set(first)], [200]);
     assert.equal((await rpc(ping, { authorization: `Bearer ${other.apiKey}` }, "34.1.2.3")).statusCode, 200);
+  } finally {
+    await drop();
+  }
+});
+
+test("/mcp keeps serving a tenant already seen on an IP that a stranger floods with bad keys, but refuses a key never seen there", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, rpc, drop } = await harness();
+  try {
+    const { accountId } = await signedInAccount(pool);
+    const created = await createWallet(pool, accountId, { label: "fresh", level: "enclave" });
+    const walletId = "walletId" in created ? created.walletId : "";
+    const fresh = await createAgent(pool, { accountId, walletId, name: "fresh", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 20, dailyUsd: 40 } });
+    if ("refused" in fresh) throw new Error(fresh.refused);
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    assert.equal((await rpc(ping, {}, "34.1.2.3")).statusCode, 200);
+    for (let index = 0; index < 120; index += 1) {
+      const bad = await app.inject({ method: "POST", url: "/mcp", remoteAddress: "34.1.2.3", headers: { authorization: `Bearer ${randomKey()}` }, payload: ping });
+      assert.equal(bad.statusCode, 401);
+    }
+    assert.equal((await rpc(ping, { authorization: `Bearer ${randomKey()}` }, "34.1.2.3")).statusCode, 429);
+    assert.equal((await rpc(ping, {}, "34.1.2.3")).statusCode, 200);
+    assert.equal((await rpc(ping, { authorization: `Bearer ${fresh.apiKey}` }, "34.1.2.3")).statusCode, 429);
   } finally {
     await drop();
   }

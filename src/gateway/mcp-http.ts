@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { bearerOf } from "../bearer.js";
@@ -9,6 +10,7 @@ import { listWallets } from "./wallets.js";
 
 export const MCP_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"] as const;
 const DEFAULT_VERSION = "2025-03-26";
+const KNOWN_CREDENTIALS = 10_000;
 
 type Rpc = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
 export type BearerAuth = (token: string) => Promise<AgentContext | null>;
@@ -29,6 +31,12 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
   const failures = app.createRateLimit({ max: 120, timeWindow: "1 minute" });
   const agentIds = new WeakMap<FastifyRequest, string>();
   const perAgent = app.createRateLimit({ max: 120, timeWindow: "1 minute", keyGenerator: (request) => agentIds.get(request) ?? request.ip });
+  const known = new Map<string, string>();
+  const remember = (digest: string, agentId: string) => {
+    known.delete(digest);
+    known.set(digest, agentId);
+    if (known.size > KNOWN_CREDENTIALS) known.delete(known.keys().next().value as string);
+  };
 
   app.get("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
   app.delete("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
@@ -38,19 +46,25 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     parseErrors.has(error.code) ? reply.code(400).send(rpcError(null, -32700, "parse error")) : app.errorHandler(error, request, reply);
 
   app.post("/mcp", { config: { rateLimit: false }, errorHandler }, async (request, reply) => {
-    const spent = await failures(request, { increment: false });
-    if (!spent.isAllowed && spent.remaining === 0) return reply.code(429).header("retry-after", spent.ttlInSeconds).send({ error: "rate_limit" });
+    const token = bearerOf(request);
+    const digest = token ? createHash("sha256").update(token).digest("base64url") : "";
+    const remembered = known.get(digest);
+    if (!remembered) {
+      const spent = await failures(request, { increment: false });
+      if (!spent.isAllowed && spent.remaining === 0) return reply.code(429).header("retry-after", spent.ttlInSeconds).send({ error: "rate_limit" });
+    }
     // Streamable HTTP servers must refuse foreign browser origins, which is how DNS rebinding reaches them.
     const origin = request.headers.origin;
     if (origin !== undefined && origin !== config.publicUrl.origin) return reply.code(403).send({ error: "origin_not_allowed" });
     const version = request.headers["mcp-protocol-version"];
     if (typeof version === "string" && !(MCP_VERSIONS as readonly string[]).includes(version)) return reply.code(400).send(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`));
-    const token = bearerOf(request);
     const agent = token ? await authenticate(token) : null;
     if (!agent) {
+      known.delete(digest);
       await failures(request);
       return challenge(config, reply, token ? "invalid_token" : undefined);
     }
+    remember(digest, agent.agentId);
     agentIds.set(request, agent.agentId);
     const limit = await perAgent(request);
     if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate_limit" });
