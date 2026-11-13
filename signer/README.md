@@ -62,7 +62,7 @@ The instruction rules:
 | --- | --- |
 | System | Only SOL transfers from this wallet: to itself, to its wrapped SOL account, to a Jito tip account, or to a listed destination within the `solana:native` daily limit |
 | Token and Token-2022 | `SyncNative`, `CloseAccount` back to this wallet, and `InitializeAccount3` owned by it. `TransferChecked` only to a listed token account, counted against `solana:<mint>` |
-| Associated Token Account | A create funded by this wallet, for itself or a listed destination |
+| Associated Token Account | A create funded by this wallet, for itself or a listed destination. A create for a destination counts 4,454,400 lamports, the rent for a 512-byte account, against `solana:native`, since that rent leaves the wallet |
 | Compute Budget | Unit price times unit limit, plus tips, at or under `solana.maxPriorityLamports` |
 
 Every Solana transaction also pays its fee from the wallet. The 5000 lamport signature fee, plus the priority fee at the requested unit limit (1,400,000 units when none is set), plus every Jito tip, counts against the `solana:native` daily limit.

@@ -23,6 +23,16 @@
       "signature": "oJrW8u1CJnJmN2p1tzhsa6XJghraQtY1f9zBwVoahEtdXahvkV4g3823zZdcgP3QHN32CFF6FrXa1QejKYbdwyf"
     },
     {
+      "name": "an associated token account for a listed destination",
+      "job": {
+        "id": "an associated token account for a listed destination",
+        "kind": "solana",
+        "message": "AQAGB6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFI0DhoPAm22emH7QexJS8QoOKORFDTtT+BYdXwcQkwkzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM8b6evO+2606PWXzaqvJdDGuU0Cp4TF6I2LYTOuURVEGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqYyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBBgYAAQIDBAUBAQ=="
+      },
+      "expect": "signed",
+      "signature": "FYqugSHbzwkE9s5a5oPVjcZZEwdDqjSYgXTSY3rhdfg6z5W16f3ZZym8EQBRTVixp82KPsx28UdaMohTVZM5jKe"
+    },
+    {
       "name": "sol transfer to a stranger",
       "job": {
         "id": "sol transfer to a stranger",

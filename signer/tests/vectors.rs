@@ -262,3 +262,29 @@ fn solana_fees_count_against_the_native_day() {
     assert_eq!(written["spent"]["solana:native"], "1005200");
     let _ = std::fs::remove_file(ledger);
 }
+
+#[test]
+fn a_token_account_created_for_a_destination_counts_its_rent_against_the_native_day() {
+    let mut file = load("policy.json");
+    file["solana"]["dailyLimits"]["solana:native"] = "5000000".into();
+    let policy = Policy::parse(&file).expect("policy");
+    let keys = keys();
+    let solana = load("solana.json");
+    let create = solana["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "an associated token account for a listed destination")
+        .unwrap()["job"]
+        .clone();
+    let ledger = fresh_ledger("ledger-token-account-rent");
+    let decisions: Vec<Value> = (0..2)
+        .map(|_| run_job(&create, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .collect();
+    assert_eq!(
+        decisions,
+        ["signed", "refused"],
+        "a 4454400 lamport rent bound plus a 5000 lamport fee against a 5000000 lamport day"
+    );
+    let _ = std::fs::remove_file(ledger);
+}

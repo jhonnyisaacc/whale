@@ -32,6 +32,7 @@ impl Decision {
 }
 
 const LAMPORTS_PER_SIGNATURE: u128 = 5_000;
+const MAX_TOKEN_ACCOUNT_RENT_LAMPORTS: u128 = (128 + 512) * 6_960;
 const SYSTEM: &str = "11111111111111111111111111111111";
 const COMPUTE_BUDGET: &str = "ComputeBudget111111111111111111111111111111";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -460,6 +461,12 @@ impl Policy {
                     refuse(
                         &mut decision,
                         "an associated token account must be funded by this wallet for itself or a listed destination",
+                    );
+                } else if account(2) != Some(own) {
+                    self.spend(
+                        &mut decision,
+                        "solana:native".into(),
+                        MAX_TOKEN_ACCOUNT_RENT_LAMPORTS,
                     );
                 }
             } else {
