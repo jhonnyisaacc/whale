@@ -16,3 +16,5 @@ export { planRebalance, BRIDGE_PROVIDERS } from "./rebalance.js";
 export { assertEvmSigning, assertSolanaSigning, assertHyperliquidSigning, turnkeyPolicyDocument, turnkeyPolicyTemplate } from "./signing-policy.js";
 export type { TransactionSigner } from "./managed-signer.js";
 export type { SwapIntent, ExecutionReport, RouteQuote, Holding, ChainRef } from "./domain.js";
+export { createBridge, createHostedClient, WhaleToolError } from "./hosted-client.js";
+export type { HostedClientOptions } from "./hosted-client.js";

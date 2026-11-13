@@ -88,12 +88,47 @@ if (entry.endsWith("mcp-server.js")) {
     executorUrl: process.env.EXECUTOR_URL ?? "http://127.0.0.1:8788",
     executorAuthToken: process.env.EXECUTOR_AUTH_TOKEN ?? process.env.AUTH_TOKEN ?? null,
   };
-  const handle = createHandler(deps);
+  const gatewayUrl = process.env.WHALE_GATEWAY_URL || undefined;
+  const apiKey = process.env.WHALE_API_KEY || undefined;
+  if (Boolean(gatewayUrl) !== Boolean(apiKey)) {
+    process.stderr.write("whale: set both WHALE_GATEWAY_URL and WHALE_API_KEY to use a hosted gateway, or neither to use local tools\n");
+    process.exit(1);
+  }
+  const { checkApiKey, createBridge, mcpEndpoint } = await import("./hosted-client.js");
+  if (apiKey) {
+    try {
+      checkApiKey(apiKey);
+    } catch {
+      process.stderr.write("whale: WHALE_API_KEY must be one line of printable characters with no spaces\n");
+      process.exit(1);
+    }
+  }
+  if (gatewayUrl) {
+    try {
+      mcpEndpoint(gatewayUrl);
+    } catch (error) {
+      const reason = error instanceof TypeError ? "is not a URL" : "must be an https URL (http only for localhost) with no credentials, query, or fragment";
+      process.stderr.write(`whale: WHALE_GATEWAY_URL ${reason}\n`);
+      process.exit(1);
+    }
+  }
+  const handle = gatewayUrl && apiKey ? createBridge({ gatewayUrl, apiKey }) : createHandler(deps);
   const lines = createInterface({ input: process.stdin });
   lines.on("line", (line) => {
     void (async () => {
       if (!line.trim()) return;
-      const reply = await handle(JSON.parse(line) as JsonRpcRequest);
+      let message: unknown;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        message = undefined;
+      }
+      if (typeof message !== "object" || message === null) {
+        const error = message === undefined ? { code: -32700, message: "parse error" } : { code: -32600, message: "invalid request" };
+        process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: null, error })}\n`);
+        return;
+      }
+      const reply = await handle(message as JsonRpcRequest);
       if (reply !== null) process.stdout.write(`${JSON.stringify(reply)}\n`);
     })();
   });
