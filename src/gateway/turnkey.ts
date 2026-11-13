@@ -12,24 +12,67 @@ export type SubOrgState = {
   policies: { policyName: string; effect: string; consensus: string; condition: string }[];
 };
 
+export type CreateOutcome = { state: "completed"; created: CreatedSubOrg } | { state: "failed"; status: string } | { state: "pending" };
+
 export type TurnkeyParent = {
-  createSubOrganization(input: { name: string; authenticator: RootAuthenticator }): Promise<CreatedSubOrg>;
-  findSubOrganization(name: string): Promise<CreatedSubOrg | null>;
+  submitSubOrganization(input: { name: string; authenticator: RootAuthenticator }): Promise<{ activityId: string; outcome: CreateOutcome }>;
+  subOrganizationActivity(activityId: string, polls: number): Promise<CreateOutcome>;
+  findSubOrganizations(rootCredentialId: string): Promise<CreatedSubOrg[]>;
   readSubOrganization(subOrganizationId: string): Promise<SubOrgState>;
 };
 
 export type DelegationConfig = { delegatePublicKey: string; routers: Readonly<Record<number, readonly string[]>>; maxValueWei: bigint };
 
-export class TurnkeyRefused extends Error {}
+export type NotSubmittedReason = "turnkey_refused" | "turnkey_unreachable";
+
+export class TurnkeyNotSubmitted extends Error {
+  constructor(
+    message: string,
+    readonly reason: NotSubmittedReason,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+  }
+}
 
 const REFUSED_GRPC_CODES = new Set([3, 5, 7, 9, 16]);
-const REFUSED_ACTIVITY = new Set(["ACTIVITY_STATUS_FAILED", "ACTIVITY_STATUS_REJECTED"]);
+const UNREACHABLE_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"]);
+const FAILED_ACTIVITY = new Set(["ACTIVITY_STATUS_FAILED", "ACTIVITY_STATUS_REJECTED"]);
+const POLL_INTERVAL_MS = 1000;
 
-function asRefusal(error: unknown): unknown {
+function connectCodes(error: Error): unknown[] {
+  const cause = error.cause as { code?: unknown; errors?: { code?: unknown }[] } | undefined;
+  return [cause?.code, ...(cause?.errors ?? []).map((entry) => entry.code)];
+}
+
+function asNotSubmitted(error: unknown): unknown {
   if (!(error instanceof Error)) return error;
   const code = (error as { code?: unknown }).code;
-  const refused = (error.name === "TurnkeyRequestError" && typeof code === "number" && REFUSED_GRPC_CODES.has(code)) || /^(400|401|403|404|422|429) /.test(error.message);
-  return refused ? new TurnkeyRefused(error.message, { cause: error }) : error;
+  if ((error.name === "TurnkeyRequestError" && typeof code === "number" && REFUSED_GRPC_CODES.has(code)) || /^(400|401|403|404|422|429) /.test(error.message)) return new TurnkeyNotSubmitted(error.message, "turnkey_refused", { cause: error });
+  if (connectCodes(error).some((entry) => typeof entry === "string" && UNREACHABLE_CODES.has(entry))) return new TurnkeyNotSubmitted(error.message, "turnkey_unreachable", { cause: error });
+  return error;
+}
+
+const activitySchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  result: z
+    .object({
+      createSubOrganizationResultV7: z
+        .object({ subOrganizationId: z.string(), wallet: z.object({ walletId: z.string(), addresses: z.array(z.string()) }).optional(), rootUserIds: z.array(z.string()).optional() })
+        .optional(),
+    })
+    .optional(),
+});
+
+function outcomeOf(activity: z.infer<typeof activitySchema>): CreateOutcome {
+  if (FAILED_ACTIVITY.has(activity.status)) return { state: "failed", status: activity.status };
+  if (activity.status !== "ACTIVITY_STATUS_COMPLETED") return { state: "pending" };
+  const result = activity.result?.createSubOrganizationResultV7;
+  const [evm, solana] = result?.wallet?.addresses ?? [];
+  const ownerUserId = result?.rootUserIds?.[0];
+  if (!result || !result.wallet || !evm || !solana || !ownerUserId) throw new Error(`turnkey activity ${activity.id} completed with an incomplete sub-organization`);
+  return { state: "completed", created: { subOrganizationId: result.subOrganizationId, walletId: result.wallet.walletId, ownerUserId, evm, solana } };
 }
 
 export const DELEGATE_USER_NAME = "whale-delegate";
@@ -106,64 +149,83 @@ export function turnkeyParentFromEnv(env: NodeJS.ProcessEnv): TurnkeyParent | nu
     return new Turnkey({ apiBaseUrl: env.TURNKEY_API_BASE ?? "https://api.turnkey.com", apiPublicKey, apiPrivateKey, defaultOrganizationId: organizationId }).apiClient();
   };
   return {
-    async createSubOrganization(input) {
+    async submitSubOrganization(input) {
       const api = await client();
-      const result = await api.createSubOrganization({
-        subOrganizationName: input.name,
-        rootQuorumThreshold: 1,
-        rootUsers: [
-          {
-            userName: "owner",
-            apiKeys: [],
-            oauthProviders: [],
-            authenticators: [
-              {
-                authenticatorName: input.authenticator.name,
-                challenge: input.authenticator.challenge,
-                attestation: {
-                  credentialId: input.authenticator.credentialId,
-                  clientDataJson: input.authenticator.clientDataJson,
-                  attestationObject: input.authenticator.attestationObject,
-                  transports: input.authenticator.transports as never[],
+      const body = {
+        type: "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
+        timestampMs: String(Date.now()),
+        organizationId,
+        parameters: {
+          subOrganizationName: input.name,
+          rootQuorumThreshold: 1,
+          rootUsers: [
+            {
+              userName: "owner",
+              apiKeys: [],
+              oauthProviders: [],
+              authenticators: [
+                {
+                  authenticatorName: input.authenticator.name,
+                  challenge: input.authenticator.challenge,
+                  attestation: {
+                    credentialId: input.authenticator.credentialId,
+                    clientDataJson: input.authenticator.clientDataJson,
+                    attestationObject: input.authenticator.attestationObject,
+                    transports: input.authenticator.transports,
+                  },
                 },
-              },
+              ],
+            },
+          ],
+          wallet: {
+            walletName: "whale",
+            accounts: [
+              { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
+              { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
             ],
           },
-        ],
-        wallet: {
-          walletName: "whale",
-          accounts: [
-            { curve: "CURVE_SECP256K1", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/60'/0'/0/0", addressFormat: "ADDRESS_FORMAT_ETHEREUM" },
-            { curve: "CURVE_ED25519", pathFormat: "PATH_FORMAT_BIP32", path: "m/44'/501'/0'/0'", addressFormat: "ADDRESS_FORMAT_SOLANA" },
-          ],
+          disableEmailRecovery: true,
+          disableEmailAuth: true,
+          disableSmsAuth: true,
+          disableOtpEmailAuth: true,
         },
-        disableEmailRecovery: true,
-        disableEmailAuth: true,
-        disableSmsAuth: true,
-        disableOtpEmailAuth: true,
-      }).catch((error: unknown) => {
-        throw asRefusal(error);
+      };
+      const response = await api.request<typeof body, unknown>("/public/v1/submit/create_sub_organization", body).catch((error: unknown) => {
+        throw asNotSubmitted(error);
       });
-      if (REFUSED_ACTIVITY.has(result.activity.status)) throw new TurnkeyRefused(`turnkey ${result.activity.status} the sub-organization`);
-      const [evm, solana] = result.wallet?.addresses ?? [];
-      const ownerUserId = result.rootUserIds?.[0];
-      if (!result.subOrganizationId || !result.wallet?.walletId || !evm || !solana || !ownerUserId) throw new Error("turnkey returned an incomplete sub-organization");
-      return { subOrganizationId: result.subOrganizationId, walletId: result.wallet.walletId, ownerUserId, evm, solana };
+      const activity = activitySchema.parse((response as { activity?: unknown }).activity);
+      return { activityId: activity.id, outcome: outcomeOf(activity) };
     },
-    async findSubOrganization(name) {
+    async subOrganizationActivity(activityId, polls) {
       const api = await client();
-      const { organizationIds } = await api.getSubOrgIds({ filterType: "NAME", filterValue: name });
-      const [subOrganizationId, ...others] = organizationIds;
-      if (!subOrganizationId) return null;
-      if (others.length > 0) throw new Error(`turnkey holds ${organizationIds.length} sub-organizations named ${name}`);
-      const [{ wallets }, { configs }] = await Promise.all([api.getWallets({ organizationId: subOrganizationId }), api.getOrganizationConfigs({ organizationId: subOrganizationId })]);
-      const wallet = wallets.find((entry) => entry.walletName === "whale");
-      const ownerUserId = configs.quorum?.userIds?.[0];
-      const { accounts } = wallet ? await api.getWalletAccounts({ organizationId: subOrganizationId, walletId: wallet.walletId }) : { accounts: [] };
-      const evm = accounts.find((entry) => entry.addressFormat === "ADDRESS_FORMAT_ETHEREUM")?.address;
-      const solana = accounts.find((entry) => entry.addressFormat === "ADDRESS_FORMAT_SOLANA")?.address;
-      if (!wallet || !ownerUserId || !evm || !solana) throw new Error(`turnkey sub-organization ${subOrganizationId} named ${name} is incomplete`);
-      return { subOrganizationId, walletId: wallet.walletId, ownerUserId, evm, solana };
+      for (let poll = 1; ; poll += 1) {
+        const outcome = outcomeOf(activitySchema.parse((await api.getActivity({ activityId })).activity));
+        if (outcome.state !== "pending" || poll >= polls) return outcome;
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      }
+    },
+    async findSubOrganizations(rootCredentialId) {
+      const api = await client();
+      const { organizationIds } = await api.getSubOrgIds({ filterType: "CREDENTIAL_ID", filterValue: rootCredentialId });
+      const found = await Promise.all(
+        organizationIds.map(async (subOrganizationId): Promise<CreatedSubOrg | null> => {
+          const [{ wallets }, { configs }, { users }] = await Promise.all([
+            api.getWallets({ organizationId: subOrganizationId }),
+            api.getOrganizationConfigs({ organizationId: subOrganizationId }),
+            api.getUsers({ organizationId: subOrganizationId }),
+          ]);
+          const ownerUserId = configs.quorum?.userIds?.[0];
+          const owner = users.find((user) => user.userId === ownerUserId);
+          if (!ownerUserId || !owner?.authenticators.some((entry) => entry.credentialId === rootCredentialId)) return null;
+          const wallet = wallets.find((entry) => entry.walletName === "whale");
+          const { accounts } = wallet ? await api.getWalletAccounts({ organizationId: subOrganizationId, walletId: wallet.walletId }) : { accounts: [] };
+          const evm = accounts.find((entry) => entry.addressFormat === "ADDRESS_FORMAT_ETHEREUM")?.address;
+          const solana = accounts.find((entry) => entry.addressFormat === "ADDRESS_FORMAT_SOLANA")?.address;
+          if (!wallet || !evm || !solana) throw new Error(`turnkey sub-organization ${subOrganizationId} rooted in the claimed passkey is incomplete`);
+          return { subOrganizationId, walletId: wallet.walletId, ownerUserId, evm, solana };
+        }),
+      );
+      return found.filter((entry): entry is CreatedSubOrg => entry !== null);
     },
     async readSubOrganization(subOrganizationId) {
       const api = await client();

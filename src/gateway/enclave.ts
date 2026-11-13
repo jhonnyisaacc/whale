@@ -6,13 +6,16 @@ import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
 import { addPasskey, assertionPayload, REFUSED_STATUS, registrationOptions, registrationPayload } from "./passkeys.js";
 import { storedPolicySchema } from "./policy.js";
-import { DELEGATE_USER_NAME, expectedPolicies, TurnkeyRefused, turnkeyTransports, verifyDelegation, type CreatedSubOrg, type DelegationConfig, type TurnkeyParent } from "./turnkey.js";
+import { DELEGATE_USER_NAME, expectedPolicies, TurnkeyNotSubmitted, turnkeyTransports, verifyDelegation, type CreatedSubOrg, type CreateOutcome, type DelegationConfig, type NotSubmittedReason, type TurnkeyParent } from "./turnkey.js";
 import type { Registration } from "./webauthn.js";
 
 const walletParam = z.object({ id: z.uuid() });
 const createBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64), assertion: assertionPayload.optional() }).strict();
 
 class EnclaveClaimed extends Error {}
+
+const NOT_SUBMITTED_STATUS: Record<NotSubmittedReason, number> = { turnkey_refused: 502, turnkey_unreachable: 503 };
+const CREATE_POLLS = 3;
 
 type EnclaveRow = {
   id: string;
@@ -22,23 +25,24 @@ type EnclaveRow = {
   turnkey_wallet_id: string | null;
   turnkey_owner_user_id: string | null;
   root_credential_id: string | null;
-  claim_abandoned: boolean;
+  turnkey_activity_id: string | null;
+  lease_expired: boolean;
+  unrecorded_claim_expired: boolean;
   document: unknown;
   solana: string | null;
 };
 
 async function enclaveWallet(pool: pg.Pool | pg.PoolClient, accountId: string, walletId: string): Promise<EnclaveRow | null> {
   const found = await pool.query<EnclaveRow>(
-    `SELECT w.id, w.status, w.level, w.turnkey_sub_org_id, w.turnkey_wallet_id, w.turnkey_owner_user_id, w.root_credential_id, p.document,
-       w.root_claimed_at IS NULL OR w.root_claimed_at < now() - interval '2 minutes' AS claim_abandoned,
+    `SELECT w.id, w.status, w.level, w.turnkey_sub_org_id, w.turnkey_wallet_id, w.turnkey_owner_user_id, w.root_credential_id, w.turnkey_activity_id, p.document,
+       w.root_claimed_at < now() - interval '2 minutes' AS lease_expired,
+       w.root_claimed_at < now() - interval '24 hours' AS unrecorded_claim_expired,
        (SELECT address FROM wallet_addresses a WHERE a.wallet_id = w.id AND a.family = 'solana') AS solana
      FROM wallets w JOIN policies p ON p.wallet_id = w.id WHERE w.id = $1 AND w.account_id = $2 AND w.level = 'enclave'`,
     [walletId, accountId],
   );
   return found.rows[0] ?? null;
 }
-
-const subOrgName = (walletId: string) => `whale-${walletId}`;
 
 async function recordSubOrg(pool: pg.Pool, accountId: string, walletId: string, credentialId: string, created: CreatedSubOrg): Promise<void> {
   await inTransaction(pool, async (client) => {
@@ -58,24 +62,38 @@ async function recordSubOrg(pool: pg.Pool, accountId: string, walletId: string, 
 
 async function releaseClaim(pool: pg.Pool, accountId: string, walletId: string, credentialId: string, reason: string): Promise<void> {
   await inTransaction(pool, async (client) => {
-    const released = await client.query("UPDATE wallets SET root_credential_id = NULL, root_claimed_at = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [walletId, credentialId]);
+    const released = await client.query("UPDATE wallets SET root_credential_id = NULL, root_claimed_at = NULL, turnkey_activity_id = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [walletId, credentialId]);
     if (released.rowCount !== 1) return;
     await client.query("DELETE FROM passkeys WHERE credential_id = $1 AND account_id = $2", [credentialId, accountId]);
     await audit(client, { accountId, walletId, actor: "system", action: "passkey.removed", detail: { credentialId, reason } });
   });
 }
 
-async function settleClaim(pool: pg.Pool, turnkey: TurnkeyParent | null, accountId: string, wallet: EnclaveRow): Promise<"free" | "enclave_exists" | "enclave_in_progress"> {
-  if (wallet.turnkey_sub_org_id) return "enclave_exists";
-  if (!wallet.root_credential_id) return "free";
-  if (!wallet.claim_abandoned || !turnkey) return "enclave_in_progress";
-  const found = await turnkey.findSubOrganization(subOrgName(wallet.id));
-  if (!found) {
-    await releaseClaim(pool, accountId, wallet.id, wallet.root_credential_id, "turnkey_has_no_sub_organization");
+type Settled = "free" | "enclave_exists" | "enclave_in_progress" | "enclave_conflict";
+
+async function applyOutcome(pool: pg.Pool, accountId: string, walletId: string, credentialId: string, outcome: CreateOutcome): Promise<Settled> {
+  if (outcome.state === "pending") return "enclave_in_progress";
+  if (outcome.state === "failed") {
+    await releaseClaim(pool, accountId, walletId, credentialId, outcome.status);
     return "free";
   }
-  await recordSubOrg(pool, accountId, wallet.id, wallet.root_credential_id, found);
+  await recordSubOrg(pool, accountId, walletId, credentialId, outcome.created);
   return "enclave_exists";
+}
+
+async function settleClaim(pool: pg.Pool, turnkey: TurnkeyParent | null, accountId: string, wallet: EnclaveRow): Promise<Settled> {
+  if (wallet.turnkey_sub_org_id) return "enclave_exists";
+  const credentialId = wallet.root_credential_id;
+  if (!credentialId) return "free";
+  if (!turnkey) return "enclave_in_progress";
+  if (wallet.turnkey_activity_id) return applyOutcome(pool, accountId, wallet.id, credentialId, await turnkey.subOrganizationActivity(wallet.turnkey_activity_id, 1));
+  if (!wallet.lease_expired) return "enclave_in_progress";
+  const found = await turnkey.findSubOrganizations(credentialId);
+  if (found.length > 1) return "enclave_conflict";
+  if (found[0]) return applyOutcome(pool, accountId, wallet.id, credentialId, { state: "completed", created: found[0] });
+  if (!wallet.unrecorded_claim_expired) return "enclave_in_progress";
+  await releaseClaim(pool, accountId, wallet.id, credentialId, "unrecorded_create_never_landed");
+  return "free";
 }
 
 export type EnclaveDeps = { config: GatewayConfig; pool: pg.Pool; turnkey: TurnkeyParent | null; delegation: DelegationConfig | null };
@@ -125,28 +143,29 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     if ("refused" in result) return reply.code(REFUSED_STATUS[result.refused]).send({ error: result.refused, detail: result.detail });
     if (!root) throw new Error(`passkey ${result.credentialId} registered without claiming wallet ${wallet.id}`);
     const credentialId = root.credentialId;
-    let created: CreatedSubOrg;
+    let submitted: Awaited<ReturnType<TurnkeyParent["submitSubOrganization"]>>;
     try {
-      created = await turnkey.createSubOrganization({
-        name: subOrgName(wallet.id),
+      submitted = await turnkey.submitSubOrganization({
+        name: `whale-${wallet.id}`,
         authenticator: {
           name: body.data.label,
           challenge: root.challenge,
-          credentialId: root.credentialId,
+          credentialId,
           clientDataJson: credential.response.clientDataJSON,
           attestationObject: credential.response.attestationObject,
           transports: turnkeyTransports(credential.response.transports),
         },
       });
     } catch (error) {
-      if (error instanceof TurnkeyRefused) {
-        await releaseClaim(pool, session.accountId, wallet.id, credentialId, "turnkey_refused");
-        return reply.code(502).send({ error: "turnkey_refused", detail: error.message });
-      }
-      await pool.query("UPDATE wallets SET root_claimed_at = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [wallet.id, credentialId]);
-      throw error;
+      if (!(error instanceof TurnkeyNotSubmitted)) throw error;
+      await releaseClaim(pool, session.accountId, wallet.id, credentialId, error.reason);
+      return reply.code(NOT_SUBMITTED_STATUS[error.reason]).send({ error: error.reason, detail: error.message });
     }
-    await recordSubOrg(pool, session.accountId, wallet.id, credentialId, created);
+    await pool.query("UPDATE wallets SET turnkey_activity_id = $3 WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [wallet.id, credentialId, submitted.activityId]);
+    const outcome = submitted.outcome.state === "pending" ? await turnkey.subOrganizationActivity(submitted.activityId, CREATE_POLLS) : submitted.outcome;
+    const settledCreate = await applyOutcome(pool, session.accountId, wallet.id, credentialId, outcome);
+    if (outcome.state === "failed") return reply.code(502).send({ error: "turnkey_refused", detail: outcome.status });
+    if (settledCreate !== "enclave_exists") return reply.code(409).send({ error: settledCreate });
     return reply.code(201).send({ walletId: wallet.id, next: "delegate" });
   });
 
