@@ -434,6 +434,13 @@ impl Policy {
                         "an associated token account must be funded by this wallet for itself or a listed destination",
                     );
                 }
+            } else {
+                refuse(
+                    &mut decision,
+                    &format!(
+                        "the signer has no instruction rule for {program_name}, so it cannot check it"
+                    ),
+                );
             }
         }
         let priority = unit_price.saturating_mul(unit_limit) / 1_000_000 + tipped;

@@ -59,8 +59,18 @@
         "kind": "solana",
         "message": "gAEAAgOgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AR51VvyMcBu7nTFbs5oFQf9sbLeo/T5D7a4QAEWsDZoAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMCAAUC4JMEAAIACQNkAAAAAAAAAAEDAAMECOUXy5d6460qAQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHAgECAA=="
       },
+      "expect": "refused",
+      "reason": "no instruction rule"
+    },
+    {
+      "name": "a v0 sol transfer with a lookup table",
+      "job": {
+        "id": "a v0 sol transfer with a lookup table",
+        "kind": "solana",
+        "message": "gAEAAwSgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8DMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwMABQJADQMAAwAJA2QAAAAAAAAAAgIAAQwCAAAA6AMAAAAAAAABBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+      },
       "expect": "signed",
-      "signature": "53pJ89GS7vgMSKgVgGnYnPzmyzMH8S4tCKazKTxgR17yeMy4TC3SCHp4fHAkzHqQj3V2h7qC2fN1vnUyQb2aC78x"
+      "signature": "4NxyDanuEs61tthnv2uqyGgbQgbg9uJxxLWuetWmvvqFHfNXbpxZydDcpT25yMnSqUNySB6GD9o14hHQcxewaUFk"
     },
     {
       "name": "a transfer whose destination comes from a lookup table",

@@ -61,7 +61,7 @@ The instruction rules:
 
 A rule that needs an account loaded from an address lookup table refuses.
 
-Programs in `solana.programs`, such as Jupiter, are trusted with this wallet's signature. Their instructions are not decoded yet, so a Jupiter swap's destination is not checked here.
+A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.
 
 The daily totals live in `--ledger`, keyed by UTC day. The file is replaced atomically, and it moves only after a signature exists.
 
