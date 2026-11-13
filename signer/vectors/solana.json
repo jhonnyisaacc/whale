@@ -219,6 +219,56 @@
       "reason": "exact-in"
     },
     {
+      "name": "a jupiter route into this wallet's wrapped SOL account",
+      "job": {
+        "id": "a jupiter route into this wallet's wrapped SOL account",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRURU+MGNc+Z3L1H89UVydnFVKguPS4imE2Fb6ueTOMruNBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQ=="
+      },
+      "expect": "signed",
+      "signature": "49sqQKPGQUYbwtJFeRDfqK1RGLFHqGCkbFLCcHeJ5na5rrwUm7nwvEy5xK9HkodCoXAEYZRFAanEW6HALef3W5Fh"
+    },
+    {
+      "name": "a jupiter route whose second destination is someone else's account",
+      "job": {
+        "id": "a jupiter route whose second destination is someone else's account",
+        "kind": "solana",
+        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAABkdhBQopTOjTcWuwmX1kKiBDJmkUZ7pfhf26jdfLJ/XAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBAAIDCAQGBQYY5RfLl3rjrSoBAQEBAQEBAQEBAQEBAQEB"
+      },
+      "expect": "refused",
+      "reason": "not this wallet's"
+    },
+    {
+      "name": "a jupiter exact_out_route",
+      "job": {
+        "id": "a jupiter exact_out_route",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGNAz75d7K+1cAQEBAQEBAQEBAQEBAQEBAQ=="
+      },
+      "expect": "refused",
+      "reason": "exact-in"
+    },
+    {
+      "name": "a jupiter shared_accounts_exact_out_route",
+      "job": {
+        "id": "a jupiter shared_accounts_exact_out_route",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGLDRaaiafUU+AQEBAQEBAQEBAQEBAQEBAQ=="
+      },
+      "expect": "refused",
+      "reason": "exact-in"
+    },
+    {
+      "name": "a jupiter route_v2",
+      "job": {
+        "id": "a jupiter route_v2",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGLtk+swxxK8UAQEBAQEBAQEBAQEBAQEBAQ=="
+      },
+      "expect": "refused",
+      "reason": "exact-in"
+    },
+    {
       "name": "a transfer whose destination comes from a lookup table",
       "job": {
         "id": "a transfer whose destination comes from a lookup table",

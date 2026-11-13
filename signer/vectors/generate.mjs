@@ -119,13 +119,14 @@ const createOwnAta = message({ keys: [solanaOwn, OWN_USDC, USDC_MINT, SYSTEM, TO
 function jupiterCases() {
   const ownUsdc = ata(solanaOwn, USDC_MINT_ID, TOKEN_ID);
   const strangerUsdc = ata(STRANGER, USDC_MINT_ID, TOKEN_ID);
-  const routeMessage = ({ authority = solanaOwn, destination = ownUsdc, fee = JUPITER, discriminator = "e517cb977ae3ad2a", mintFromLookup = false } = {}) => {
-    const routeKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_ID)), Buffer.alloc(32, 0x51), destination, Buffer.from(bs58.decode(USDC_MINT_ID)), Buffer.alloc(32, 0x52), JUPITER, COMPUTE];
+  const routeMessage = ({ authority = solanaOwn, destination = ownUsdc, second = JUPITER, outputMint = Buffer.from(bs58.decode(USDC_MINT_ID)), fee = JUPITER, discriminator = "e517cb977ae3ad2a", mintFromLookup = false } = {}) => {
+    const routeKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_ID)), Buffer.alloc(32, 0x51), destination, outputMint, Buffer.alloc(32, 0x52), JUPITER, COMPUTE];
     if (!authority.equals(solanaOwn)) routeKeys.push(authority);
+    if (!second.equals(JUPITER)) routeKeys.push(second);
     if (!fee.equals(JUPITER)) routeKeys.push(fee);
     const index = (key) => routeKeys.findIndex((entry) => entry.equals(key));
     const mint = mintFromLookup ? routeKeys.length : 4;
-    const accounts = [1, index(authority), 2, 3, 6, mint, index(fee), 5, 6];
+    const accounts = [1, index(authority), 2, 3, index(second), mint, index(fee), 5, 6];
     const instructions = [limit(7, 300_000), price(7, 100), ix(6, accounts, Buffer.concat([Buffer.from(discriminator, "hex"), Buffer.alloc(16, 1)]))];
     if (!mintFromLookup) return message({ keys: routeKeys, instructions });
     return message({ version: 0, keys: routeKeys, instructions, lookups: [{ key: Buffer.alloc(32, 7), writable: [1] }] });
@@ -142,6 +143,11 @@ function jupiterCases() {
     ["a jupiter route with a platform fee", routeMessage({ fee: Buffer.alloc(32, 0x77) }), "refused", "platform fee"],
     ["a jupiter route signed for another authority", routeMessage({ authority: STRANGER }), "refused", "authority"],
     ["a jupiter instruction that is not an exact-in route", routeMessage({ discriminator: "0102030405060708" }), "refused", "exact-in"],
+    ["a jupiter route into this wallet's wrapped SOL account", routeMessage({ destination: WRAPPED_SOL, outputMint: WSOL_MINT.toBuffer() }), "signed"],
+    ["a jupiter route whose second destination is someone else's account", routeMessage({ second: strangerUsdc }), "refused", "not this wallet's"],
+    ["a jupiter exact_out_route", routeMessage({ discriminator: "d033ef977b2bed5c" }), "refused", "exact-in"],
+    ["a jupiter shared_accounts_exact_out_route", routeMessage({ discriminator: "b0d169a89a7d453e" }), "refused", "exact-in"],
+    ["a jupiter route_v2", routeMessage({ discriminator: "bb64facc31c4af14" }), "refused", "exact-in"],
   ];
 }
 const solanaCases = [
