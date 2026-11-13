@@ -40,13 +40,13 @@ The wallet policy maps onto session policies:
 
 **Static offsets only.** A universal-action rule compares one 32-byte word at a fixed position with one reference value, and every rule of the action must pass. In Smart Sessions v1.0.0, `UniActionPolicy` reads the word at `4 + offset`, so a rule's `offset` counts from the end of the selector. A rule at a fixed position works only when the field cannot move.
 
-0x `AllowanceHolder.exec(address,address,uint256,address,bytes)` wraps `Settler.execute`. Every `exec` argument except `data` sits at a fixed word. The caller reaches `data` through the offset word at byte 132, and the caller chooses that offset. This is the same flaw that rules out KyberSwap below. The ABI encoder writes `0xa0`, which puts the inner call at byte 196 and the Settler recipient word at byte 200. A caller can instead point the offset past a decoy that keeps the account address at byte 200. The real inner call then sits after the decoy and pays another recipient. A rule on byte 200 alone accepts that calldata, so the session also pins the offset word. The `exec` action carries these rules, all `EQUAL`:
+0x `AllowanceHolder.exec(address,address,uint256,address,bytes)` wraps `Settler.execute`. Every `exec` argument except `data` sits at a fixed word. The caller reaches `data` through the offset word at byte 132, and the caller chooses that offset. This is the same flaw that rules out KyberSwap below. The ABI encoder writes `0xa0`, which puts the inner call at byte 196 and the Settler recipient word at byte 200. A caller can instead point the offset past a decoy that keeps the account address at byte 200. The real inner call then sits after the decoy and pays another recipient. A rule on byte 200 alone accepts that calldata, so the session also pins the offset word. The `exec` action carries these rules. Every rule except the `amount` rule is `EQUAL`.
 
 | Calldata byte | Rule `offset` | Field | Required value |
 | --- | --- | --- | --- |
 | 4 | 0 | `operator` | The chain's pinned Settler |
 | 36 | 32 | `token` | The session's sell token |
-| 68 | 64 | `amount` | Greater than 0, with `isLimited` set and the session's swap cap as the limit. This rule is `GREATER_THAN` 0, not `EQUAL` |
+| 68 | 64 | `amount` | `GREATER_THAN` 0, with `isLimited` set and the session's swap cap as the limit |
 | 100 | 96 | `target` | The same Settler |
 | 132 | 128 | Offset of `data` | `0xa0` |
 | 196 | 192 | Inner selector and the first 28 bytes of the recipient word | The `Settler.execute` selector, then those 28 bytes for the account address |
