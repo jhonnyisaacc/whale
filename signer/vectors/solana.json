@@ -99,6 +99,16 @@
       "reason": "does not list"
     },
     {
+      "name": "a listed program the signer has no rule for",
+      "job": {
+        "id": "a listed program the signer has no rule for",
+        "kind": "solana",
+        "message": "AQABAqCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEBAQABAQ=="
+      },
+      "expect": "refused",
+      "reason": "no instruction rule"
+    },
+    {
       "name": "priority a fraction of a lamport above the cap",
       "job": {
         "id": "priority a fraction of a lamport above the cap",

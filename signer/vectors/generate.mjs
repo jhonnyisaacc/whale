@@ -92,6 +92,7 @@ const BONK_MINT_ID = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
 const ata = (owner, mint, program) => Buffer.from(PublicKey.findProgramAddressSync([new PublicKey(owner).toBuffer(), new PublicKey(program).toBuffer(), new PublicKey(mint).toBuffer()], new PublicKey(ATA_ID))[0].toBytes());
 const SOL_DEST = Buffer.alloc(32, 0x33);
 const STRANGER = Buffer.alloc(32, 0x44);
+const UNRULED = Buffer.alloc(32, 0x55);
 const short = (value) => Buffer.from([value]);
 const u32 = (value) => { const out = Buffer.alloc(4); out.writeUInt32LE(value); return out; };
 const u64 = (value) => { const out = Buffer.alloc(8); out.writeBigUInt64LE(BigInt(value)); return out; };
@@ -197,6 +198,7 @@ const solanaCases = [
   ["sol transfer to a stranger", message({ keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "listed destination"],
   ["a second required signer", message({ signers: 2, keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "only signer"],
   ["a program the policy does not list", message({ keys: [solanaOwn, STRANGER], instructions: [ix(1, [0], Buffer.from([1]))] }), "refused", "does not list"],
+  ["a listed program the signer has no rule for", message({ keys: [solanaOwn, UNRULED], instructions: [ix(1, [0], Buffer.from([1]))] }), "refused", "no instruction rule"],
   ["priority a fraction of a lamport above the cap", message({ keys, instructions: [limit(3, 200_000), price(3, 500_001)] }), "refused", "100001 lamports"],
   ["priority above the cap", message({ keys, instructions: [limit(3, 1_400_000), price(3, 10_000_000)] }), "refused", "priority fees"],
   ["a jupiter route that reads its accounts from a lookup table", message({ version: 0, keys: [solanaOwn, JUPITER, COMPUTE], instructions: [limit(2, 300_000), price(2, 100), ix(1, [0, 3, 4], Buffer.from("e517cb977ae3ad2a", "hex"))], lookups: [{ key: Buffer.alloc(32, 7), writable: [1, 2] }] }), "refused", "lookup table"],
@@ -225,7 +227,7 @@ const policy = {
     dailyLimits: { [`8453:${USDC}`]: "10000000", "8453:native": "5000000000000000" },
   },
   solana: {
-    programs: [JUPITER_ID],
+    programs: [JUPITER_ID, bs58.encode(UNRULED)],
     destinations: [bs58.encode(SOL_DEST)],
     maxPriorityLamports: "100000",
     dailyLimits: { "solana:native": "2000000000", [`solana:${USDC_MINT_ID}`]: "1000000" },

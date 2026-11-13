@@ -32,7 +32,8 @@
   },
   "solana": {
     "programs": [
-      "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+      "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "6k78AbasGMFFrhG95Pj6jQbqkVt7FQMhVgemxJovWKR6"
     ],
     "destinations": [
       "4Ss5JMkXAD9Z7cktFEdrqeMuT6jGMF1pVozTyPHZ6zT4"
