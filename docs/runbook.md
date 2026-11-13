@@ -32,6 +32,22 @@ pnpm run build
 
 `DATABASE_URL=... pnpm run migrate` applies the numbered files in `migrations/` under an advisory lock. A second run prints `migrations: up to date`. It refuses to run when an applied file changed or when the database is ahead of the build. The executor tables still create themselves at boot.
 
+## Start the gateway
+
+The gateway is the public process from ADR 0003. `pnpm run start:gateway` applies migrations, then listens on `PORT` (default 8080). Docker runs it from the same image with `node dist/src/gateway-server.js`.
+
+| Variable | Rule |
+| --- | --- |
+| `GATEWAY_PUBLIC_URL` | A bare origin. `https` outside `localhost`. Google redirects to `/auth/google/callback` on it. |
+| `DATABASE_URL` | Required. The role needs DDL rights while migrations run at boot. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | A Google OAuth web client. Register the callback URL above as its only redirect URI. |
+| `GATEWAY_SECRET` | At least 32 random bytes, base64url. It seals the short-lived login state. Rotating it cancels logins in flight, not sessions. |
+| `GATEWAY_TRUST_PROXY_HOPS` | 0 to 3. Required when `GATEWAY_PUBLIC_URL` is not `localhost`, `127.0.0.1`, or `[::1]`. Set 1 behind one proxy, such as Railway, so rate limits see the client address. With 0 behind a proxy, every client shares one rate-limit bucket. Defaults to 0 on localhost. |
+
+Boot refuses `TURNKEY_API_PRIVATE_KEY`, `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `WHALE_BROADCAST`, and `EXECUTOR_AUTH_TOKEN`, because the gateway holds no signing credential. `HOSTED_LIVE` throws until ADR 0003 is accepted.
+
+Sessions are a `__Host-` cookie that is `HttpOnly`, `Secure`, and `SameSite=Lax`. Postgres keeps only the SHA-256 of the token. A session ends after 12 hours idle or 7 days. A `POST` to `/api/` or `/auth/` from another origin gets 403.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.

@@ -14,6 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "tsc -p tsconfig.json && node --test dist/test/*.test.js",
     "start:executor": "node dist/src/executor-server.js",
+    "start:gateway": "node dist/src/gateway-server.js",
     "start:cli": "node dist/src/cli.js",
     "create-wallet": "node dist/src/create-wallet.js",
     "policy:turnkey": "tsc -p tsconfig.json && node scripts/write-turnkey-policy.mjs",

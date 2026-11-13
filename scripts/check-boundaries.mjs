@@ -6,6 +6,8 @@ const rules = [
   { from: /^(domain|chains|limits|quote-hop)\.ts$/, ban: /from "\.\/(executor|broadcast|aggregators|config|.*-server)/, why: "domain and chain tables import no service or engine module" },
   { from: /^(config|aggregators|broadcast|executor)\//, ban: /-server\.js"/, why: "engines import no HTTP server module" },
   { from: /^config\//, ban: /from "\.\.\/(broadcast|executor|managed-signer)/, why: "config imports no signing or sending module" },
+  { from: /^gateway\//, ban: /from "\.\.\/(managed-signer|signer|keystore|signing-policy|broadcast|executor|http)(\.js|\/)/, why: "the public gateway imports no signer, sender, or executor module" },
+  { from: /^gateway-server\.ts$/, ban: /from "\.\/(managed-signer|signer|keystore|signing-policy|broadcast|executor|http)(\.js|\/)/, why: "the public gateway imports no signer, sender, or executor module" },
   { from: /^db\//, ban: /from "\.\.\/(broadcast|executor|aggregators|managed-signer|signer|.*-server)/, why: "the database layer imports no engine, signer, or server module" },
 ];
 
