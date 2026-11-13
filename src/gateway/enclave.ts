@@ -142,7 +142,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
         root = registration;
       });
     } catch (error) {
-      if (error instanceof EnclaveClaimed) return reply.code(409).send({ error: "enclave_exists" });
+      if (error instanceof EnclaveClaimed) return reply.code(409).send({ error: "enclave_in_progress" });
       throw error;
     }
     if ("refused" in result) return reply.code(REFUSED_STATUS[result.refused]).send({ error: result.refused, detail: result.detail });
