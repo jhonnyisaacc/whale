@@ -262,6 +262,31 @@ test("expired OAuth requests, codes, and tokens are deleted a day after they exp
   }
 });
 
+test("clients with no grant are deleted a day after they register, and granted or in-flight clients stay", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { app, pool, form, authorize, connect, fetches, drop } = await harness({ [CIMD]: { client_id: CIMD, client_name: "Cursor", redirect_uris: [REDIRECT] } }, () => clock);
+  const exists = async (id: string) => (await pool.query("SELECT 1 FROM oauth_clients WHERE id = $1", [id])).rowCount === 1;
+  try {
+    const unused = await register(form, app);
+    const late = await register(form, app);
+    const granted = await register(form, app);
+    await connect(granted);
+    assert.equal((await authorize(CIMD)).reply.statusCode, 302);
+
+    clock += 24 * 60 * 60 * 1000 + 60_000;
+    assert.equal((await authorize(late)).reply.statusCode, 302);
+    assert.deepEqual([await exists(unused), await exists(late), await exists(granted), await exists(CIMD)], [false, true, true, true]);
+
+    clock += 60 * 60 * 1000;
+    await authorize(late);
+    assert.deepEqual([await exists(late), await exists(granted), await exists(CIMD)], [true, true, false]);
+    assert.equal((await authorize(CIMD)).reply.statusCode, 302);
+    assert.equal(fetches.length, 2);
+  } finally {
+    await drop();
+  }
+});
+
 test("a signed-out user can deny a request from the same origin, and the old public deny path is gone", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, form, authorize, drop } = await harness();
   try {
@@ -301,6 +326,33 @@ test("a metadata-document client must name itself by its own URL, and a denial g
     const back = new URL(denied.json().redirect);
     assert.deepEqual([back.searchParams.get("error"), back.searchParams.get("state")], ["access_denied", "st-1"]);
     assert.equal((await app.inject({ method: "GET", url: `/oauth/requests/${requestId}` })).statusCode, 404);
+  } finally {
+    await drop();
+  }
+});
+
+test("an old client that starts a flow while another caller cleans up does not fail that caller", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { app, pool, form, authorize, drop } = await harness(undefined, () => clock);
+  try {
+    const old = await register(form, app);
+    clock += 24 * 60 * 60 * 1000 + 60_000;
+    const fresh = await register(form, app);
+    const racing = await pool.connect();
+    try {
+      await racing.query("BEGIN");
+      await racing.query(
+        "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($5, $1, $2, $5, NULL, $3, $4)",
+        [old, REDIRECT, `${ORIGIN}/mcp`, new Date(clock + 60_000), "r".repeat(43)],
+      );
+      const cleaning = authorize(fresh);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await racing.query("COMMIT");
+      assert.equal((await cleaning).reply.statusCode, 302);
+    } finally {
+      racing.release();
+    }
+    assert.equal((await pool.query("SELECT 1 FROM oauth_clients WHERE id = $1", [old])).rowCount, 1);
   } finally {
     await drop();
   }
