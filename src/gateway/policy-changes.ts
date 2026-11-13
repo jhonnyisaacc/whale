@@ -10,7 +10,7 @@ export type PolicyChangeResult =
   | { status: "unchanged"; version: number }
   | { status: "applied"; version: number }
   | { status: "scheduled"; changeId: string; effectiveAt: string }
-  | { refused: "not_found" | "stale" | "conflict" | "step_up_required" | "step_up_failed"; detail?: string };
+  | { refused: "not_found" | "stale" | "conflict" | "wallet_frozen" | "step_up_required" | "step_up_failed"; detail?: string };
 
 function fixedTime(now: number | undefined): Date | null {
   return now === undefined ? null : new Date(now);
@@ -36,8 +36,8 @@ export async function changePolicy(
   input: { accountId: string; walletId: string; baseVersion: number; document: WalletPolicy; assertion: AssertionPayload | null },
   now?: number,
 ): Promise<PolicyChangeResult> {
-  const current = await pool.query<{ version: number; document: unknown }>(
-    "SELECT p.version, p.document FROM policies p JOIN wallets w ON w.id = p.wallet_id WHERE w.id = $1 AND w.account_id = $2 AND w.status <> 'archived'",
+  const current = await pool.query<{ version: number; document: unknown; status: string }>(
+    "SELECT p.version, p.document, w.status FROM policies p JOIN wallets w ON w.id = p.wallet_id WHERE w.id = $1 AND w.account_id = $2 AND w.status <> 'archived'",
     [input.walletId, input.accountId],
   );
   const row = current.rows[0];
@@ -59,10 +59,13 @@ export async function changePolicy(
       return { status: "applied" as const, version };
     });
   }
+  if (row.status === "frozen") return { refused: "wallet_frozen" };
   if (!input.assertion) return { refused: "step_up_required" };
   const approved = await verifyStepUp(pool, config, input.accountId, widenAction(input.walletId, input.baseVersion, input.document), input.assertion, now);
   if (approved !== true) return { refused: "step_up_failed", detail: approved };
   return inTransaction(pool, async (client): Promise<PolicyChangeResult> => {
+    const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = $1 FOR SHARE", [input.walletId]);
+    if (wallet.rows[0]?.status === "frozen") return { refused: "wallet_frozen" };
     await client.query("UPDATE policy_changes SET status = 'superseded', decided_at = COALESCE($2::timestamptz, now()) WHERE wallet_id = $1 AND status = 'pending'", [input.walletId, fixedTime(now)]);
     const change = await client.query<{ id: string; effective_at: Date }>(
       `INSERT INTO policy_changes (wallet_id, base_version, document, direction, effective_at, requested_at)

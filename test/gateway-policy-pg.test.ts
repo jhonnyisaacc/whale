@@ -37,14 +37,17 @@ async function holdLock(pool: pg.Pool, sql: string, params: unknown[]) {
   const pid = (await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid as number;
   const watcher = new pg.Client({ connectionString: TEST_DATABASE_URL });
   await watcher.connect();
-  const waitingBehind = async (count: number) => {
+  const queued = async (count: number) => {
+    const found = await watcher.query<{ n: number }>(
+      `WITH RECURSIVE queue(pid) AS (SELECT $1::int UNION SELECT a.pid FROM pg_stat_activity a JOIN queue q ON q.pid = ANY(pg_blocking_pids(a.pid)))
+       SELECT count(*)::int - 1 AS n FROM queue`,
+      [pid],
+    );
+    return (found.rows[0]?.n ?? 0) >= count;
+  };
+  const waitingBehind = async (count: number, unless?: () => boolean) => {
     for (let tries = 0; tries < 1500; tries += 1) {
-      const found = await watcher.query<{ n: number }>(
-        `WITH RECURSIVE queue(pid) AS (SELECT $1::int UNION SELECT a.pid FROM pg_stat_activity a JOIN queue q ON q.pid = ANY(pg_blocking_pids(a.pid)))
-         SELECT count(*)::int - 1 AS n FROM queue`,
-        [pid],
-      );
-      if ((found.rows[0]?.n ?? 0) >= count) return;
+      if (unless?.() || (await queued(count))) return;
       await delay(10);
     }
     await release();
@@ -193,6 +196,56 @@ test("freezing cancels a pending widening, so it never applies after unfreezing"
     await drop();
   }
 });
+
+test("a frozen wallet refuses a widening, even one approved with a passkey", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, wallet, approve, put, advance, now, drop } = await harness();
+  try {
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: user.headers, payload: {} })).statusCode, 200);
+    const wider = { ...DEFAULT_POLICY, maxTxUsd: 80 };
+    const refused = await put({ baseVersion: 1, document: wider, assertion: await approve(widenAction(wallet.id, 1, wider)) });
+    assert.deepEqual([refused.statusCode, refused.json().error], [409, "wallet_frozen"], refused.body);
+    assert.equal((await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/policy/pending`, headers: user.headers })).json().pending, null);
+    advance(WIDEN_DELAY_MS + 1);
+    assert.equal(await applyDueChanges(pool, now()), 0);
+    const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
+    assert.deepEqual([listed.status, listed.policyVersion, listed.policy.maxTxUsd], ["frozen", 1, DEFAULT_POLICY.maxTxUsd]);
+  } finally {
+    await drop();
+  }
+});
+
+for (const scope of ["wallet", "account"] as const) {
+  test(`${scope === "wallet" ? "a wallet" : "an account"} freeze that races a widening still cancels it`, { skip: !TEST_DATABASE_URL }, async () => {
+    const { app, pool, user, wallet, approve, put, advance, now, drop } = await harness();
+    const key = Math.floor(Math.random() * 2 ** 31);
+    try {
+      await pool.query(`CREATE FUNCTION hold_widen() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(${key}); RETURN NEW; END $$`);
+      await pool.query("CREATE TRIGGER hold_widen BEFORE INSERT ON audit_events FOR EACH ROW WHEN (NEW.action = 'policy.widen_requested') EXECUTE FUNCTION hold_widen()");
+      const wider = { ...DEFAULT_POLICY, maxTxUsd: 80 };
+      const assertion = await approve(widenAction(wallet.id, 1, wider));
+      const lock = await holdLock(pool, "SELECT pg_advisory_xact_lock($1)", [key]);
+      const widening = put({ baseVersion: 1, document: wider, assertion });
+      await lock.waitingBehind(1);
+      let frozeFirst = false;
+      const url = scope === "wallet" ? `/api/wallets/${wallet.id}/freeze` : "/api/account/freeze";
+      const freezing = app.inject({ method: "POST", url, headers: user.headers, payload: {} }).then((reply) => ((frozeFirst = true), reply));
+      await lock.waitingBehind(2, () => frozeFirst);
+      await lock.release();
+      const [widened, frozen] = [await widening, await freezing];
+      assert.equal(frozen.statusCode, 200, frozen.body);
+      assert.equal(widened.statusCode, 202, widened.body);
+      assert.equal((await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/policy/pending`, headers: user.headers })).json().pending, null);
+      advance(WIDEN_DELAY_MS + 1);
+      assert.equal(await applyDueChanges(pool, now()), 0);
+      const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
+      assert.deepEqual([listed.status, listed.policyVersion, listed.policy.maxTxUsd], ["frozen", 1, DEFAULT_POLICY.maxTxUsd]);
+      const cancelled = await pool.query("SELECT detail FROM audit_events WHERE action = 'policy.widen_cancelled'");
+      assert.deepEqual(cancelled.rows.map((row) => row.detail), [{ changeId: widened.json().changeId, reason: "frozen" }]);
+    } finally {
+      await drop();
+    }
+  });
+}
 
 test("the widening delay runs on the database clock, so a skewed replica cannot shorten it", { skip: !TEST_DATABASE_URL }, async (t) => {
   const { pool, wallet, approve, put, drop } = await harness({ processClock: true });
