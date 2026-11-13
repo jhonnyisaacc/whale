@@ -191,6 +191,8 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const policy = storedPolicySchema.parse(wallet.document);
     const policies = delegate ? expectedPolicies({ delegateUserId: delegate.userId, walletId: wallet.turnkey_wallet_id, solanaAddress: wallet.solana, policy, config: deps.delegation }) : null;
     const ownerCredentialIds = state.users.find((user) => user.userId === wallet.turnkey_owner_user_id)?.credentialIds ?? [];
+    const policiesInPlace = policies !== null && allowPoliciesMatch(state.policies, policies);
+    const stalePolicyIds = policies !== null && !policiesInPlace ? state.policies.flatMap((entry) => (entry.effect === "EFFECT_ALLOW" && entry.policyId ? [entry.policyId] : [])) : [];
     return {
       subOrganizationId: wallet.turnkey_sub_org_id,
       ownerUserId: wallet.turnkey_owner_user_id,
@@ -199,7 +201,8 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
       delegateUser: { userName: DELEGATE_USER_NAME, apiKeys: [{ apiKeyName: "whale-executor", publicKey: deps.delegation.delegatePublicKey, curveType: "API_KEY_CURVE_P256" }], authenticators: [], oauthProviders: [], userTags: [] },
       delegateUserId: delegate?.userId ?? null,
       policies,
-      policiesInPlace: policies !== null && allowPoliciesMatch(state.policies, policies),
+      policiesInPlace,
+      stalePolicyIds,
     };
   });
 

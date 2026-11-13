@@ -7,6 +7,9 @@ import { delegationFromEnv, expectedPolicies, TurnkeyNotSubmitted, verifyDelegat
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
 import { softAuthenticator, type SoftAuthenticator } from "./webauthn-fixtures.js";
+import { ApiError } from "../web/src/api.js";
+import { authorizeDelegate, type DelegationDeps } from "../web/src/enclave-delegation.js";
+import type { Delegation } from "../web/src/turnkey.js";
 
 const RP = { rpId: "whale.example", origin: "https://whale.example" };
 const DELEGATE_KEY = `02${"ab".repeat(32)}`;
@@ -632,6 +635,53 @@ test("a chain this build dropped from the stored policy is left out of the deleg
     state.policies = baseline;
     const confirmed = await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/confirm`, headers: user.headers, payload: {} });
     assert.deepEqual(confirmed.json(), { walletId, status: "active" });
+  } finally {
+    await close();
+  }
+});
+
+test("a pending wallet narrowed after its policies were added but before confirm replaces them on retry and activates with one policy set", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, fake, user, newWallet, create, close } = await enclaveGateway();
+  try {
+    const walletId = await newWallet();
+    assert.equal((await (await create(walletId))()).statusCode, 201);
+    const call = (failConfirm: boolean) =>
+      (async (path: string, init: { method?: string; body?: unknown } = {}) => {
+        if (failConfirm && path.endsWith("/enclave/confirm")) throw new Error("network down");
+        const reply = await app.inject({ method: (init.method ?? "GET") as "GET", url: path, headers: user.headers, ...(init.body === undefined ? {} : { payload: init.body as object }) });
+        if (reply.statusCode >= 400) throw new ApiError(reply.statusCode, reply.json().error, null);
+        return reply.json();
+      }) as DelegationDeps["api"];
+    const org = (delegation: Delegation) => fake.orgs.get(delegation.subOrganizationId) as SubOrgState;
+    const turnkey = {
+      addDelegate: async (delegation: Delegation) => void org(delegation).users.push({ userId: randomUUID(), userName: "whale-delegate", credentialIds: [], apiPublicKeys: [DELEGATE_KEY] }),
+      addPolicies: async (delegation: Delegation) => void org(delegation).policies.push(...(delegation.policies as SubOrgState["policies"]).map((entry) => ({ ...entry, policyId: randomUUID() }))),
+      deletePolicies: async (delegation: Delegation) => {
+        const state = org(delegation);
+        state.policies = state.policies.filter((entry) => !delegation.stalePolicyIds.includes(entry.policyId ?? ""));
+      },
+      addOwnerPasskeys: async () => undefined,
+    };
+    await assert.rejects(authorizeDelegate({ api: call(true), ...turnkey }, walletId), /network down/);
+
+    const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets.find((entry: { id: string }) => entry.id === walletId);
+    const narrowed = await app.inject({ method: "PUT", url: `/api/wallets/${walletId}/policy`, headers: user.headers, payload: { baseVersion: listed.policyVersion, document: { ...listed.policy, chains: ["arbitrum", "solana"] } } });
+    assert.equal(narrowed.statusCode, 200, narrowed.body);
+
+    const refused = async () => {
+      throw new Error("passkey dismissed");
+    };
+    await assert.rejects(authorizeDelegate({ api: call(false), ...turnkey, addPolicies: refused }, walletId), /passkey dismissed/);
+    const halfway = (await app.inject({ method: "GET", url: `/api/wallets/${walletId}/enclave/delegation`, headers: user.headers })).json();
+    assert.deepEqual([halfway.policiesInPlace, halfway.stalePolicyIds, org(halfway).policies.filter((entry) => entry.effect === "EFFECT_ALLOW").length], [false, [], 0]);
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/confirm`, headers: user.headers, payload: {} })).json().error, "delegation_not_safe");
+
+    await authorizeDelegate({ api: call(false), ...turnkey }, walletId);
+    const delegation = (await app.inject({ method: "GET", url: `/api/wallets/${walletId}/enclave/delegation`, headers: user.headers })).json();
+    assert.equal((await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets.find((entry: { id: string }) => entry.id === walletId).status, "active");
+    const allows = org(delegation).policies.filter((entry) => entry.effect === "EFFECT_ALLOW");
+    assert.deepEqual(allows.map((entry) => entry.condition).sort(), (delegation.policies as SubOrgState["policies"]).map((entry) => entry.condition).sort());
+    assert.deepEqual(delegation.stalePolicyIds, []);
   } finally {
     await close();
   }

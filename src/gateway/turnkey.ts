@@ -9,7 +9,7 @@ export type SubOrgState = {
   threshold: number;
   rootUserIds: string[];
   users: { userId: string; userName: string; credentialIds: string[]; apiPublicKeys: string[] }[];
-  policies: { policyName: string; effect: string; consensus: string; condition: string }[];
+  policies: { policyId?: string; policyName: string; effect: string; consensus: string; condition: string }[];
 };
 
 export type SubOrgLookup = { state: "listed"; found: CreatedSubOrg[] } | { state: "truncated" };
@@ -252,7 +252,7 @@ export function turnkeyParentFromEnv(env: NodeJS.ProcessEnv): TurnkeyParent | nu
           credentialIds: user.authenticators.map((entry) => entry.credentialId),
           apiPublicKeys: user.apiKeys.map((entry) => entry.credential.publicKey),
         })),
-        policies: policies.policies.map((policy) => ({ policyName: policy.policyName, effect: policy.effect, consensus: policy.consensus, condition: policy.condition })),
+        policies: policies.policies.map((policy) => ({ policyId: policy.policyId, policyName: policy.policyName, effect: policy.effect, consensus: policy.consensus, condition: policy.condition })),
       };
     },
   };
