@@ -80,7 +80,7 @@ const solanaKey = createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" })
 const solanaOwn = createPublicKey(solanaKey).export({ format: "der", type: "spki" }).subarray(12);
 const SYSTEM = Buffer.alloc(32);
 const COMPUTE = Buffer.from(bs58.decode("ComputeBudget111111111111111111111111111111"));
-const JUPITER = Buffer.from(bs58.decode("JUP6LkbZbjS1jKKwapdHNy74zcZ3tSUQ8ccNmVnJJxP"));
+const JUPITER = Buffer.from(bs58.decode("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"));
 const SOL_DEST = Buffer.alloc(32, 0x33);
 const STRANGER = Buffer.alloc(32, 0x44);
 const short = (value) => Buffer.from([value]);
@@ -134,7 +134,7 @@ const policy = {
     dailyLimits: { [`8453:${USDC}`]: "10000000", "8453:native": "5000000000000000" },
   },
   solana: {
-    programs: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tSUQ8ccNmVnJJxP"],
+    programs: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
     destinations: [bs58.encode(SOL_DEST)],
     maxPriorityLamports: "100000",
     dailyLimits: { "solana:native": "2000000000" },
