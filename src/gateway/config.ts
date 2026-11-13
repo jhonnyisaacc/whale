@@ -39,10 +39,13 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
   if (!clientId.endsWith(".apps.googleusercontent.com")) throw new Error("GOOGLE_CLIENT_ID is not a Google OAuth client id");
   const port = Number(env.PORT ?? "8080");
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("PORT must be a TCP port");
+  const publicUrl = publicUrlFrom(required(env, "GATEWAY_PUBLIC_URL"));
+  const deployed = !LOCAL_HOSTS.has(publicUrl.hostname);
+  if (deployed && !env.GATEWAY_TRUST_PROXY_HOPS?.trim()) throw new Error("GATEWAY_TRUST_PROXY_HOPS is required when GATEWAY_PUBLIC_URL is not localhost: 1 behind one proxy, 0 with none");
   const hops = Number(env.GATEWAY_TRUST_PROXY_HOPS ?? "0");
   if (!Number.isInteger(hops) || hops < 0 || hops > 3) throw new Error("GATEWAY_TRUST_PROXY_HOPS must be 0 to 3");
   return {
-    publicUrl: publicUrlFrom(required(env, "GATEWAY_PUBLIC_URL")),
+    publicUrl,
     port,
     databaseUrl: required(env, "DATABASE_URL"),
     google: { clientId, clientSecret: required(env, "GOOGLE_CLIENT_SECRET") },
