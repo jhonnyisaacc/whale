@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { authenticateApiKey, type AgentContext } from "./agents.js";
 import type { GatewayConfig } from "./config.js";
@@ -37,7 +37,11 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
   app.get("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
   app.delete("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
 
-  app.post("/mcp", { config: limited }, async (request, reply) => {
+  const parseErrors = new Set(["FST_ERR_CTP_INVALID_JSON_BODY", "FST_ERR_CTP_EMPTY_JSON_BODY"]);
+  const errorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) =>
+    parseErrors.has(error.code) ? reply.code(400).send(rpcError(null, -32700, "parse error")) : app.errorHandler(error, request, reply);
+
+  app.post("/mcp", { config: limited, errorHandler }, async (request, reply) => {
     // Streamable HTTP servers must refuse foreign browser origins, which is how DNS rebinding reaches them.
     const origin = request.headers.origin;
     if (origin !== undefined && origin !== config.publicUrl.origin) return reply.code(403).send({ error: "origin_not_allowed" });

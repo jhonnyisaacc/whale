@@ -30,11 +30,11 @@ async function harness() {
   const rpc = (body: unknown, headers: Record<string, string> = {}, remoteAddress = "127.0.0.1") =>
     app.inject({ method: "POST", url: "/mcp", remoteAddress, headers: { authorization: `Bearer ${apiKey}`, accept: "application/json, text/event-stream", ...headers }, payload: body as Record<string, unknown> });
   const call = async (name: string, args: Record<string, unknown>) => (await rpc({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } })).json().result;
-  return { app, pool, sent, rpc, call, agentId, accountId, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, sent, rpc, call, agentId, accountId, apiKey, drop: async () => (await app.close(), await drop()) };
 }
 
 test("MCP over HTTP authenticates the agent, negotiates the version, and refuses foreign origins", { skip: !TEST_DATABASE_URL }, async () => {
-  const { app, rpc, drop } = await harness();
+  const { app, rpc, apiKey, drop } = await harness();
   try {
     const anonymous = await app.inject({ method: "POST", url: "/mcp", payload: { jsonrpc: "2.0", id: 1, method: "ping" } });
     assert.equal(anonymous.statusCode, 401);
@@ -50,6 +50,11 @@ test("MCP over HTTP authenticates the agent, negotiates the version, and refuses
     assert.equal(unknown.json().result.protocolVersion, "2026-07-28");
     assert.equal((await rpc({ jsonrpc: "2.0", method: "notifications/initialized" })).statusCode, 202);
     assert.equal((await rpc([{ jsonrpc: "2.0", id: 1, method: "ping" }])).statusCode, 400);
+    for (const payload of ["{\"jsonrpc\": \"2.0\", \"id\": 1,", ""]) {
+      const garbled = await app.inject({ method: "POST", url: "/mcp", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, payload });
+      assert.equal(garbled.statusCode, 400);
+      assert.deepEqual(garbled.json(), { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } });
+    }
     assert.equal((await rpc({ jsonrpc: "2.0", id: 2, method: "resources/list" })).json().error.code, -32601);
     const tools = (await rpc({ jsonrpc: "2.0", id: 3, method: "tools/list" })).json().result.tools.map((tool: { name: string }) => tool.name);
     assert.deepEqual(tools, ["wallet_status", "deposit_address", "balance", "quote", "swap", "transfer"]);
