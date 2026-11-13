@@ -42,6 +42,14 @@ impl<'a> Reader<'a> {
         }
         Err("compact length is too long".into())
     }
+
+    fn count(&mut self, item_size: usize) -> Result<usize, String> {
+        let count = self.short()?;
+        if count.saturating_mul(item_size) > self.bytes.len() - self.at {
+            return Err("message is truncated".into());
+        }
+        Ok(count)
+    }
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Message, String> {
@@ -56,7 +64,7 @@ pub fn parse(bytes: &[u8]) -> Result<Message, String> {
     }
     let required_signatures = reader.byte()?;
     reader.take(2)?;
-    let key_count = reader.short()?;
+    let key_count = reader.count(32)?;
     let keys = (0..key_count)
         .map(|_| {
             reader
@@ -65,11 +73,11 @@ pub fn parse(bytes: &[u8]) -> Result<Message, String> {
         })
         .collect::<Result<Vec<[u8; 32]>, String>>()?;
     reader.take(32)?;
-    let instruction_count = reader.short()?;
+    let instruction_count = reader.count(3)?;
     let mut instructions = Vec::with_capacity(instruction_count);
     for _ in 0..instruction_count {
         let program = usize::from(reader.byte()?);
-        let account_count = reader.short()?;
+        let account_count = reader.count(1)?;
         let accounts = (0..account_count)
             .map(|_| reader.byte().map(usize::from))
             .collect::<Result<Vec<_>, _>>()?;
