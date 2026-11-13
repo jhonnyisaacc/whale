@@ -18,8 +18,13 @@ const DELEGATION: DelegationConfig = { delegatePublicKey: DELEGATE_KEY, routers:
 function fakeTurnkey() {
   const orgs = new Map<string, SubOrgState>();
   const created: { challenge: string; credentialId: string; name: string }[] = [];
+  const faults = { failNextCreate: false };
   const turnkey: TurnkeyParent = {
     async createSubOrganization(input) {
+      if (faults.failNextCreate) {
+        faults.failNextCreate = false;
+        throw new Error("turnkey is unavailable");
+      }
       const subOrganizationId = randomUUID();
       const ownerUserId = randomUUID();
       created.push({ challenge: input.authenticator.challenge, credentialId: input.authenticator.credentialId, name: input.name });
@@ -32,7 +37,7 @@ function fakeTurnkey() {
       return structuredClone(state);
     },
   };
-  return { turnkey, orgs, created };
+  return { turnkey, orgs, created, faults };
 }
 
 test("expected Turnkey policies follow the wallet's EVM chains and scope Whale's delegate", () => {
@@ -121,5 +126,55 @@ test("an enclave wallet gets its passkey as Turnkey root, then activates only af
   } finally {
     await app.close();
     await drop();
+  }
+});
+
+async function enclaveGateway() {
+  const { pool, drop } = await migratedSchema();
+  const fake = fakeTurnkey();
+  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: fake.turnkey, delegation: DELEGATION });
+  const user = await signedInAccount(pool);
+  const newWallet = async (): Promise<string> => (await app.inject({ method: "POST", url: "/api/wallets", headers: user.headers, payload: { label: "main", level: "enclave" } })).json().id;
+  const create = async (walletId: string) => {
+    const options = (await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: user.headers, payload: {} })).json();
+    return () => app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave`, headers: user.headers, payload: { credential: softAuthenticator(RP).register(options.challenge), label: "Mac" } });
+  };
+  const trackedSubOrgs = async () => (await pool.query<{ id: string }>("SELECT turnkey_sub_org_id AS id FROM wallets WHERE turnkey_sub_org_id IS NOT NULL")).rows.map((row) => row.id).sort();
+  return { app, pool, fake, user, newWallet, create, trackedSubOrgs, close: async () => (await app.close(), await drop()) };
+}
+
+test("two concurrent enclave creates for one wallet reach Turnkey once", { skip: !TEST_DATABASE_URL }, async () => {
+  const gateway = await enclaveGateway();
+  try {
+    const walletId = await gateway.newWallet();
+    const first = await gateway.create(walletId);
+    const second = await gateway.create(walletId);
+    const responses = await Promise.all([first(), second()]);
+    assert.deepEqual(responses.map((response) => response.statusCode).sort(), [201, 409]);
+    assert.equal(gateway.fake.created.length, 1);
+    assert.deepEqual(await gateway.trackedSubOrgs(), [...gateway.fake.orgs.keys()].sort());
+    const passkeys = await gateway.pool.query("SELECT 1 FROM passkeys WHERE account_id = $1", [gateway.user.accountId]);
+    assert.equal(passkeys.rowCount, 1);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("a failure after Turnkey creates the sub-organization still leaves it recorded on the wallet", { skip: !TEST_DATABASE_URL }, async () => {
+  const gateway = await enclaveGateway();
+  try {
+    const first = await gateway.newWallet();
+    gateway.fake.faults.failNextCreate = true;
+    assert.equal((await (await gateway.create(first))()).statusCode, 500);
+    assert.equal((await (await gateway.create(first))()).statusCode, 201);
+
+    const second = await gateway.newWallet();
+    assert.equal((await (await gateway.create(second))()).statusCode, 500);
+    assert.equal(gateway.fake.created.length, 2);
+    assert.deepEqual(await gateway.trackedSubOrgs(), [...gateway.fake.orgs.keys()].sort());
+    const retry = await gateway.app.inject({ method: "POST", url: `/api/wallets/${second}/enclave/options`, headers: gateway.user.headers, payload: {} });
+    assert.equal(retry.json().error, "enclave_exists");
+  } finally {
+    await gateway.close();
   }
 });
