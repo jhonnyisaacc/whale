@@ -2,6 +2,18 @@ const DEPENDENCY_TABLES = new Set(["dependencies", "dev-dependencies", "build-de
 const SOURCE_KEYS = new Set(["git", "path", "registry", "registry-index"]);
 const CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index";
 
+const ESCAPES: Record<string, string> = { b: "\b", t: "\t", n: "\n", f: "\f", r: "\r", '"': '"', "\\": "\\" };
+
+function decodeBasic(basic: string): string {
+  return basic.replace(/\\(?:u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|[ \t]*\r?\n\s*|(.?))/g, (escape, short?: string, long?: string, char?: string) => {
+    if (short || long) return String.fromCodePoint(parseInt(short ?? long ?? "", 16));
+    if (char === undefined) return "";
+    const decoded = ESCAPES[char];
+    if (decoded === undefined) throw new Error(`invalid TOML escape ${escape}`);
+    return decoded;
+  });
+}
+
 function tomlKeyPaths(text: string): string[][] {
   const paths: string[][] = [];
   let at = 0;
@@ -20,7 +32,7 @@ function tomlKeyPaths(text: string): string[][] {
     while (end < text.length && !text.startsWith(fence, end)) end += quote === '"' && text[end] === "\\" ? 2 : 1;
     const value = text.slice(at + fence.length, end);
     at = end + fence.length;
-    return value;
+    return quote === "'" ? value : decodeBasic(value);
   };
   const key = (): string[] => {
     const parts: string[] = [];
