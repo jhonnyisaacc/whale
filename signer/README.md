@@ -76,7 +76,7 @@ Jupiter v6, when listed in `solana.programs`, is decoded the way the app signing
 - the platform fee account is unset;
 - every destination is this wallet's wrapped SOL account, or its associated token account for the output mint under Token or Token-2022.
 
-The signer derives those addresses itself, with the runtime's program-derived-address search.
+The signer derives those addresses itself, with the runtime's program-derived-address search. Jupiter transactions often load the output mint from an address lookup table. The signer then cannot read the mint, so a destination passes if it is this wallet's account for wrapped SOL, USDC, or USDT, the mints the app quotes against. The app signing policy does the same. Every other Jupiter account must be static.
 
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom.
 

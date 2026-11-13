@@ -159,6 +159,26 @@
       "signature": "5KRKP1hdc6A1PQqYPrTHgsb5iY4cHMJaJ3Fz3aXeCFEptyRiTgCEHnK8mWkCNL4VDYuHCVfx1ukDP4ujuaytLP7m"
     },
     {
+      "name": "a jupiter route whose output mint comes from a lookup table",
+      "job": {
+        "id": "a jupiter route whose output mint comes from a lookup table",
+        "kind": "solana",
+        "message": "gAEABwigmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8Abd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVEj7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDBwAFAuCTBAAHAAkDZAAAAAAAAAAGCQEAAgMGCAYFBhjlF8uXeuOtKgEBAQEBAQEBAQEBAQEBAQEBBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+      },
+      "expect": "signed",
+      "signature": "tE2fK67KXf7hg6Aya2Fpfs1V5FMNCw6kBc3Pvrmfhio3p9aA3Xiz9UUfPCE37A113GQYTSn6YnGCgKfFV6cbksB"
+    },
+    {
+      "name": "a jupiter route from a lookup table mint into someone else's account",
+      "job": {
+        "id": "a jupiter route from a lookup table mint into someone else's account",
+        "kind": "solana",
+        "message": "gAEABwigmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8Abd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFkdhBQopTOjTcWuwmX1kKiBDJmkUZ7pfhf26jdfLJ/XMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDBwAFAuCTBAAHAAkDZAAAAAAAAAAGCQEAAgMGCAYFBhjlF8uXeuOtKgEBAQEBAQEBAQEBAQEBAQEBBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+      },
+      "expect": "refused",
+      "reason": "not this wallet's"
+    },
+    {
       "name": "a jupiter route into someone else's account",
       "job": {
         "id": "a jupiter route into someone else's account",

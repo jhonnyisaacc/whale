@@ -40,6 +40,11 @@ const TOKEN_2022: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const JUPITER: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
+const QUOTE_MINTS: [&str; 3] = [
+    WSOL_MINT,
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+];
 
 struct JupiterRoute {
     discriminator: [u8; 8],
@@ -106,7 +111,10 @@ fn jupiter_route(
     if read(route.fee)? != jupiter {
         return Err("the Jupiter platform fee account is set".into());
     }
-    let mint = read(route.mint)?;
+    let mints = match account(route.mint) {
+        Some(mint) => vec![mint],
+        None => QUOTE_MINTS.map(known).to_vec(),
+    };
     let ata = known(ASSOCIATED_TOKEN);
     let mut owned = vec![crate::pda::associated_token_address(
         &own,
@@ -114,13 +122,15 @@ fn jupiter_route(
         &known(TOKEN),
         &ata,
     )];
-    for program in [TOKEN, TOKEN_2022] {
-        owned.push(crate::pda::associated_token_address(
-            &own,
-            &mint,
-            &known(program),
-            &ata,
-        ));
+    for mint in &mints {
+        for program in [TOKEN, TOKEN_2022] {
+            owned.push(crate::pda::associated_token_address(
+                &own,
+                mint,
+                &known(program),
+                &ata,
+            ));
+        }
     }
     for (position, slot) in route.destinations.iter().enumerate() {
         let destination = read(*slot)?;

@@ -119,13 +119,16 @@ const createOwnAta = message({ keys: [solanaOwn, OWN_USDC, USDC_MINT, SYSTEM, TO
 function jupiterCases() {
   const ownUsdc = ata(solanaOwn, USDC_MINT_ID, TOKEN_ID);
   const strangerUsdc = ata(STRANGER, USDC_MINT_ID, TOKEN_ID);
-  const routeMessage = ({ authority = solanaOwn, destination = ownUsdc, fee = JUPITER, discriminator = "e517cb977ae3ad2a" } = {}) => {
+  const routeMessage = ({ authority = solanaOwn, destination = ownUsdc, fee = JUPITER, discriminator = "e517cb977ae3ad2a", mintFromLookup = false } = {}) => {
     const routeKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_ID)), Buffer.alloc(32, 0x51), destination, Buffer.from(bs58.decode(USDC_MINT_ID)), Buffer.alloc(32, 0x52), JUPITER, COMPUTE];
     if (!authority.equals(solanaOwn)) routeKeys.push(authority);
     if (!fee.equals(JUPITER)) routeKeys.push(fee);
     const index = (key) => routeKeys.findIndex((entry) => entry.equals(key));
-    const accounts = [1, index(authority), 2, 3, 6, 4, index(fee), 5, 6];
-    return message({ keys: routeKeys, instructions: [limit(7, 300_000), price(7, 100), ix(6, accounts, Buffer.concat([Buffer.from(discriminator, "hex"), Buffer.alloc(16, 1)]))] });
+    const mint = mintFromLookup ? routeKeys.length : 4;
+    const accounts = [1, index(authority), 2, 3, 6, mint, index(fee), 5, 6];
+    const instructions = [limit(7, 300_000), price(7, 100), ix(6, accounts, Buffer.concat([Buffer.from(discriminator, "hex"), Buffer.alloc(16, 1)]))];
+    if (!mintFromLookup) return message({ keys: routeKeys, instructions });
+    return message({ version: 0, keys: routeKeys, instructions, lookups: [{ key: Buffer.alloc(32, 7), writable: [1] }] });
   };
   const ownUsdc2022 = ata(solanaOwn, USDC_MINT_ID, TOKEN_2022_ID);
   const sharedKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_2022_ID)), Buffer.alloc(32, 0x61), Buffer.alloc(32, 0x62), Buffer.alloc(32, 0x63), Buffer.alloc(32, 0x64), ownUsdc2022, Buffer.alloc(32, 0x65), Buffer.from(bs58.decode(USDC_MINT_ID)), JUPITER, COMPUTE];
@@ -133,6 +136,8 @@ function jupiterCases() {
   return [
     ["a jupiter route into this wallet's USDC account", routeMessage(), "signed"],
     ["a jupiter shared route into this wallet's Token-2022 account", shared, "signed"],
+    ["a jupiter route whose output mint comes from a lookup table", routeMessage({ mintFromLookup: true }), "signed"],
+    ["a jupiter route from a lookup table mint into someone else's account", routeMessage({ mintFromLookup: true, destination: strangerUsdc }), "refused", "not this wallet's"],
     ["a jupiter route into someone else's account", routeMessage({ destination: strangerUsdc }), "refused", "not this wallet's"],
     ["a jupiter route with a platform fee", routeMessage({ fee: Buffer.alloc(32, 0x77) }), "refused", "platform fee"],
     ["a jupiter route signed for another authority", routeMessage({ authority: STRANGER }), "refused", "authority"],
