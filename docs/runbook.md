@@ -54,6 +54,14 @@ Sessions are a `__Host-` cookie that is `HttpOnly`, `Secure`, and `SameSite=Lax`
 
 `POST /api/wallets/:id/agents` with `{ "name", "limits" }` creates an agent and returns its API key once, as `whale_<id>_<secret>`. Postgres keeps the SHA-256 of the secret. The limits must sit inside the wallet policy. The limit that applies at send time is the intersection, because the policy can narrow later. `POST /api/agents/:id/rotate` replaces the key. `POST /api/agents/:id/revoke` stops the agent and every credential it holds.
 
+### MCP over HTTP
+
+`POST /mcp` speaks MCP Streamable HTTP with JSON replies and no server stream. An agent sends `Authorization: Bearer whale_...`. A missing or bad key gets 401 with `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp"`. A request with a foreign `Origin` gets 403. Versions `2026-07-28`, `2025-11-25`, `2025-06-18`, and `2025-03-26` are accepted.
+
+The tools are `wallet_status`, `deposit_address`, `balance`, `quote`, `swap`, and `transfer`. Before anything leaves the gateway, a tool must stay inside the agent's chains and actions, the wallet's slippage cap, its token list, and, for a transfer, its destination list. A refusal is an audit event. `swap` and `transfer` are plans: the executor answers with the route a swap would take, or the transfer it would send, and signs nothing.
+
+To enable quotes, set `HOSTED_EXECUTOR_URL` (the executor's private address) and `HOSTED_SERVICE_TOKEN` on the gateway, and the same `HOSTED_SERVICE_TOKEN` on the executor. The token must be at least 32 characters and must differ from `EXECUTOR_AUTH_TOKEN`. The executor accepts it on `POST /hosted/commands` only.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.

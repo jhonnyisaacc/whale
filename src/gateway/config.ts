@@ -5,6 +5,7 @@ export type GatewayConfig = {
   google: { clientId: string; clientSecret: string };
   secret: Buffer;
   trustProxyHops: number;
+  executor: { url: URL; token: string } | null;
 };
 
 // The gateway is public and holds no signing credential. Boot refuses one, so a copied executor env cannot
@@ -51,9 +52,23 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     google: { clientId, clientSecret: required(env, "GOOGLE_CLIENT_SECRET") },
     secret: secretFrom(required(env, "GATEWAY_SECRET")),
     trustProxyHops: hops,
+    executor: executorFrom(env),
   };
 }
 
+// The executor stays on the private network. The gateway reaches only its /hosted/commands route, with a token
+// that the executor refuses on every other route.
+export function executorFrom(env: NodeJS.ProcessEnv): { url: URL; token: string } | null {
+  const raw = env.HOSTED_EXECUTOR_URL?.trim();
+  if (!raw) return null;
+  const url = new URL(raw);
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("HOSTED_EXECUTOR_URL must be http or https");
+  if (/[?#]/.test(url.href)) throw new Error("HOSTED_EXECUTOR_URL must not carry a query or fragment, because the gateway appends /hosted/commands to its path");
+  const token = required(env, "HOSTED_SERVICE_TOKEN");
+  if (token.length < 32) throw new Error("HOSTED_SERVICE_TOKEN must be at least 32 characters");
+  return { url, token };
+}
+
 export function gatewaySecrets(config: GatewayConfig): string[] {
-  return [config.google.clientSecret, config.secret.toString("base64url"), config.databaseUrl];
+  return [config.google.clientSecret, config.secret.toString("base64url"), config.databaseUrl, ...(config.executor ? [config.executor.token] : [])];
 }

@@ -1,6 +1,7 @@
 import fastifyAuth from "@fastify/auth";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { bearerOf } from "./bearer.js";
 import { tokenMatches } from "./managed-signer.js";
 import { loggerOptions } from "./log.js";
 
@@ -70,11 +71,6 @@ declare module "fastify" {
     verifyBearer: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     drain: Drain;
   }
-}
-
-export function bearerOf(request: FastifyRequest): string {
-  const header = request.headers.authorization;
-  return typeof header === "string" && header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
 }
 
 export function anyTokenMatches(presented: string, tokens: readonly string[]): boolean {
