@@ -10,7 +10,7 @@ export type PolicyChangeResult =
   | { status: "unchanged"; version: number }
   | { status: "applied"; version: number }
   | { status: "scheduled"; changeId: string; effectiveAt: string }
-  | { refused: "not_found" | "stale" | "conflict" | "step_up_required" | "step_up_failed"; detail?: string };
+  | { refused: "not_found" | "stale" | "conflict" | "wallet_frozen" | "step_up_required" | "step_up_failed"; detail?: string };
 
 function fixedTime(now: number | undefined): Date | null {
   return now === undefined ? null : new Date(now);
@@ -36,8 +36,8 @@ export async function changePolicy(
   input: { accountId: string; walletId: string; baseVersion: number; document: WalletPolicy; assertion: AssertionPayload | null },
   now?: number,
 ): Promise<PolicyChangeResult> {
-  const current = await pool.query<{ version: number; document: unknown }>(
-    "SELECT p.version, p.document FROM policies p JOIN wallets w ON w.id = p.wallet_id WHERE w.id = $1 AND w.account_id = $2 AND w.status <> 'archived'",
+  const current = await pool.query<{ version: number; document: unknown; status: string }>(
+    "SELECT p.version, p.document, w.status FROM policies p JOIN wallets w ON w.id = p.wallet_id WHERE w.id = $1 AND w.account_id = $2 AND w.status <> 'archived'",
     [input.walletId, input.accountId],
   );
   const row = current.rows[0];
@@ -59,10 +59,13 @@ export async function changePolicy(
       return { status: "applied" as const, version };
     });
   }
+  if (row.status === "frozen") return { refused: "wallet_frozen" };
   if (!input.assertion) return { refused: "step_up_required" };
   const approved = await verifyStepUp(pool, config, input.accountId, widenAction(input.walletId, input.baseVersion, input.document), input.assertion, now);
   if (approved !== true) return { refused: "step_up_failed", detail: approved };
   return inTransaction(pool, async (client): Promise<PolicyChangeResult> => {
+    const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = $1 FOR SHARE", [input.walletId]);
+    if (wallet.rows[0]?.status === "frozen") return { refused: "wallet_frozen" };
     await client.query("UPDATE policy_changes SET status = 'superseded', decided_at = COALESCE($2::timestamptz, now()) WHERE wallet_id = $1 AND status = 'pending'", [input.walletId, fixedTime(now)]);
     const change = await client.query<{ id: string; effective_at: Date }>(
       `INSERT INTO policy_changes (wallet_id, base_version, document, direction, effective_at, requested_at)
@@ -104,6 +107,7 @@ export async function applyDueChanges(pool: pg.Pool, now?: number): Promise<numb
   for (const { id } of due.rows) {
     const done = await inTransaction(pool, async (client) => {
       await client.query("SELECT 1 FROM policies WHERE wallet_id = (SELECT wallet_id FROM policy_changes WHERE id = $1) FOR UPDATE", [id]);
+      const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = (SELECT wallet_id FROM policy_changes WHERE id = $1) FOR SHARE", [id]);
       const change = await client.query<{ wallet_id: string; base_version: number; document: unknown; account_id: string }>(
         `SELECT c.wallet_id, c.base_version, c.document, w.account_id FROM policy_changes c JOIN wallets w ON w.id = c.wallet_id
          WHERE c.id = $1 AND c.status = 'pending' FOR UPDATE OF c`,
@@ -111,6 +115,11 @@ export async function applyDueChanges(pool: pg.Pool, now?: number): Promise<numb
       );
       const row = change.rows[0];
       if (!row) return false;
+      if (wallet.rows[0]?.status === "frozen") {
+        await client.query("UPDATE policy_changes SET status = 'cancelled', decided_at = COALESCE($2::timestamptz, now()) WHERE id = $1", [id, fixedTime(now)]);
+        await audit(client, { accountId: row.account_id, walletId: row.wallet_id, actor: "system", action: "policy.widen_cancelled", detail: { changeId: id, reason: "frozen" } });
+        return false;
+      }
       const updated = await client.query<{ version: number }>(
         "UPDATE policies SET version = version + 1, document = $3, updated_at = COALESCE($4::timestamptz, now()) WHERE wallet_id = $1 AND version = $2 RETURNING version",
         [row.wallet_id, row.base_version, JSON.stringify(row.document), fixedTime(now)],

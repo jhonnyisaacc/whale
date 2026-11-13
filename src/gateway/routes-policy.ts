@@ -10,7 +10,7 @@ import { walletPolicySchema } from "./policy.js";
 const walletParam = z.object({ id: z.uuid() });
 const changeBody = z.object({ baseVersion: z.number().int().min(1), document: walletPolicySchema, assertion: assertionPayload.optional() }).strict();
 const unfreezeBody = z.object({ assertion: assertionPayload }).strict();
-const REFUSED_STATUS: Record<string, number> = { not_found: 404, stale: 409, conflict: 409, step_up_required: 428, step_up_failed: 403 };
+const REFUSED_STATUS: Record<string, number> = { not_found: 404, stale: 409, conflict: 409, wallet_frozen: 409, step_up_required: 428, step_up_failed: 403 };
 
 function walletIdOf(request: FastifyRequest): string | null {
   const parsed = walletParam.safeParse(request.params);
