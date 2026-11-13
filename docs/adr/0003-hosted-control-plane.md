@@ -42,7 +42,7 @@ The Turnkey policy carries what Turnkey can see:
 - when an ABI is uploaded for the target, named arguments through `eth.tx.contract_call_args`, for example the recipient and amount of an ERC-20 `transfer`;
 - the Solana program ids and native transfer recipients, as today.
 
-Calldata nested inside a `bytes` argument, such as 0x `exec` wrapping Settler `execute`, is not documented as parseable. Swaps through those routers therefore rely on Whale's app policy for the recipient check. The dashboard says so on the enclave level. A user who needs that closed picks `self_hosted` or `smart_account`.
+Calldata nested inside a `bytes` argument, such as 0x `exec` wrapping Settler `execute`, is not documented as parseable. Swaps through those routers therefore rely on Whale's app policy for the recipient check. The dashboard says so on the enclave level. A user who needs that check outside Whale picks `self_hosted` or `smart_account`. At `smart_account` the chain checks the recipient field but not the Settler actions, so the session's caps bound the loss instead. [ADR 0004](0004-smart-account-level.md) explains why.
 
 Whale's delegated credential is one P-256 API key per deployment. It lives only in executor env, and each sub-organization's policy bounds what it can do. A per-tenant key in a KMS is the follow-up, listed below.
 
@@ -52,7 +52,7 @@ Whale's delegated credential is one P-256 API key per deployment. It lives only 
 
 #### `smart_account`
 
-The user's key owns the account. Whale holds a session key whose permissions an audited on-chain module enforces: allowed targets and selectors, spending limits, value limits, and expiry. Whale writes no account or module contract. The module choice is [ADR 0004](0004-smart-account-level.md). Period caps wait on step 4 of its "Verify before code", which picks between 24-hour sessions and a periodic spending-limit module. Until its verification steps are done, the level is listed as unavailable.
+The user's key owns the account. Whale holds a session key whose permissions an audited on-chain module enforces. The module checks the allowed targets and selectors, a cap on the amount of each allowed call, and a native value limit. Whale writes no account or module contract. The module choice is [ADR 0004](0004-smart-account-level.md). Session expiry and period caps wait on step 4 of its "Verify before code", which picks between 24-hour sessions and a periodic spending-limit module. Until its verification steps are done, the level is listed as unavailable.
 
 ### Identity
 

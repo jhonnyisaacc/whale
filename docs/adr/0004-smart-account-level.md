@@ -35,7 +35,7 @@ The wallet policy maps onto session policies:
 | Per-token caps | A limited universal-action rule on the amount of each allowed call, described under "The cap is the bound" |
 | Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Step 4 under "Verify before code" picks one, and the period caps that ADR 0003 promises wait on it |
 | A 0x swap calls only a pinned Settler | Universal-action rules that pin the `exec` `operator` and `target` to the chain's Settler |
-| Swap recipient must be the account | Universal-action rules on **static** calldata offsets, listed below |
+| Swap recipient must be the account | Universal-action rules on **static** calldata offsets, listed below. They stop accidental and naive misuse. They do not bound loss, because the Settler actions are unchecked |
 | Transfers to listed destinations | A universal-action rule on the `transfer` recipient, which sits at a static offset, and a limited rule on its amount |
 
 **Static offsets only.** A universal-action rule compares one 32-byte word at a fixed position with one reference value, and every rule of the action must pass. In Smart Sessions v1.0.0, `UniActionPolicy` reads the word at `4 + offset`, so a rule's `offset` counts from the end of the selector. A rule at a fixed position works only when the field cannot move.
@@ -53,6 +53,8 @@ The wallet policy maps onto session policies:
 | 200 | 196 | `slippage.recipient` | The account address |
 
 On 2026-11-13 these positions were checked again with viem 2.57.13. Canonical calldata passes every rule. Calldata whose offset word is `0x100`, with a decoy before the real inner call, passes the byte-200 rule but ABI-decodes to another recipient, and the byte-132 rule refuses it.
+
+**The recipient rules do not bound loss.** `Settler.execute` also takes `bytes[] actions`, and no rule reads them. The caller chooses the actions. Each action is reached through an offset that the caller chooses, which is the flaw that rules out KyberSwap below. The recipients inside the actions are pool addresses that change with each quote, so no static rule could pin them anyway. A compromised Whale can send `slippage.recipient` set to the account, `buyToken` set to zero, `minAmountOut` set to 0, and one action `TRANSFER_FROM(attacker, permit, sig)`. Every rule in the table passes. Settler sends the lent amount to the attacker (`Settler.sol:69-78` and `Permit2Payment.sol:476-497`). It then skips the slippage check, because `minAmountOut` and `buyToken` are both zero (`SettlerBase.sol:113-114`). The recipient, offset, and selector rules refuse calldata that names another recipient where the ABI puts it. A buggy or naive client makes that mistake. A compromised Whale does not have to, so the bound on loss is the swap cap.
 
 `exec` lends the sold-token allowance to `operator` for one call into `target`. Without the `operator` and `target` rules, a compromised Whale names its own contract for both and pulls the lent allowance. The app policy already requires both to be a pinned Settler, in `assertSettler` in `src/signing-policy.ts` and in the 0x entry of `docs/threat-model.md`. A rule holds one reference value, so one session pins one Settler. 0x rotates Settler addresses. After a rotation, 0x swaps at this level are refused until the owner enables a session for the new Settler.
 
@@ -84,8 +86,8 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
 2. Confirm which 7579 account and WebAuthn validator are in the registry with audits, and their deployed addresses on each chain Whale enables.
 3. Confirm RIP-7212 availability on each enabled chain, or the gas cost of the fallback verifier.
 4. Pick between 24-hour sessions and a periodic spending-limit module.
-5. Write a fork test with a session key that tries each of these. Each must revert on-chain:
-   - pay a swap to another recipient;
+5. Write a fork test with a session key. Send `exec` with `minAmountOut` 0, `buyToken` zero, and a `TRANSFER_FROM` action that pays the attacker, several times. The attacker must receive the lent amounts until the swap cap is used, and the next such `exec` must revert. Then try each of these. Each must revert on-chain:
+   - pay a swap to another recipient in `slippage.recipient`;
    - send `exec` calldata whose `data` offset points past a decoy that keeps the account address at byte 200;
    - name a non-Settler contract as `operator`, with `target` still the pinned Settler;
    - name a non-Settler contract as `target`, with `operator` still the pinned Settler;
@@ -94,13 +96,14 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
    - exceed the transfer cap over several transfers;
    - name a sell token other than the session's in `exec`;
    - send native value with any call;
-   - call `approve` or `transferFrom` on the sell token;
+   - call `approve(attacker, remainingCap)` on the sell token;
+   - call `transferFrom` on the sell token;
    - call a non-0x router.
 6. Decide how userOp fees are bounded: a userOp policy with an audit, a paymaster that the owner controls, or a native balance that the owner keeps to a gas float.
 
 ## Consequences
 
-- A full Whale compromise at this level can spend only inside the active session's per-token caps, only through the pinned 0x Settler to the account itself, and only until the session expires. That is the strongest guarantee of the three levels, and it costs route choice.
+- A full Whale compromise at this level can lose, of each sell token, at most the session's swap cap plus its transfer cap. It can move that amount only through the pinned Settler or to the listed transfer destination. It can choose where Settler sends a swapped amount, so the whole swap cap can go to the attacker. Until step 6 is done, it can also spend the account's native balance on userOp fees. The session lasts until the owner removes it, unless step 4 adds expiry. That is the strongest guarantee of the three levels, and it costs route choice.
 - Every new chain needs the owner's passkey to enable a session.
 - Gas is higher than for an EOA, because of the 4337 entry point and on-chain P-256 verification. On the cheap L2s Whale defaults to, that is cents.
 
