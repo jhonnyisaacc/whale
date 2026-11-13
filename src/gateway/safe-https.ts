@@ -45,7 +45,7 @@ const guardedLookup: RequestOptions["lookup"] = (hostname, options, callback) =>
     .catch((error: Error) => callback(error, "", 4));
 };
 
-export type SafeResponse = { status: number; body: string };
+export type SafeResponse = { status: number; body: string; truncated: boolean };
 export type SafeInit = { method: "GET" | "POST"; headers?: Record<string, string>; body?: string; maxBytes: number; timeoutMs: number };
 
 export function pinnedRequest(url: URL, init: SafeInit, send: typeof request = request): Promise<SafeResponse> {
@@ -57,13 +57,22 @@ export function pinnedRequest(url: URL, init: SafeInit, send: typeof request = r
     };
     const req = send(url, { method: init.method, headers: init.headers ?? {}, lookup: guardedLookup }, (response) => {
       let size = 0;
+      let cut = false;
       const chunks: Buffer[] = [];
+      const finish = (truncated: boolean) => settle(resolve)({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8"), truncated });
       response.on("data", (chunk: Buffer) => {
-        size += chunk.byteLength;
-        if (size > init.maxBytes) req.destroy(new Error("response is too large"));
-        else chunks.push(chunk);
+        if (cut) return;
+        if (size + chunk.byteLength <= init.maxBytes) {
+          size += chunk.byteLength;
+          chunks.push(chunk);
+          return;
+        }
+        cut = true;
+        chunks.push(chunk.subarray(0, init.maxBytes - size));
+        finish(true);
+        req.destroy();
       });
-      response.on("end", () => settle(resolve)({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
+      response.on("end", () => finish(false));
       response.on("error", settle(reject));
     });
     req.on("error", settle(reject));

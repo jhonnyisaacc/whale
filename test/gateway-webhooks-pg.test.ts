@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { createServer, request, type RequestListener } from "node:http";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { audit } from "../src/gateway/accounts.js";
 import { buildGateway } from "../src/gateway/app.js";
+import { pinnedRequest } from "../src/gateway/safe-https.js";
 import { deliverDue, RETRY_AFTER_MS, signature, type Send } from "../src/gateway/webhooks.js";
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
@@ -42,7 +45,7 @@ test("webhooks get only their account's chosen events, signed, retried on failur
     let status = 200;
     const send: Send = async (url, init) => {
       sent.push({ url, headers: init.headers, body: init.body });
-      return { status, body: "" };
+      return { status, body: "", truncated: false };
     };
     let clock = Date.now() + 1_000;
     assert.equal(await deliverDue(pool, SECRET, send, clock), 3);
@@ -100,9 +103,38 @@ test("a delivery row cannot point one account's webhook at another account's eve
     );
     await pool.query("INSERT INTO webhook_deliveries (webhook_id, account_id, event_id, next_attempt_at) VALUES ($1, $2, $3, now())", [id, user.accountId, event]);
     const sent: string[] = [];
-    assert.equal(await deliverDue(pool, SECRET, async (_url, init) => (sent.push(init.body), { status: 200, body: "" })), 0);
+    assert.equal(await deliverDue(pool, SECRET, async (_url, init) => (sent.push(init.body), { status: 200, body: "", truncated: false })), 0);
     assert.deepEqual(sent, []);
   } finally {
+    await drop();
+  }
+});
+
+async function receiver(handler: RequestListener) {
+  const server = createServer(handler);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}/hook`);
+  const send: Send = (_url, init) => pinnedRequest(url, init, request);
+  return { send, close: () => (server.closeAllConnections(), server.close()) };
+}
+
+test("a 200 with a body over the cap counts as delivered, once", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, user, hook, drop } = await harness();
+  const endpoint = await receiver((_request, response) => {
+    response.writeHead(200, { "content-type": "text/plain" });
+    response.end("x".repeat(64 * 1024));
+  });
+  try {
+    await hook();
+    await audit(pool, { accountId: user.accountId, actor: "user", action: "wallet.frozen" });
+    const clock = Date.now() + 1_000;
+    assert.equal(await deliverDue(pool, SECRET, endpoint.send, clock), 1);
+    const row = (await pool.query("SELECT attempts, delivered_at IS NOT NULL AS delivered, last_status, last_error FROM webhook_deliveries")).rows[0];
+    assert.deepEqual(row, { attempts: 1, delivered: true, last_status: 200, last_error: null });
+    assert.equal((await pool.query("SELECT failures FROM webhooks")).rows[0]?.failures, 0);
+    assert.equal(await deliverDue(pool, SECRET, endpoint.send, clock + RETRY_AFTER_MS[0]! + 1), 0);
+  } finally {
+    endpoint.close();
     await drop();
   }
 });

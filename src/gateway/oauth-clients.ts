@@ -71,6 +71,7 @@ export const fetchMetadataDocument = async (raw: string, { deadlineMs = METADATA
     throw new Error(`client metadata ${error.message}`);
   });
   if (response.status !== 200) throw new Error(`client metadata answered ${response.status}`);
+  if (response.truncated) throw new Error("client metadata response is too large");
   return response.body;
 };
 
