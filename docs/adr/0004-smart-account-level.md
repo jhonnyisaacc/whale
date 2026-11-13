@@ -33,7 +33,7 @@ The wallet policy maps onto session policies:
 | --- | --- |
 | Allowed chains | One session per chain, enabled by the owner |
 | Per-token caps | The spending-limit policy, per token |
-| Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Step 4 under "Verify before code" picks one |
+| Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Step 4 under "Verify before code" picks one, and the period caps that ADR 0003 promises wait on it |
 | A 0x swap calls only a pinned Settler | Universal-action rules that pin the `exec` `operator` and `target` to the chain's Settler |
 | Swap recipient must be the account | Universal-action rules on **static** calldata offsets, listed below |
 | Transfers to listed destinations | A universal-action rule on the `transfer` recipient, which sits at a static offset |

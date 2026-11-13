@@ -26,7 +26,7 @@ A wallet's level is fixed at creation. Moving to another level means a new addre
 | --- | --- | --- | --- |
 | `enclave` | A Turnkey sub-organization whose only root is the user's passkey | Turnkey's policy engine, then Whale's app policy | Sign what the Turnkey policy allows, one transaction at a time. Turnkey policies are stateless, so daily caps hold only while Whale is intact. |
 | `self_hosted` | The user's machine, inside `whale-signer` (Rust) | The signer's local policy file, which Whale cannot edit | Ask. The signer refuses anything outside its local policy and keeps its own daily totals. |
-| `smart_account` | The user's key owns an on-chain account. Whale holds a session key | The account's on-chain session module | Spend inside the session limits the chain enforces, including period caps. |
+| `smart_account` | The user's key owns an on-chain account. Whale holds a session key | The account's on-chain session module | Spend inside the session limits the chain enforces. Period caps wait on step 4 of ADR 0004's "Verify before code". |
 
 The dashboard states this table to the user when they choose. No level is called "unhackable".
 
@@ -52,7 +52,7 @@ Whale's delegated credential is one P-256 API key per deployment. It lives only 
 
 #### `smart_account`
 
-The user's key owns the account. Whale holds a session key whose permissions an audited on-chain module enforces: allowed targets and selectors, spending limits per period, value limits, and expiry. Whale writes no account or module contract. The module choice is [ADR 0004](0004-smart-account-level.md). Until its verification steps are done, the level is listed as unavailable.
+The user's key owns the account. Whale holds a session key whose permissions an audited on-chain module enforces: allowed targets and selectors, spending limits, value limits, and expiry. Whale writes no account or module contract. The module choice is [ADR 0004](0004-smart-account-level.md). Period caps wait on step 4 of its "Verify before code", which picks between 24-hour sessions and a periodic spending-limit module. Until its verification steps are done, the level is listed as unavailable.
 
 ### Identity
 
@@ -126,7 +126,7 @@ The dashboard is a Vite and React single-page app in a `web/` pnpm workspace pac
 
 ## Not decided here
 
-- The smart-account module, on EVM and on Solana.
+- The smart-account module, on EVM and on Solana. [ADR 0004](0004-smart-account-level.md) decides it.
 - A per-tenant delegated key in a KMS.
 - Billing.
 - Whether hosted live opens per wallet or per account after review.
