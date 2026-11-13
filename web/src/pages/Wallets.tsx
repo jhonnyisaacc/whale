@@ -14,11 +14,11 @@ export function Wallets() {
       .catch((caught: unknown) => setError(describe(caught)));
   }, []);
 
-  const create = async () => {
+  const create = async (level: "enclave" | "self_hosted") => {
     setBusy(true);
     setError(null);
     try {
-      const wallet = await api<Wallet>("/api/wallets", { method: "POST", body: { label, level: "enclave" } });
+      const wallet = await api<Wallet>("/api/wallets", { method: "POST", body: { label, level } });
       navigate(`/wallets/${wallet.id}`);
     } catch (caught) {
       setError(describe(caught));
@@ -43,13 +43,23 @@ export function Wallets() {
       <div className="card stack">
         <h2>New wallet</h2>
         <p className="muted">
-          Enclave: the key lives in Turnkey's secure enclave and only your passkey owns it. Whale gets a limited key that can sign what your policy allows, one
-          transaction at a time. Self-hosted and smart-account levels come later.
+          <strong>Enclave:</strong> the key lives in Turnkey's secure enclave and only your passkey owns it. Whale gets a limited key that signs what the enclave
+          policy allows, one transaction at a time. Daily caps hold only while Whale is intact.
+        </p>
+        <p className="muted">
+          <strong>Self-hosted:</strong> the key and the policy live in whale-signer on your machine. Whale can only ask; your signer checks every transaction and
+          keeps its own daily totals, so even a full Whale compromise cannot spend outside your file.
+        </p>
+        <p className="muted">
+          <strong>Smart account:</strong> rules enforced on-chain. Not available yet.
         </p>
         <div className="row">
           <input value={label} maxLength={64} onChange={(event) => setLabel(event.target.value)} aria-label="Wallet name" />
-          <button className="primary" disabled={busy || label.trim().length === 0} onClick={() => void create()}>
+          <button className="primary" disabled={busy || label.trim().length === 0} onClick={() => void create("enclave")}>
             Create enclave wallet
+          </button>
+          <button disabled={busy || label.trim().length === 0} onClick={() => void create("self_hosted")}>
+            Create self-hosted wallet
           </button>
         </div>
       </div>

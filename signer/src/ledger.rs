@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct Ledger {
     day: String,
     spent: BTreeMap<String, u128>,
+    jobs: BTreeMap<String, String>,
     _lock: fs::File,
 }
 
@@ -76,6 +77,7 @@ impl Ledger {
         let empty = |lock| Ledger {
             day: day.to_owned(),
             spent: BTreeMap::new(),
+            jobs: BTreeMap::new(),
             _lock: lock,
         };
         if !path.exists() {
@@ -102,11 +104,30 @@ impl Ledger {
                     .ok_or("the ledger holds a bad amount")?,
             );
         }
+        let mut jobs = BTreeMap::new();
+        for (job, work) in value
+            .get("jobs")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default()
+        {
+            jobs.insert(
+                job,
+                work.as_str()
+                    .ok_or("the ledger holds a bad job entry")?
+                    .to_owned(),
+            );
+        }
         Ok(Ledger {
             day: day.to_owned(),
             spent,
+            jobs,
             _lock: lock,
         })
+    }
+
+    pub fn charged_work(&self, job: &str) -> Option<&str> {
+        self.jobs.get(job).map(String::as_str)
     }
 
     pub fn over_limit(
@@ -130,18 +151,31 @@ impl Ledger {
             .collect()
     }
 
-    pub fn commit(&mut self, path: &Path, spend: &[(String, u128)]) -> Result<(), String> {
+    pub fn commit(
+        &mut self,
+        path: &Path,
+        spend: &[(String, u128)],
+        job: Option<(&str, &str)>,
+    ) -> Result<(), String> {
         self.spent = add(&self.spent, spend)?;
+        if let Some((job, work)) = job {
+            self.jobs.insert(job.to_owned(), work.to_owned());
+        }
         let spent: Map<String, Value> = self
             .spent
             .iter()
             .map(|(key, value)| (key.clone(), Value::String(value.to_string())))
             .collect();
+        let charged: Map<String, Value> = self
+            .jobs
+            .iter()
+            .map(|(job, work)| (job.clone(), Value::String(work.clone())))
+            .collect();
         let temporary = path.with_extension("tmp");
         let mut file = fs::File::create(&temporary)
             .map_err(|error| format!("cannot write the ledger: {error}"))?;
         file.write_all(
-            json!({ "day": self.day, "spent": spent })
+            json!({ "day": self.day, "spent": spent, "jobs": charged })
                 .to_string()
                 .as_bytes(),
         )
@@ -169,14 +203,14 @@ mod tests {
         let limits = BTreeMap::from([(key.clone(), 10_000_000u128)]);
         let mut ledger = Ledger::load(&path, "2026-11-03").expect("ledger");
         ledger
-            .commit(&path, &[(key.clone(), 3_000_000)])
+            .commit(&path, &[(key.clone(), 3_000_000)], None)
             .expect("commit");
         let wrap = [(key.clone(), u128::MAX - 2_999_999)];
         assert_eq!(
             ledger.over_limit(&wrap, &limits),
             ["today's total for 8453:0xtoken would pass 2^128"]
         );
-        assert!(ledger.commit(&path, &wrap).is_err());
+        assert!(ledger.commit(&path, &wrap, None).is_err());
         drop(ledger);
         let ledger = Ledger::load(&path, "2026-11-03").expect("ledger");
         assert_eq!(

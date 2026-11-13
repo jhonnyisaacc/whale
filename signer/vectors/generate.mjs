@@ -151,6 +151,8 @@ const policy = {
   },
 };
 writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);
-writeFileSync(`${out}evm.json`, `${JSON.stringify({ evmKey: EVM_KEY, own, cases: evm }, null, 2)}\n`);
+const registration = "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31\ncode:wreg_example";
+const personalSign = { message: registration, signature: await account.signMessage({ message: registration }) };
+writeFileSync(`${out}evm.json`, `${JSON.stringify({ evmKey: EVM_KEY, own, personalSign, cases: evm }, null, 2)}\n`);
 writeFileSync(`${out}solana.json`, `${JSON.stringify({ seed: SOLANA_SEED.toString("hex"), own: bs58.encode(solanaOwn), cases: solana }, null, 2)}\n`);
 console.log(`wrote ${evm.length} evm and ${solana.length} solana vectors for ${own} and ${bs58.encode(solanaOwn)}`);

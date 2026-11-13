@@ -12,12 +12,19 @@ export WHALE_SIGNER_PASSPHRASE='at least twelve characters'
 ./target/release/whale-signer sign --keystore keystore.json --policy policy.json --ledger ledger.json < job.json
 ```
 
+To work with a hosted gateway, ask the dashboard for a connection code (it takes your passkey), then:
+
+```bash
+./target/release/whale-signer connect --keystore keystore.json --gateway https://<gateway> --wallet <wallet id> --code wreg_...
+./target/release/whale-signer serve --keystore keystore.json --gateway https://<gateway> --policy policy.json --ledger ledger.json
+```
+
+`connect` signs the registration text (wallet id plus code) with both keys. The EVM key uses EIP-191. The gateway checks both signatures before it takes these addresses, and stores the returned token next to the keystore with owner-only permissions. `serve` long-polls `/signer/v1/jobs` over https, so no inbound port is opened. It checks each job with the same code as `sign` and posts the decision back. `--once` handles at most one job, for testing.
+
 `init` refuses if the file already exists. On Unix it creates the keystore readable only by its owner (mode 0600). Other platforms have no such mode, so the file inherits the permissions of its directory, and `init` prints a warning to stderr. `sign` prints one JSON decision and exits:
 - 0 when it signed;
 - 3 when it refused;
 - 2 on a usage or file error.
-
-The connection to the gateway, an outbound long-poll, is the next step. Until then `sign` is the whole interface.
 
 ## Keystore
 
@@ -71,7 +78,7 @@ A rule that needs an account loaded from an address lookup table refuses.
 
 A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.
 
-The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom.
+The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom. The ledger also records each charged job id with a digest of what it signed. A job the gateway hands out again after a lost answer is signed again without a second charge. The same id with different work is refused.
 
 ## Supply chain
 
