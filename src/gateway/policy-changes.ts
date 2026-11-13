@@ -10,7 +10,11 @@ export type PolicyChangeResult =
   | { status: "unchanged"; version: number }
   | { status: "applied"; version: number }
   | { status: "scheduled"; changeId: string; effectiveAt: string }
-  | { refused: "not_found" | "stale" | "step_up_required" | "step_up_failed"; detail?: string };
+  | { refused: "not_found" | "stale" | "conflict" | "step_up_required" | "step_up_failed"; detail?: string };
+
+function isOnePendingViolation(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "23505" && "constraint" in error && error.constraint === "policy_changes_one_pending";
+}
 
 export function widenAction(walletId: string, baseVersion: number, document: WalletPolicy) {
   return { kind: "policy.widen", walletId, baseVersion, document };
@@ -54,7 +58,7 @@ export async function changePolicy(
   if (!input.assertion) return { refused: "step_up_required" };
   const approved = await verifyStepUp(pool, config, input.accountId, widenAction(input.walletId, input.baseVersion, input.document), input.assertion, now);
   if (approved !== true) return { refused: "step_up_failed", detail: approved };
-  return inTransaction(pool, async (client) => {
+  return inTransaction(pool, async (client): Promise<PolicyChangeResult> => {
     await client.query("UPDATE policy_changes SET status = 'superseded', decided_at = $2 WHERE wallet_id = $1 AND status = 'pending'", [input.walletId, new Date(now)]);
     const effectiveAt = new Date(now + WIDEN_DELAY_MS);
     const change = await client.query<{ id: string }>(
@@ -64,6 +68,9 @@ export async function changePolicy(
     const changeId = change.rows[0]?.id as string;
     await audit(client, { ...scope, action: "policy.widen_requested", detail: { changeId, effectiveAt: effectiveAt.toISOString() } });
     return { status: "scheduled" as const, changeId, effectiveAt: effectiveAt.toISOString() };
+  }).catch((error: unknown) => {
+    if (isOnePendingViolation(error)) return { refused: "conflict" as const };
+    throw error;
   });
 }
 

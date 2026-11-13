@@ -37,7 +37,7 @@ async function holdLock(pool: pg.Pool, sql: string, params: unknown[]) {
   const watcher = new pg.Client({ connectionString: TEST_DATABASE_URL });
   await watcher.connect();
   const waitingBehind = async (count: number) => {
-    for (let tries = 0; tries < 500; tries += 1) {
+    for (let tries = 0; tries < 1500; tries += 1) {
       const found = await watcher.query<{ n: number }>(
         `WITH RECURSIVE queue(pid) AS (SELECT $1::int UNION SELECT a.pid FROM pg_stat_activity a JOIN queue q ON q.pid = ANY(pg_blocking_pids(a.pid)))
          SELECT count(*)::int - 1 AS n FROM queue`,
@@ -46,9 +46,13 @@ async function holdLock(pool: pg.Pool, sql: string, params: unknown[]) {
       if ((found.rows[0]?.n ?? 0) >= count) return;
       await delay(10);
     }
+    await release();
     throw new Error(`fewer than ${count} transactions queued behind the held lock`);
   };
+  let released = false;
   const release = async () => {
+    if (released) return;
+    released = true;
     await holder.query("COMMIT");
     holder.release();
     await watcher.end();
@@ -137,6 +141,30 @@ test("a narrowing that races the sweep waits for it instead of deadlocking", { s
     assert.deepEqual((await put({ baseVersion: 2, document: { ...wider, maxTxUsd: 10 } })).json(), { status: "applied", version: 3 });
     const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
     assert.deepEqual([listed.policyVersion, listed.policy.maxTxUsd], [3, 10]);
+  } finally {
+    await drop();
+  }
+});
+
+test("two widenings that race answer one 202 and one 409", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, wallet, approve, put, drop } = await harness();
+  try {
+    const first = { ...DEFAULT_POLICY, maxTxUsd: 60 };
+    assert.equal((await put({ baseVersion: 1, document: first, assertion: await approve(widenAction(wallet.id, 1, first)) })).statusCode, 202);
+    const [a, b] = [{ ...DEFAULT_POLICY, maxTxUsd: 70 }, { ...DEFAULT_POLICY, maxTxUsd: 80 }];
+    const [approveA, approveB] = [await approve(widenAction(wallet.id, 1, a)), await approve(widenAction(wallet.id, 1, b))];
+    const lock = await holdLock(pool, "SELECT 1 FROM policy_changes WHERE status = 'pending' FOR UPDATE", []);
+    const racing = [put({ baseVersion: 1, document: a, assertion: approveA }), put({ baseVersion: 1, document: b, assertion: approveB })];
+    await lock.waitingBehind(2).catch(async (error: unknown) => {
+      throw new Error(`${String(error)}: ${(await Promise.all(racing)).map((reply) => `${reply.statusCode} ${reply.body}`).join(" | ")}`);
+    });
+    await lock.release();
+    const replies = await Promise.all(racing);
+    assert.deepEqual(replies.map((reply) => reply.statusCode).sort(), [202, 409], replies.map((reply) => reply.body).join(" "));
+    assert.equal(replies.find((reply) => reply.statusCode === 409)?.json().error, "conflict");
+    const pending = await pool.query("SELECT document->>'maxTxUsd' AS max FROM policy_changes WHERE status = 'pending'");
+    assert.equal(pending.rows.length, 1);
+    assert.equal(Number(pending.rows[0].max), replies[0]?.statusCode === 202 ? 70 : 80);
   } finally {
     await drop();
   }
