@@ -40,10 +40,16 @@ pub fn bytes_at(data: &[u8], start: usize) -> Option<&[u8]> {
     data.get(start + 32..start.checked_add(32)?.checked_add(length)?)
 }
 
+pub struct Exec {
+    pub operator: [u8; 20],
+    pub target: [u8; 20],
+}
+
 pub struct SwapTerms {
     pub provider: &'static str,
     pub recipient: [u8; 20],
     pub sell: Option<([u8; 20], u128)>,
+    pub exec: Option<Exec>,
 }
 
 fn settler(args: &[u8]) -> Option<[u8; 20]> {
@@ -59,6 +65,7 @@ fn kyber_desc(data: &[u8], start: usize) -> Option<SwapTerms> {
         provider: "kyberswap",
         recipient: address(data, start + 6 * 32)?,
         sell: Some((address(data, start)?, uint(data, start + 7 * 32)?)),
+        exec: None,
     })
 }
 
@@ -70,9 +77,11 @@ pub fn swap_terms(calldata: &[u8]) -> Option<SwapTerms> {
             provider: "zeroex",
             recipient: settler(args)?,
             sell: None,
+            exec: None,
         });
     }
     if head == selector(ZERO_EX_EXEC) {
+        let operator = address(args, 0)?;
         let token = address(args, 32)?;
         let amount = uint(args, 64)?;
         let inner = bytes_at(args, offset(args, 128, 0)?)?;
@@ -83,6 +92,10 @@ pub fn swap_terms(calldata: &[u8]) -> Option<SwapTerms> {
             provider: "zeroex",
             recipient: settler(&inner[4..])?,
             sell: Some((token, amount)),
+            exec: Some(Exec {
+                operator,
+                target: address(args, 96)?,
+            }),
         });
     }
     if head == selector(&format!("swapSimpleMode(address,{KYBER_DESC},bytes,bytes)")) {

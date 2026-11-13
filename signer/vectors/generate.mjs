@@ -38,6 +38,9 @@ const evmCases = [
   ["kyber swap to this wallet", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swap", args: [{ callTarget: ATTACKER, approveTarget: ATTACKER, targetData: "0xabcdef", desc: desc(own, 2_000_000n), clientData: "0x01" }] })), "signed", null, own],
   ["0x exec into settler for this wallet", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [SETTLER, USDC, 3_000_000n, SETTLER, settlerCall(own)] })), "signed", null, own],
   ["0x exec into settler paying an attacker", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [SETTLER, USDC, 3_000_000n, SETTLER, settlerCall(ATTACKER)] })), "refused", "not this wallet", ATTACKER],
+  ["0x exec whose operator and target are an attacker", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [ATTACKER, USDC, 3_000_000n, ATTACKER, settlerCall(own)] })), "refused", "pinned Settler", own],
+  ["0x exec whose operator is not its target", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [ATTACKER, USDC, 3_000_000n, SETTLER, settlerCall(own)] })), "refused", "operator is not its target", own],
+  ["settler execute sent to a contract that is not a pinned Settler", tx(KYBER, settlerCall(own)), "refused", "pinned Settler", own],
   ["0x exec above the daily token limit", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [SETTLER, USDC, 30_000_000n, SETTLER, settlerCall(own)] })), "refused", "above the 10000000 limit", own],
   ["usdc transfer to a listed destination", tx(USDC, encodeFunctionData({ abi: erc20, functionName: "transfer", args: [DESTINATION, 1_000_000n] })), "signed"],
   ["usdc transfer to anyone else", tx(USDC, encodeFunctionData({ abi: erc20, functionName: "transfer", args: [ATTACKER, 1_000_000n] })), "refused", "listed destination"],
@@ -104,6 +107,7 @@ const policy = {
   evm: {
     chains: [8453],
     routers: { 8453: [KYBER, ALLOWANCE_HOLDER] },
+    settlers: { 8453: [SETTLER] },
     destinations: [DESTINATION],
     maxValueWei: "2000000000000000",
     dailyLimits: { [`8453:${USDC}`]: "10000000", "8453:native": "5000000000000000" },

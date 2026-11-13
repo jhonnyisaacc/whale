@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 pub struct Policy {
     evm_chains: HashSet<u64>,
     routers: BTreeMap<u64, HashSet<[u8; 20]>>,
+    settlers: BTreeMap<u64, HashSet<[u8; 20]>>,
     evm_destinations: HashSet<[u8; 20]>,
     max_value_wei: u128,
     allow_undecoded_router_calls: bool,
@@ -64,6 +65,26 @@ fn amount(value: Option<&Value>, name: &str) -> Result<u128, String> {
         .map_err(|_| format!("{name} is not a whole number"))
 }
 
+fn addresses_by_chain(
+    value: Option<&Value>,
+    name: &str,
+) -> Result<BTreeMap<u64, HashSet<[u8; 20]>>, String> {
+    let mut out = BTreeMap::new();
+    if let Some(map) = value.and_then(Value::as_object) {
+        for (chain, list) in map {
+            let id: u64 = chain
+                .parse()
+                .map_err(|_| format!("{name} chain {chain} is not a number"))?;
+            let set = text_list(Some(list))
+                .iter()
+                .map(|item| evm::parse_address(item))
+                .collect::<Result<HashSet<_>, _>>()?;
+            out.insert(id, set);
+        }
+    }
+    Ok(out)
+}
+
 impl Policy {
     pub fn parse(file: &Value) -> Result<Policy, String> {
         if file.get("version").and_then(Value::as_u64) != Some(1) {
@@ -71,19 +92,8 @@ impl Policy {
         }
         let evm = file.get("evm").cloned().unwrap_or(Value::Null);
         let sol = file.get("solana").cloned().unwrap_or(Value::Null);
-        let mut routers = BTreeMap::new();
-        if let Some(map) = evm.get("routers").and_then(Value::as_object) {
-            for (chain, list) in map {
-                let id: u64 = chain
-                    .parse()
-                    .map_err(|_| format!("router chain {chain} is not a number"))?;
-                let set = text_list(Some(list))
-                    .iter()
-                    .map(|item| evm::parse_address(item))
-                    .collect::<Result<HashSet<_>, _>>()?;
-                routers.insert(id, set);
-            }
-        }
+        let routers = addresses_by_chain(evm.get("routers"), "router")?;
+        let settlers = addresses_by_chain(evm.get("settlers"), "settler")?;
         let mut daily_limits = BTreeMap::new();
         for section in [&evm, &sol] {
             if let Some(map) = section.get("dailyLimits").and_then(Value::as_object) {
@@ -108,6 +118,7 @@ impl Policy {
                 .map(|items| items.iter().filter_map(Value::as_u64).collect())
                 .unwrap_or_default(),
             routers,
+            settlers,
             evm_destinations: text_list(evm.get("destinations"))
                 .iter()
                 .map(|item| evm::parse_address(item))
@@ -223,6 +234,28 @@ impl Policy {
                     decision
                         .reasons
                         .push("the swap router is not listed for this chain".into());
+                }
+                if terms.provider == "zeroex" {
+                    let target = terms.exec.as_ref().map_or(router, |exec| exec.target);
+                    if terms
+                        .exec
+                        .as_ref()
+                        .is_some_and(|exec| exec.operator != exec.target)
+                    {
+                        decision
+                            .reasons
+                            .push("the 0x exec operator is not its target".into());
+                    }
+                    if !self
+                        .settlers
+                        .get(&chain)
+                        .is_some_and(|settlers| settlers.contains(&target))
+                    {
+                        decision.reasons.push(format!(
+                            "the 0x target 0x{} is not a pinned Settler",
+                            hex::encode(target)
+                        ));
+                    }
                 }
                 if terms.recipient != own {
                     decision.reasons.push(format!(
