@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import pg from "pg";
 import { MIGRATIONS_DIR, migrate } from "../src/db/migrate.js";
@@ -84,6 +87,36 @@ test("one EVM address belongs to one wallet whatever its case, while Solana addr
     await assert.rejects(client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2)", [second, address.toLowerCase()]), /duplicate key/);
     await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'solana', 'abcsolana')", [second]);
   } finally {
+    await drop();
+  }
+});
+
+function migrationsDir(files: Record<string, string>): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "whale-migrations-"));
+  for (const [name, sql] of Object.entries(files)) writeFileSync(path.join(dir, name), sql);
+  return dir;
+}
+
+test("a migration blocked on a table lock gives up and frees the runner lock", { skip: !url }, async () => {
+  const { config, client, drop } = await freshSchema();
+  const blocker = new pg.Client(config);
+  await blocker.connect();
+  try {
+    const first = { "0001_a.sql": "CREATE TABLE held (id int)" };
+    await migrate(config, migrationsDir(first));
+    const next = migrationsDir({ ...first, "0002_b.sql": "ALTER TABLE held ADD COLUMN extra int" });
+    await blocker.query("BEGIN");
+    await blocker.query("LOCK TABLE held IN ACCESS SHARE MODE");
+    const blocked = migrate(config, next, { lockTimeoutMs: 200 });
+    blocked.catch(() => {});
+    const outcome = await Promise.race([blocked.then(() => "applied", (error: Error) => error.message), new Promise((resolve) => setTimeout(resolve, 3000, "still waiting"))]);
+    assert.match(String(outcome), /lock timeout/);
+    await blocker.query("COMMIT");
+    await blocked.catch(() => {});
+    assert.deepEqual(await migrate(config, next, { lockTimeoutMs: 200 }), ["0002_b"]);
+  } finally {
+    await blocker.query("ROLLBACK").catch(() => {});
+    await blocker.end();
     await drop();
   }
 });
