@@ -33,7 +33,6 @@ export function Approvals() {
     void load();
   }, []);
 
-  // The passkey signs this approval id together with the exact command the agent asked for.
   const approve = async (approval: Approval) => {
     setError(null);
     try {

@@ -21,7 +21,6 @@ const LABELS: Record<string, string> = {
   "agent.revoked": "Agent revoked",
 };
 
-// Refusals are listed with everything else: they show what an agent tried that the policy stopped.
 export function Activity() {
   const [events, setEvents] = useState<Event[]>([]);
   const [done, setDone] = useState(false);

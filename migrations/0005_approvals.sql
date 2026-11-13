@@ -1,5 +1,3 @@
--- Operations an agent asked for that need a human. The command is stored as the gateway parsed it, so an approval
--- covers that exact command and nothing else.
 CREATE TABLE approvals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id uuid NOT NULL REFERENCES accounts (id),
