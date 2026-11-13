@@ -28,6 +28,10 @@ The file mode is `0600`. `*.keystore.json` is gitignored. Live mode refuses `KEY
 pnpm run build
 ```
 
+## Migrate the hosted schema
+
+`DATABASE_URL=... pnpm run migrate` applies the numbered files in `migrations/` under an advisory lock. A second run prints `migrations: up to date`. It refuses to run when an applied file changed or when the database is ahead of the build. The executor tables still create themselves at boot.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.

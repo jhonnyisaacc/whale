@@ -12,3 +12,4 @@ Each row names a feature and the check that proves it. Add a row when a feature 
 | Installs wait a week, keep publisher trust, run no dependency scripts, and pin every version and action | `pnpm test`. `test/supply-chain.test.ts` covers it. |
 | No file grows past the agent budget | `node scripts/check-file-size.mjs` |
 | Layers keep their import rules | `node scripts/check-boundaries.mjs` |
+| Migrations apply once under a lock, refuse a changed file, and the tenant schema refuses cross-account links | `pnpm test` with `TEST_DATABASE_URL`. `test/migrate.test.ts` and `test/tenancy-pg.test.ts` cover it. CI runs Postgres. |
