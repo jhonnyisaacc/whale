@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { CommandDeps, WalletCommand, WalletResult } from "../commands.js";
 import { run } from "../commands.js";
 import { hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
-import { anyTokenMatches, bearerOf } from "../http.js";
+import { bearerOf } from "../bearer.js";
+import { anyTokenMatches } from "../http.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
 

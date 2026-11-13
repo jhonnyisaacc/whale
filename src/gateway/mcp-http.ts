@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
+import { bearerOf } from "../bearer.js";
 import { authenticateApiKey, type AgentContext } from "./agents.js";
 import type { GatewayConfig } from "./config.js";
 import type { ExecutorClient } from "./executor-client.js";
@@ -14,11 +15,6 @@ export type BearerAuth = (token: string) => Promise<AgentContext | null>;
 
 function rpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
-}
-
-function bearer(request: FastifyRequest): string {
-  const header = request.headers.authorization;
-  return typeof header === "string" && header.startsWith("Bearer ") ? header.slice(7).trim() : "";
 }
 
 function challenge(config: GatewayConfig, reply: FastifyReply, error?: string) {
@@ -47,7 +43,7 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     if (origin !== undefined && origin !== config.publicUrl.origin) return reply.code(403).send({ error: "origin_not_allowed" });
     const version = request.headers["mcp-protocol-version"];
     if (typeof version === "string" && !(MCP_VERSIONS as readonly string[]).includes(version)) return reply.code(400).send(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`));
-    const token = bearer(request);
+    const token = bearerOf(request);
     if (!token) return challenge(config, reply);
     const agent = await authenticate(token);
     if (!agent) return challenge(config, reply, "invalid_token");
