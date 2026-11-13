@@ -145,6 +145,27 @@ test("an authorize error for a self-registered client renders here and never red
   }
 });
 
+test("a loopback redirect matches on any port, and nothing else about it may differ", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, authorize, form, user, walletId, drop } = await harness({
+    [CIMD]: { client_id: CIMD, client_name: "Cursor", redirect_uris: ["http://127.0.0.1/callback", "https://client.example/cb"] },
+  });
+  try {
+    for (const other of ["http://127.0.0.1:33418/other", "http://localhost:33418/callback", "https://client.example:8443/cb"]) {
+      assert.equal((await authorize(CIMD, { redirect_uri: other })).reply.statusCode, 400, other);
+    }
+    const { reply, verifier } = await authorize(CIMD);
+    assert.match(String(reply.headers.location), /^\/connect\?request=/);
+    const request = new URL(String(reply.headers.location), ORIGIN).searchParams.get("request") as string;
+    const approved = await app.inject({ method: "POST", url: `/api/oauth/requests/${request}/approve`, headers: user.headers, payload: { walletId, name: "Cursor", limits: LIMITS } });
+    const back = new URL(approved.json().redirect);
+    assert.equal(`${back.origin}${back.pathname}`, REDIRECT);
+    const tokens = await form("/oauth/token", { grant_type: "authorization_code", code: back.searchParams.get("code") as string, redirect_uri: REDIRECT, client_id: CIMD, code_verifier: verifier });
+    assert.equal(tokens.statusCode, 200);
+  } finally {
+    await drop();
+  }
+});
+
 test("a metadata-document client must name itself by its own URL, and a denial goes back to the client", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, authorize, drop } = await harness({
     [CIMD]: { client_id: CIMD, client_name: "Cursor", redirect_uris: [REDIRECT] },

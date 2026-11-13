@@ -70,9 +70,9 @@ A client registers in one of two ways:
 - By its metadata document URL as `client_id`. The gateway fetches it over https only, from a host that resolves only to public addresses, with no redirects, 64 KiB at most, and caches it for an hour. The document's `client_id` must equal its URL.
 - Through `POST /oauth/register`, which the MCP spec now marks deprecated.
 
-Redirect URIs must be https, a loopback `http` address, or an app scheme such as `cursor://`.
+Redirect URIs must be https, a loopback `http` address, or an app scheme such as `cursor://`. A redirect must match a registered URI exactly, except that a loopback redirect may use any port (OAuth 2.1 8.4.2).
 
-`GET /oauth/authorize` checks the client and the exact redirect URI before anything can go back to the client. It requires PKCE `S256` and the `resource` `https://<gateway>/mcp`. Every client registers itself, so an error at this step renders on the gateway and never redirects. It then sends the browser to `/connect?request=<id>`. That page reads `GET /oauth/requests/:id`, shows the client name and the redirect host, warns on localhost, and signs the user in with Google if needed. The user picks a wallet and the agent limits and calls `POST /api/oauth/requests/:id/approve`, which creates the agent and a five-minute single-use code. The redirect carries `code`, `state`, and `iss`.
+`GET /oauth/authorize` checks the client and the redirect URI before anything can go back to the client. It requires PKCE `S256` and the `resource` `https://<gateway>/mcp`. Every client registers itself, so an error at this step renders on the gateway and never redirects. It then sends the browser to `/connect?request=<id>`. That page reads `GET /oauth/requests/:id`, shows the client name and the redirect host, warns on localhost, and signs the user in with Google if needed. The user picks a wallet and the agent limits and calls `POST /api/oauth/requests/:id/approve`, which creates the agent and a five-minute single-use code. The redirect carries `code`, `state`, and `iss`.
 
 `POST /oauth/token` with form fields covers two grants:
 - The authorization code grant returns a one-hour access token `wat_...`, bound to the MCP resource, and a 30-day refresh token `wrt_...`.

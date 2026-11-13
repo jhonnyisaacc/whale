@@ -31,6 +31,18 @@ export function isLoopbackRedirect(raw: string): boolean {
   return url.protocol === "http:" && LOOPBACK.has(url.hostname);
 }
 
+export function redirectMatches(registered: string[], presented: string): boolean {
+  if (registered.includes(presented)) return true;
+  if (!redirectUriAllowed(presented) || !isLoopbackRedirect(presented)) return false;
+  const withoutPort = (raw: string) => {
+    const url = new URL(raw);
+    url.port = "";
+    return url.toString();
+  };
+  const wanted = withoutPort(presented);
+  return registered.some((uri) => isLoopbackRedirect(uri) && withoutPort(uri) === wanted);
+}
+
 export const registrationSchema = z
   .object({
     redirect_uris: z.array(z.string()).min(1).max(5),

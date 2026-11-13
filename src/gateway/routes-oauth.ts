@@ -4,7 +4,7 @@ import type pg from "pg";
 import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
-import { fetchMetadataDocument, isLoopbackRedirect, registerClient, registrationSchema, resolveClient, type MetadataFetch } from "./oauth-clients.js";
+import { fetchMetadataDocument, isLoopbackRedirect, redirectMatches, registerClient, registrationSchema, resolveClient, type MetadataFetch } from "./oauth-clients.js";
 import { approveRequest, createRequest, denyRequest, exchangeCode, pendingRequest, refreshTokens, revokeToken } from "./oauth-store.js";
 import { agentLimitsSchema, limitsWithin } from "./policy.js";
 import { listWallets } from "./wallets.js";
@@ -77,7 +77,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
     if (!query.success) return reply.code(400).send({ error: "invalid_request" });
     const client = await resolveClient(pool, query.data.client_id, fetchDocument, now());
     if (!client) return reply.code(400).send({ error: "invalid_client" });
-    if (!client.redirectUris.includes(query.data.redirect_uri)) return reply.code(400).send({ error: "invalid_redirect_uri" });
+    if (!redirectMatches(client.redirectUris, query.data.redirect_uri)) return reply.code(400).send({ error: "invalid_redirect_uri" });
     if (query.data.response_type !== "code") return reply.code(400).send({ error: "unsupported_response_type" });
     if (query.data.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(query.data.code_challenge ?? "")) return reply.code(400).send({ error: "invalid_request" });
     if ((query.data.resource ?? resource) !== resource) return reply.code(400).send({ error: "invalid_target" });
