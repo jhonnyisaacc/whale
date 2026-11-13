@@ -107,7 +107,7 @@ if (entry.endsWith("mcp-server.js")) {
     try {
       mcpEndpoint(gatewayUrl);
     } catch (error) {
-      const reason = error instanceof TypeError ? "is not a URL" : "must be an https URL (http only for localhost) with no credentials, query, or fragment";
+      const reason = error instanceof TypeError ? "is not a URL" : "must be an https URL (http only for localhost) with no credentials, query, fragment, or API key in it";
       process.stderr.write(`whale: WHALE_GATEWAY_URL ${reason}\n`);
       process.exit(1);
     }
