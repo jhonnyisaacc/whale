@@ -21,7 +21,7 @@ function fakeTurnkey() {
   const orgs = new Map<string, SubOrgState>();
   const created: { challenge: string; credentialId: string; name: string; org: CreatedSubOrg }[] = [];
   const activities = new Map<string, { outcome: CreateOutcome; land: () => void }>();
-  const faults: { nextCreate: Fault | null; createDelayMs: number; findDelayMs: number; gate: Promise<void> | null } = { nextCreate: null, createDelayMs: 0, findDelayMs: 0, gate: null };
+  const faults: { nextCreate: Fault | null; createDelayMs: number; findDelayMs: number; gate: Promise<void> | null; pollFails: boolean } = { nextCreate: null, createDelayMs: 0, findDelayMs: 0, gate: null, pollFails: false };
   const landed = (input: Parameters<TurnkeyParent["submitSubOrganization"]>[0]): CreatedSubOrg => {
     const ownerUserId = randomUUID();
     const n = created.length;
@@ -55,6 +55,7 @@ function fakeTurnkey() {
       return { activityId, outcome };
     },
     async subOrganizationActivity(activityId) {
+      if (faults.pollFails) throw new Error("fetch failed");
       const activity = activities.get(activityId);
       if (!activity) throw new Error(`no activity ${activityId}`);
       return activity.outcome;
@@ -248,7 +249,7 @@ test("a failure after Turnkey creates the sub-organization still leaves it recor
 async function lostCreate(gateway: Awaited<ReturnType<typeof enclaveGateway>>) {
   const walletId = await gateway.newWallet();
   gateway.fake.faults.nextCreate = "lost";
-  assert.equal((await (await gateway.create(walletId))()).statusCode, 500);
+  assert.deepEqual((await (await gateway.create(walletId))()).json(), { error: "enclave_in_progress" });
   await gateway.pool.query("UPDATE wallets SET root_claimed_at = now() - interval '3 minutes' WHERE id = $1", [walletId]);
   const options = () => gateway.app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: gateway.user.headers, payload: {} });
   const delegation = () => gateway.app.inject({ method: "GET", url: `/api/wallets/${walletId}/enclave/delegation`, headers: gateway.user.headers });
@@ -308,7 +309,7 @@ test("a sub-organization whose create response was lost is adopted by the next c
     const challenges = await Promise.all([1, 2].map(async () => (await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: user.headers, payload: {} })).json().challenge));
     const submit = (challenge: string) => app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave`, headers: user.headers, payload: { credential: authenticator.register(challenge), label: "Mac" } });
     fake.faults.nextCreate = "lost";
-    assert.equal((await submit(challenges[0])).statusCode, 500);
+    assert.deepEqual((await submit(challenges[0])).json(), { error: "enclave_in_progress" });
     assert.equal((await submit(challenges[1])).json().error, "enclave_in_progress");
     await gateway.pool.query("UPDATE wallets SET root_claimed_at = now() - interval '3 minutes' WHERE id = $1", [walletId]);
     const retried = await submit(challenges[1]);
@@ -362,7 +363,7 @@ test("a wallet whose create response was lost is adopted when the browser asks f
   try {
     const walletId = await gateway.newWallet();
     fake.faults.nextCreate = "lost";
-    assert.equal((await (await gateway.create(walletId))()).statusCode, 500);
+    assert.deepEqual((await (await gateway.create(walletId))()).json(), { error: "enclave_in_progress" });
     const options = () => app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: user.headers, payload: {} });
     assert.equal((await options()).json().error, "enclave_in_progress");
     await gateway.pool.query("UPDATE wallets SET root_claimed_at = now() - interval '3 minutes' WHERE id = $1", [walletId]);
@@ -380,7 +381,8 @@ test("a create whose outcome is unknown keeps its claim and passkey instead of f
   try {
     const walletId = await gateway.newWallet();
     fake.faults.nextCreate = "timeout";
-    assert.equal((await (await gateway.create(walletId))()).statusCode, 500);
+    const created = await (await gateway.create(walletId))();
+    assert.deepEqual([created.statusCode, created.json()], [409, { error: "enclave_in_progress" }]);
     const options = () => app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: user.headers, payload: {} });
     assert.equal((await options()).json().error, "enclave_in_progress");
     await pool.query("UPDATE wallets SET root_claimed_at = now() - interval '3 minutes' WHERE id = $1", [walletId]);
@@ -410,6 +412,30 @@ test("a create Turnkey still holds as pending is never freed and lands as the wa
     assert.deepEqual(await gateway.trackedSubOrgs(), [fake.created[0]?.org.subOrganizationId]);
     const delegation = await app.inject({ method: "GET", url: `/api/wallets/${walletId}/enclave/delegation`, headers: user.headers });
     assert.equal(delegation.statusCode, 200, delegation.body);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("a Turnkey error while polling a pending create answers enclave_in_progress and keeps the claim, activity, and passkey", { skip: !TEST_DATABASE_URL }, async () => {
+  const gateway = await enclaveGateway();
+  const { app, user, fake, pool } = gateway;
+  try {
+    const walletId = await gateway.newWallet();
+    fake.faults.nextCreate = "pending";
+    fake.faults.pollFails = true;
+    const created = await (await gateway.create(walletId))();
+    assert.deepEqual([created.statusCode, created.json()], [409, { error: "enclave_in_progress" }]);
+    const options = () => app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: user.headers, payload: {} });
+    const polled = await options();
+    assert.deepEqual([polled.statusCode, polled.json()], [409, { error: "enclave_in_progress" }]);
+    const row = (await pool.query<{ root_credential_id: string | null; turnkey_activity_id: string | null }>("SELECT root_credential_id, turnkey_activity_id FROM wallets WHERE id = $1", [walletId])).rows[0];
+    assert.ok(row?.root_credential_id && row.turnkey_activity_id);
+    assert.equal((await pool.query("SELECT 1 FROM passkeys WHERE account_id = $1", [user.accountId])).rowCount, 1);
+    fake.faults.pollFails = false;
+    fake.landPending();
+    assert.equal((await options()).json().error, "enclave_exists");
+    assert.equal(fake.named(walletId), 1);
   } finally {
     await gateway.close();
   }

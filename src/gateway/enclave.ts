@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
 import { audit, inTransaction } from "./accounts.js";
@@ -69,6 +69,11 @@ async function releaseClaim(pool: pg.Pool, accountId: string, walletId: string, 
   });
 }
 
+function outcomeUnknown(log: FastifyBaseLogger, error: unknown): CreateOutcome {
+  log.error({ err: error }, "turnkey create outcome unknown");
+  return { state: "pending" };
+}
+
 type Settled = "free" | "enclave_exists" | "enclave_in_progress" | "enclave_conflict";
 
 async function applyOutcome(pool: pg.Pool, accountId: string, walletId: string, credentialId: string, outcome: CreateOutcome): Promise<Settled> {
@@ -81,12 +86,12 @@ async function applyOutcome(pool: pg.Pool, accountId: string, walletId: string, 
   return "enclave_exists";
 }
 
-async function settleClaim(pool: pg.Pool, turnkey: TurnkeyParent | null, accountId: string, wallet: EnclaveRow): Promise<Settled> {
+async function settleClaim(pool: pg.Pool, turnkey: TurnkeyParent | null, accountId: string, wallet: EnclaveRow, log: FastifyBaseLogger): Promise<Settled> {
   if (wallet.turnkey_sub_org_id) return "enclave_exists";
   const credentialId = wallet.root_credential_id;
   if (!credentialId) return "free";
   if (!turnkey) return "enclave_in_progress";
-  if (wallet.turnkey_activity_id) return applyOutcome(pool, accountId, wallet.id, credentialId, await turnkey.subOrganizationActivity(wallet.turnkey_activity_id, 1));
+  if (wallet.turnkey_activity_id) return applyOutcome(pool, accountId, wallet.id, credentialId, await turnkey.subOrganizationActivity(wallet.turnkey_activity_id, 1).catch((error: unknown) => outcomeUnknown(log, error)));
   if (!wallet.lease_expired) return "enclave_in_progress";
   const found = await turnkey.findSubOrganizations(credentialId);
   if (found.length > 1) return "enclave_conflict";
@@ -110,7 +115,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const params = walletParam.safeParse(request.params);
     const wallet = params.success ? await enclaveWallet(pool, session.accountId, params.data.id) : null;
     if (!wallet) return reply.code(404).send({ error: "not_found" });
-    const settled = await settleClaim(pool, deps.turnkey, session.accountId, wallet);
+    const settled = await settleClaim(pool, deps.turnkey, session.accountId, wallet, request.log);
     if (settled !== "free") return reply.code(409).send({ error: settled });
     return registrationOptions(pool, config, session, binding(wallet.id));
   });
@@ -125,7 +130,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     if (!params.success || !body.success) return reply.code(400).send({ error: "invalid_request" });
     const wallet = await enclaveWallet(pool, session.accountId, params.data.id);
     if (!wallet) return reply.code(404).send({ error: "not_found" });
-    const settled = await settleClaim(pool, turnkey, session.accountId, wallet);
+    const settled = await settleClaim(pool, turnkey, session.accountId, wallet, request.log);
     if (settled !== "free") return reply.code(409).send({ error: settled });
     const { credential } = body.data;
     let root: (Registration & { challenge: string }) | undefined;
@@ -157,12 +162,15 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
         },
       });
     } catch (error) {
-      if (!(error instanceof TurnkeyNotSubmitted)) throw error;
+      if (!(error instanceof TurnkeyNotSubmitted)) {
+        outcomeUnknown(request.log, error);
+        return reply.code(409).send({ error: "enclave_in_progress" });
+      }
       await releaseClaim(pool, session.accountId, wallet.id, credentialId, error.reason);
       return reply.code(NOT_SUBMITTED_STATUS[error.reason]).send({ error: error.reason, detail: error.message });
     }
     await pool.query("UPDATE wallets SET turnkey_activity_id = $3 WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [wallet.id, credentialId, submitted.activityId]);
-    const outcome = submitted.outcome.state === "pending" ? await turnkey.subOrganizationActivity(submitted.activityId, CREATE_POLLS) : submitted.outcome;
+    const outcome = submitted.outcome.state === "pending" ? await turnkey.subOrganizationActivity(submitted.activityId, CREATE_POLLS).catch((error: unknown) => outcomeUnknown(request.log, error)) : submitted.outcome;
     const settledCreate = await applyOutcome(pool, session.accountId, wallet.id, credentialId, outcome);
     if (outcome.state === "failed") return reply.code(502).send({ error: "turnkey_refused", detail: outcome.status });
     if (settledCreate !== "enclave_exists") return reply.code(409).send({ error: settledCreate });
