@@ -87,10 +87,15 @@ test("every package.json pins every dependency, the root pins the package manage
 
 test("the Rust signer pins every crate exactly and commits its lockfile", () => {
   const manifest = read("signer/Cargo.toml");
-  const dependencies = (manifest.split("[dependencies]")[1] ?? "").split(/^\[/m)[0] ?? "";
-  const lines = dependencies.split("\n").filter((line) => /^[a-z0-9_-]+ = /.test(line));
-  assert.ok(lines.length > 0);
-  for (const line of lines) assert.match(line, /"=\d+\.\d+\.\d+"/, line);
+  const tables = manifest.split(/^\[/m).slice(1).map((table) => {
+    const [header = "", ...body] = table.split("\n");
+    return { name: header.replace(/\]\s*$/, "").trim(), body: body.filter((line) => /^[a-z0-9_-]+\s*=/.test(line)) };
+  });
+  const lists = tables.filter((table) => /(^|\.)((dev|build)-)?dependencies$/.test(table.name));
+  const single = tables.filter((table) => /(^|\.)((dev|build)-)?dependencies\.[^.]+$/.test(table.name));
+  assert.ok(lists.some((table) => table.name === "dependencies" && table.body.length > 0));
+  for (const line of lists.flatMap((table) => table.body)) assert.match(line, /"=\d+\.\d+\.\d+"/, line);
+  for (const table of single) assert.ok(table.body.some((line) => /^version\s*=\s*"=\d+\.\d+\.\d+"/.test(line)), table.name);
   assert.match(manifest, /^\[profile\.release\]\noverflow-checks = true$/m, "release builds refuse integer overflow");
   assert.equal(existsSync(path("signer/Cargo.lock")), true, "Cargo.lock is committed");
   assert.match(read("signer/rust-toolchain.toml"), /channel = "\d+\.\d+\.\d+"/);
