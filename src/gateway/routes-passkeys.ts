@@ -16,8 +16,9 @@ const bindable = (action: unknown) => {
 };
 const stepUpBody = z.object({ action: z.record(z.string(), z.unknown()).refine(bindable) }).strict();
 
-export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool }): void {
+export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; now?: () => number }): void {
   const { config, pool } = deps;
+  const now = deps.now ?? Date.now;
 
   app.get("/api/passkeys", async (request, reply) => {
     const session = await requireSession(pool, request, reply);
@@ -28,7 +29,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: Gate
   app.post("/api/passkeys/options", { config: perMinute(20) }, async (request, reply) => {
     const session = await requireSession(pool, request, reply);
     if (!session) return reply;
-    return registrationOptions(pool, config, session);
+    return registrationOptions(pool, config, session, "passkey", now());
   });
 
   app.post("/api/passkeys", { config: perMinute(10) }, async (request, reply) => {
@@ -36,7 +37,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: Gate
     if (!session) return reply;
     const body = addBody.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
-    const added = await addPasskey(pool, config, { accountId: session.accountId, payload: body.data.credential, label: body.data.label, assertion: body.data.assertion ?? null });
+    const added = await addPasskey(pool, config, { accountId: session.accountId, payload: body.data.credential, label: body.data.label, assertion: body.data.assertion ?? null }, undefined, now());
     if ("refused" in added) return reply.code(REFUSED_STATUS[added.refused]).send({ error: added.refused, detail: added.detail });
     return reply.code(201).send({ credentialId: added.credentialId, label: body.data.label });
   });
@@ -47,7 +48,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: Gate
     if (!session) return reply;
     const body = stepUpBody.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
-    const options = await stepUpOptions(pool, config, session.accountId, body.data.action);
+    const options = await stepUpOptions(pool, config, session.accountId, body.data.action, now());
     if (!options) return reply.code(409).send({ error: "no_passkey" });
     return options;
   });

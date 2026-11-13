@@ -10,6 +10,7 @@ import { registerEnclaveRoutes } from "./enclave.js";
 import { registerOAuthRoutes } from "./routes-oauth.js";
 import { delegationFromEnv, turnkeyParentFromEnv, type DelegationConfig, type TurnkeyParent } from "./turnkey.js";
 import { registerPasskeyRoutes } from "./routes-passkeys.js";
+import { registerPolicyRoutes } from "./routes-policy.js";
 import { registerWalletRoutes } from "./routes-wallets.js";
 import type { MetadataFetch } from "./oauth-clients.js";
 
@@ -33,7 +34,8 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   app.get("/health", async () => ({ ok: true }));
   registerAuthRoutes(app, { config: deps.config, pool: deps.pool, fetchImpl, keys: deps.keys ?? googleKeys(fetchImpl, now), now });
   registerWalletRoutes(app, deps.pool);
-  registerPasskeyRoutes(app, { config: deps.config, pool: deps.pool });
+  registerPasskeyRoutes(app, { config: deps.config, pool: deps.pool, now });
+  registerPolicyRoutes(app, { config: deps.config, pool: deps.pool, now: deps.now });
   registerEnclaveRoutes(app, {
     config: deps.config,
     pool: deps.pool,
