@@ -105,7 +105,7 @@ export async function registerPasskey(
   const challenge = challengeIn(input.payload.response.clientDataJSON);
   if (!challenge) return "the passkey response has no challenge";
   return inTransaction(pool, async (client) => {
-    await client.query("SELECT 1 FROM accounts WHERE id = $1 FOR UPDATE", [input.accountId]);
+    await client.query("SELECT 1 FROM accounts WHERE id = $1 FOR NO KEY UPDATE", [input.accountId]);
     const count = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL", [input.accountId]);
     const live = count.rows[0]?.n ?? 0;
     if (input.firstOnly && live > 0) return NOT_FIRST;
