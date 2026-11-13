@@ -63,6 +63,9 @@ test("the tenant schema refuses cross-account links and history rewrites", { ski
     await assert.rejects(client.query("INSERT INTO audit_events (account_id, wallet_id, actor, action) VALUES ($1, $2, 'user', 'peek')", [bob, wallet]), /violates foreign key constraint/);
     await assert.rejects(client.query("UPDATE audit_events SET action = 'nothing'"), /append-only/);
     await assert.rejects(client.query("DELETE FROM audit_events"), /append-only/);
+    await assert.rejects(client.query("TRUNCATE audit_events"), /append-only/);
+    await assert.rejects(client.query("TRUNCATE accounts CASCADE"), /append-only/);
+    assert.equal((await client.query("SELECT count(*)::int AS n FROM audit_events")).rows[0]?.n, 1);
   } finally {
     await drop();
   }
