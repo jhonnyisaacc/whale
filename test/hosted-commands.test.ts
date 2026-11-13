@@ -3,6 +3,7 @@ import test from "node:test";
 import type { CommandDeps, WalletCommand } from "../src/commands.js";
 import { hostedServiceToken, registerHostedRoutes } from "../src/executor-server/hosted.js";
 import { hostedCommandSchema, walletCommandOf } from "../src/hosted-commands.js";
+import { executorClient } from "../src/gateway/executor-client.js";
 import { buildApp } from "../src/http.js";
 
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -87,4 +88,14 @@ test("the executor's hosted limit is per account and counts only requests that c
   } finally {
     await app.close();
   }
+});
+
+test("the gateway reaches the hosted route under any path on HOSTED_EXECUTOR_URL", async () => {
+  const urls: string[] = [];
+  const fetchImpl = (async (input: string | URL | Request) => (urls.push(String(input)), new Response("{}"))) as typeof fetch;
+  const request = { ...IDS, command: { kind: "balance" as const, chainKey: "base", address: WETH } };
+  for (const base of ["http://executor.internal:8080", "http://executor.internal:8080/whale", "http://executor.internal:8080/whale/"]) {
+    await executorClient({ url: new URL(base), token: HOSTED_TOKEN }, fetchImpl).run(request);
+  }
+  assert.deepEqual(urls, ["http://executor.internal:8080/hosted/commands", "http://executor.internal:8080/whale/hosted/commands", "http://executor.internal:8080/whale/hosted/commands"]);
 });
