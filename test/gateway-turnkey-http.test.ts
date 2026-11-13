@@ -9,6 +9,7 @@ type Answer = { status: number; json?: unknown; text?: string };
 
 async function fakeTurnkeyApi(routes: Record<string, (body: Record<string, unknown>) => Answer>) {
   const hits: { path: string; body: Record<string, unknown> }[] = [];
+  const handlers = new Map(Object.entries(routes));
   const server = http.createServer((request, response) => {
     let raw = "";
     request.on("data", (chunk) => (raw += chunk));
@@ -16,7 +17,7 @@ async function fakeTurnkeyApi(routes: Record<string, (body: Record<string, unkno
       const path = request.url ?? "";
       const body = JSON.parse(raw || "{}") as Record<string, unknown>;
       hits.push({ path, body });
-      const answer = routes[path]?.(body) ?? { status: 500, text: "unexpected" };
+      const answer = handlers.get(path)?.(body) ?? { status: 500, text: "unexpected" };
       response.writeHead(answer.status, { "content-type": answer.json === undefined ? "text/html" : "application/json" });
       response.end(answer.json === undefined ? (answer.text ?? "") : JSON.stringify(answer.json));
     });
