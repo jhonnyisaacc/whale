@@ -67,18 +67,22 @@ The instruction rules:
 
 Every Solana transaction also pays its fee from the wallet. The 5000 lamport signature fee, plus the priority fee at the requested unit limit (1,400,000 units when none is set), plus every Jito tip, counts against the `solana:native` daily limit.
 
-A rule that needs an account loaded from an address lookup table refuses.
+A rule that needs an account loaded from an address lookup table refuses. The one exception is the Jupiter output mint, below.
 
 A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked.
 
-Jupiter v6, when listed in `solana.programs`, is decoded the way the app signing policy decodes it. Only the four exact-in routes pass, and each one must meet three conditions:
+Jupiter v6, when listed in `solana.programs`, is decoded the way the app signing policy decodes it. Only the four exact-in routes pass (`route`, `routeWithTokenLedger`, `sharedAccountsRoute`, `sharedAccountsRouteWithTokenLedger`), and each one must meet three conditions:
 - the transfer authority is this wallet;
 - the platform fee account is unset;
 - every destination is this wallet's wrapped SOL account, or its associated token account for the output mint under Token or Token-2022.
 
 The signer derives those addresses itself, with the runtime's program-derived-address search. Jupiter transactions often load the output mint from an address lookup table. The signer then cannot read the mint, so a destination passes if it is this wallet's account for wrapped SOL, USDC, or USDT, the mints the app quotes against. The app signing policy does the same. Every other Jupiter account must be static.
 
+Jupiter instructions outside those four are refused. That includes `exactOutRoute`, `sharedAccountsExactOutRoute`, and `routeV2`, which most current Jupiter traffic uses. It also includes `setTokenLedger`, so the two token ledger routes cannot pass in practice either.
+
 A Jupiter swap usually comes with one or two associated token account creates, for wrapped SOL and for the output mint. Each create counts its 4,454,400 lamport rent bound against `solana:native`, also when it is idempotent and the account already exists, because the signer cannot see whether it does. A SOL to USDC swap that creates both, at 300,000 units and 100,000 micro-lamports per unit, counts 8,943,800 lamports with its fee, so a `solana:native` limit of 0.1 SOL allows 11 such swaps a day. Rent for this wallet's own accounts stays in its accounts and is recoverable by closing them, but it still leaves the spendable balance, so it counts.
+
+**The Jupiter rules do not bound loss either.** They check where the output lands, not what the swap sells or what it gets back. The signer does not decode the route plan, so the sold amount counts against no daily limit, and neither does SOL moved into this wallet's wrapped SOL account to fund the swap. A compromised Whale can set `quotedOutAmount` to 0 and route through a pool it controls, and the swap gives up its whole input. Listing Jupiter in `solana.programs` therefore lifts the daily-limit bound for every token and all wrapped SOL in this wallet, the same way `allowUndecodedRouterCalls` lifts it on EVM. Leave Jupiter out of `solana.programs` unless you accept that.
 
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom.
 
