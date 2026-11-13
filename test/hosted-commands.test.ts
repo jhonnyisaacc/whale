@@ -67,6 +67,23 @@ test("the executor's hosted route accepts only its own token and never reaches a
   }
 });
 
+test("the hosted route reads a bearer token after one or more spaces", async () => {
+  const depsFor = async (): Promise<CommandDeps> => ({
+    quote: async (item) => ({ planId: "zeroex", kind: "aggregator", hops: [], priceImpactPct: 0.1, feeUsd: 0, buyAmount: "42", chain: item.sell.chain, chainKey: item.sell.chainKey }),
+  });
+  const app = await buildApp({ authTokens: ["executor-token-123456"], logger: false });
+  registerHostedRoutes(app, { token: HOSTED_TOKEN, depsFor });
+  try {
+    const quote = { kind: "quote", chainKey: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000", slippageBps: 50, taker: null };
+    const post = (authorization: string) => app.inject({ method: "POST", url: "/hosted/commands", headers: { authorization }, payload: { ...IDS, command: quote } });
+    assert.equal((await post(`Bearer ${HOSTED_TOKEN}`)).statusCode, 200);
+    assert.equal((await post(`Bearer  ${HOSTED_TOKEN}`)).statusCode, 200);
+    assert.equal((await post(`Bearer${HOSTED_TOKEN}`)).statusCode, 401);
+  } finally {
+    await app.close();
+  }
+});
+
 test("the executor's hosted limit is per account and counts only requests that carry the service token", async () => {
   const depsFor = async (): Promise<CommandDeps> => ({
     quote: async (item) => ({ planId: "zeroex", kind: "aggregator", hops: [], priceImpactPct: 0.1, feeUsd: 0, buyAmount: "42", chain: item.sell.chain, chainKey: item.sell.chainKey }),
