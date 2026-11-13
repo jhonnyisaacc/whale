@@ -133,3 +133,17 @@ test("a chain a later build drops is dropped from stored policies and limits, ne
     await drop();
   }
 });
+
+test("an agent cannot be created on a frozen wallet", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, drop } = await harness();
+  try {
+    const { headers } = await signedInAccount(pool);
+    const wallet = (await app.inject({ method: "POST", url: "/api/wallets", headers, payload: { label: "main", level: "enclave" } })).json();
+    await pool.query("UPDATE wallets SET status = 'frozen'");
+    const refused = await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/agents`, headers, payload: { name: "bot", limits: LIMITS } });
+    assert.deepEqual([refused.statusCode, refused.json().error], [409, "wallet_frozen"]);
+    assert.equal((await pool.query("SELECT id FROM agents")).rowCount, 0);
+  } finally {
+    await drop();
+  }
+});

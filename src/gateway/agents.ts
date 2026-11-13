@@ -35,8 +35,10 @@ export async function issueApiKey(client: pg.ClientBase, agentId: string): Promi
 export async function createAgent(
   pool: pg.Pool,
   input: { accountId: string; walletId: string; name: string; limits: AgentLimits },
-): Promise<{ agentId: string; apiKey: string }> {
+): Promise<{ agentId: string; apiKey: string } | { refused: "wallet_frozen" }> {
   return inTransaction(pool, async (client) => {
+    const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = $1 AND account_id = $2 FOR UPDATE", [input.walletId, input.accountId]);
+    if (wallet.rows[0]?.status === "frozen") return { refused: "wallet_frozen" };
     const agent = await client.query<{ id: string }>("INSERT INTO agents (account_id, wallet_id, name, limits) VALUES ($1, $2, $3, $4) RETURNING id", [
       input.accountId,
       input.walletId,
