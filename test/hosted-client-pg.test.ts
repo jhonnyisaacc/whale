@@ -45,11 +45,12 @@ test("the hosted client and the stdio bridge reach the same tools under the same
     await assert.rejects(createHostedClient({ gatewayUrl: "https://whale.example", apiKey: "whale_000000000000_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", fetchImpl: viaInject(app) }).walletStatus(), /refused this API key: invalid_token/);
 
     const bridge = createBridge({ gatewayUrl: "https://whale.example", apiKey, fetchImpl: viaInject(app) });
-    const listed = (await bridge({ jsonrpc: "2.0", id: 1, method: "tools/list" } as { id: number })) as { result: { tools: unknown[] } };
+    const listed = (await bridge({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: unknown[] } };
     assert.deepEqual(listed.result.tools, await client.tools());
-    assert.equal(await bridge({ jsonrpc: "2.0", method: "notifications/initialized" } as { id?: undefined }), null);
+    assert.equal(await bridge({ jsonrpc: "2.0", method: "notifications/initialized" }), null);
+    assert.deepEqual(await bridge([{ jsonrpc: "2.0", id: 1, method: "ping" }, { jsonrpc: "2.0", id: 2, method: "ping" }]), { jsonrpc: "2.0", id: null, error: { code: -32600, message: "expected one JSON-RPC 2.0 request" } });
     const down = createBridge({ gatewayUrl: "https://whale.example", apiKey, fetchImpl: (async () => Promise.reject(new Error("connect ECONNREFUSED"))) as typeof fetch });
-    assert.deepEqual(await down({ jsonrpc: "2.0", id: 7, method: "ping" } as { id: number }), { jsonrpc: "2.0", id: 7, error: { code: -32000, message: "the Whale gateway is unreachable: connect ECONNREFUSED" } });
+    assert.deepEqual(await down({ jsonrpc: "2.0", id: 7, method: "ping" }), { jsonrpc: "2.0", id: 7, error: { code: -32000, message: "the Whale gateway is unreachable: connect ECONNREFUSED" } });
   } finally {
     await app.close();
     await drop();

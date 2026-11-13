@@ -12,7 +12,7 @@ test("http is allowed for the IPv6 loopback", () => {
 
 test("an unreachable gateway keeps the network cause", async () => {
   const refused = (async () => Promise.reject(new TypeError("fetch failed", { cause: new Error("connect ECONNREFUSED 127.0.0.1:8080") }))) as typeof fetch;
-  const reply = (await createBridge({ gatewayUrl, apiKey: "whale_key", fetchImpl: refused })({ jsonrpc: "2.0", id: 4, method: "ping" } as { id: number })) as { id: number; error: { message: string } };
+  const reply = (await createBridge({ gatewayUrl, apiKey: "whale_key", fetchImpl: refused })({ jsonrpc: "2.0", id: 4, method: "ping" })) as { id: number; error: { message: string } };
   assert.equal(reply.id, 4);
   assert.match(reply.error.message, /ECONNREFUSED 127\.0\.0\.1:8080/);
   await assert.rejects(createHostedClient({ gatewayUrl, apiKey: "whale_key", fetchImpl: refused }).walletStatus(), /ECONNREFUSED 127\.0\.0\.1:8080/);
@@ -20,13 +20,13 @@ test("an unreachable gateway keeps the network cause", async () => {
 
 test("the gateway's refusal reason reaches the caller", async () => {
   const unsupported = answering(400, { jsonrpc: "2.0", id: null, error: { code: -32600, message: "unsupported MCP-Protocol-Version 1999-01-01" } });
-  assert.deepEqual(await createBridge({ gatewayUrl, apiKey: "whale_key", fetchImpl: unsupported })({ jsonrpc: "2.0", id: 5, method: "ping" } as { id: number }), {
+  assert.deepEqual(await createBridge({ gatewayUrl, apiKey: "whale_key", fetchImpl: unsupported })({ jsonrpc: "2.0", id: 5, method: "ping" }), {
     jsonrpc: "2.0",
     id: 5,
     error: { code: -32600, message: "unsupported MCP-Protocol-Version 1999-01-01" },
   });
   await assert.rejects(createHostedClient({ gatewayUrl, apiKey: "whale_key", fetchImpl: unsupported }).walletStatus(), /unsupported MCP-Protocol-Version 1999-01-01/);
   const revoked = answering(401, { error: "unauthorized" }, { "www-authenticate": 'Bearer resource_metadata="https://whale.example/.well-known/oauth-protected-resource/mcp", error="invalid_token"' });
-  const reply = (await createBridge({ gatewayUrl, apiKey: "whale_key", fetchImpl: revoked })({ jsonrpc: "2.0", id: 6, method: "ping" } as { id: number })) as { error: { message: string } };
+  const reply = (await createBridge({ gatewayUrl, apiKey: "whale_key", fetchImpl: revoked })({ jsonrpc: "2.0", id: 6, method: "ping" })) as { error: { message: string } };
   assert.match(reply.error.message, /refused this API key: invalid_token/);
 });

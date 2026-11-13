@@ -84,7 +84,8 @@ export function createHostedClient(options: HostedClientOptions) {
 export function createBridge(options: HostedClientOptions) {
   const endpoint = mcpEndpoint(options.gatewayUrl);
   const fetchImpl = options.fetchImpl ?? fetch;
-  return async (message: { id?: unknown }): Promise<unknown> => {
+  return async (message: unknown): Promise<unknown> => {
+    const id = typeof message === "object" && message !== null && !Array.isArray(message) ? (message as { id?: unknown }).id : null;
     try {
       const response = await fetchImpl(endpoint, {
         method: "POST",
@@ -92,11 +93,11 @@ export function createBridge(options: HostedClientOptions) {
         body: JSON.stringify(message),
         signal: AbortSignal.timeout(options.timeoutMs ?? 20_000),
       });
-      if (response.status === 202 || message.id === undefined) return null;
-      if (!response.ok) return { jsonrpc: "2.0", id: message.id ?? null, error: await refusal(response) };
+      if (response.status === 202 || id === undefined) return null;
+      if (!response.ok) return { jsonrpc: "2.0", id, error: await refusal(response) };
       return (await response.json()) as unknown;
     } catch (error) {
-      return message.id === undefined ? null : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: unreachable(error).message } };
+      return id === undefined ? null : { jsonrpc: "2.0", id, error: { code: -32000, message: unreachable(error).message } };
     }
   };
 }
