@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { api, describe, type Wallet } from "../api.js";
-import { addBackupPasskey } from "../backup-passkey.js";
+import { api, describe } from "../api.js";
+import { addBackupPasskey, syncBackupPasskeys } from "../backup-passkey.js";
 import { stepUp } from "../stepup.js";
-import { addOwnerPasskey, type Delegation } from "../turnkey.js";
+import { addOwnerPasskeys } from "../turnkey.js";
 import { createPasskey } from "../webauthn.js";
 
 type Passkey = { credentialId: string; label: string; createdAt: string; lastUsedAt: string | null };
@@ -32,23 +32,27 @@ export function Settings() {
     void load();
   }, []);
 
-  const addPasskey = async () => {
+  const syncBackups = async () => {
+    const added = await syncBackupPasskeys({ api, addOwnerPasskeys }, setStatus);
+    setStatus(added > 0 ? "Your backup passkeys can now open your account and every enclave." : "No enclave is missing a backup passkey.");
+  };
+
+  const run = async (work: () => Promise<void>) => {
     setError(null);
     try {
-      const { challenge, credential } = await addBackupPasskey({ api, createPasskey, stepUp }, label, setStatus);
-      const wallets = (await api<{ wallets: Wallet[] }>("/api/wallets")).wallets.filter((wallet) => wallet.level === "enclave" && wallet.addresses.length > 0);
-      for (const wallet of wallets) {
-        setStatus(`Approve adding it to ${wallet.label} with your current passkey…`);
-        const delegation = await api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`);
-        await addOwnerPasskey(delegation, { name: label, challenge, credential });
-      }
-      setStatus(wallets.length > 0 ? "The backup passkey can now open your account and your enclaves." : "Added.");
+      await work();
     } catch (caught) {
       setStatus(null);
       setError(describe(caught));
     }
     await load();
   };
+
+  const addPasskey = () =>
+    run(async () => {
+      await addBackupPasskey({ api, createPasskey, stepUp }, label, setStatus);
+      await syncBackups();
+    });
 
   const addWebhook = async () => {
     setError(null);
@@ -80,6 +84,7 @@ export function Settings() {
           <button className="primary" onClick={() => void addPasskey()}>
             Add backup passkey
           </button>
+          <button onClick={() => void run(syncBackups)}>Add backups to every enclave</button>
         </div>
         {status ? <p className="muted">{status}</p> : null}
       </div>

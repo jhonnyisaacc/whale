@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, describe, type Wallet } from "../api.js";
 import { enclaveOutcome, pollDelayMs } from "../enclave-outcome.js";
 import { stepUp } from "../stepup.js";
-import { addDelegate, addPolicies, type Delegation } from "../turnkey.js";
+import { addDelegate, addOwnerPasskeys, addPolicies, type Delegation } from "../turnkey.js";
 import { createPasskey, type CreationOptions } from "../webauthn.js";
 
 // Two passkey moments. First the passkey becomes the only owner of a new Turnkey enclave. Then the same passkey adds
@@ -107,6 +107,10 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
       if (!delegation.policiesInPlace) {
         setStatus("Approve the signing policy with your passkey…");
         await addPolicies(delegation);
+      }
+      if (delegation.missingAuthenticators.length > 0) {
+        setStatus("Approve adding your backup passkeys to this enclave…");
+        await addOwnerPasskeys(delegation);
       }
       setStatus("Checking Turnkey…");
       await api(`/api/wallets/${wallet.id}/enclave/confirm`, { method: "POST", body: {} });

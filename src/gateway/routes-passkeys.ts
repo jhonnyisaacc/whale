@@ -3,9 +3,9 @@ import type pg from "pg";
 import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
-import { addPasskey, assertionPayload, bindingOf, listPasskeys, REFUSED_STATUS, registrationOptions, registrationPayload, stepUpOptions } from "./passkeys.js";
+import { addPasskey, assertionPayload, bindingOf, keepTurnkeyAuthenticator, listPasskeys, REFUSED_STATUS, registrationOptions, registrationPayload, stepUpOptions } from "./passkeys.js";
 
-const addBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64), assertion: assertionPayload.optional() }).strict();
+const addBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64), assertion: assertionPayload.optional(), backup: z.literal(true).optional() }).strict();
 const bindable = (action: unknown) => {
   try {
     bindingOf(action);
@@ -37,7 +37,9 @@ export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: Gate
     if (!session) return reply;
     const body = addBody.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
-    const added = await addPasskey(pool, config, { accountId: session.accountId, payload: body.data.credential, label: body.data.label, assertion: body.data.assertion ?? null }, undefined, now());
+    const { credential, label } = body.data;
+    const keep = body.data.backup ? keepTurnkeyAuthenticator(session.accountId, credential, label) : undefined;
+    const added = await addPasskey(pool, config, { accountId: session.accountId, payload: credential, label, assertion: body.data.assertion ?? null }, keep, now());
     if ("refused" in added) return reply.code(REFUSED_STATUS[added.refused]).send({ error: added.refused, detail: added.detail });
     return reply.code(201).send({ credentialId: added.credentialId, label: body.data.label });
   });

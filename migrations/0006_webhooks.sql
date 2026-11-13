@@ -28,3 +28,5 @@ CREATE TABLE webhook_deliveries (
   FOREIGN KEY (webhook_id, account_id) REFERENCES webhooks (id, account_id) ON DELETE CASCADE
 );
 CREATE INDEX webhook_deliveries_due_idx ON webhook_deliveries (next_attempt_at) WHERE delivered_at IS NULL AND gave_up_at IS NULL;
+
+ALTER TABLE passkeys ADD COLUMN turnkey_authenticator jsonb;
