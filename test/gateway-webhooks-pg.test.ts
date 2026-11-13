@@ -77,3 +77,32 @@ test("webhooks get only their account's chosen events, signed, retried on failur
     await drop();
   }
 });
+
+async function harness() {
+  const { pool, drop } = await migratedSchema();
+  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: null, delegation: null });
+  const user = await signedInAccount(pool);
+  const hook = async (events: string[] = ["wallet.frozen"]) =>
+    (await app.inject({ method: "POST", url: "/api/webhooks", headers: user.headers, payload: { url: "https://hooks.example/whale", format: "whale", events } })).json() as { id: string; secret: string };
+  return { app, pool, user, hook, drop: async () => (await app.close(), await drop()) };
+}
+
+test("a delivery row cannot point one account's webhook at another account's event", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, user, hook, drop } = await harness();
+  try {
+    const other = await signedInAccount(pool);
+    const { id } = await hook();
+    await audit(pool, { accountId: other.accountId, actor: "user", action: "wallet.frozen" });
+    const event = (await pool.query<{ id: string }>("SELECT id FROM audit_events WHERE account_id = $1", [other.accountId])).rows[0]?.id;
+    await assert.rejects(
+      pool.query("INSERT INTO webhook_deliveries (webhook_id, account_id, event_id, next_attempt_at) VALUES ($1, $2, $3, now())", [id, other.accountId, event]),
+      /violates foreign key constraint/,
+    );
+    await pool.query("INSERT INTO webhook_deliveries (webhook_id, account_id, event_id, next_attempt_at) VALUES ($1, $2, $3, now())", [id, user.accountId, event]);
+    const sent: string[] = [];
+    assert.equal(await deliverDue(pool, SECRET, async (_url, init) => (sent.push(init.body), { status: 200, body: "" })), 0);
+    assert.deepEqual(sent, []);
+  } finally {
+    await drop();
+  }
+});

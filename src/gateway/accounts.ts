@@ -38,8 +38,8 @@ export async function audit(
     `WITH event AS (
        INSERT INTO audit_events (account_id, wallet_id, agent_id, actor, action, detail) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, account_id, action
      )
-     INSERT INTO webhook_deliveries (webhook_id, event_id, next_attempt_at)
-     SELECT w.id, event.id, now() FROM event JOIN webhooks w ON w.account_id = event.account_id AND w.disabled_at IS NULL AND event.action = ANY (w.events)`,
+     INSERT INTO webhook_deliveries (webhook_id, account_id, event_id, next_attempt_at)
+     SELECT w.id, w.account_id, event.id, now() FROM event JOIN webhooks w ON w.account_id = event.account_id AND w.disabled_at IS NULL AND event.action = ANY (w.events)`,
     [
     event.accountId,
     event.walletId ?? null,

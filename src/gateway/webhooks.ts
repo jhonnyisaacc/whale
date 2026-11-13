@@ -58,7 +58,7 @@ export async function addWebhook(
 export async function listWebhooks(pool: pg.Pool, accountId: string) {
   const rows = await pool.query<{ id: string; url: string; format: string; events: string[]; failures: number; disabled_at: Date | null; last_status: number | null; last_error: string | null }>(
     `SELECT w.id, w.url, w.format, w.events, w.failures, w.disabled_at, d.last_status, d.last_error
-     FROM webhooks w LEFT JOIN LATERAL (SELECT last_status, last_error FROM webhook_deliveries WHERE webhook_id = w.id AND attempts > 0 ORDER BY id DESC LIMIT 1) d ON true
+     FROM webhooks w LEFT JOIN LATERAL (SELECT last_status, last_error FROM webhook_deliveries WHERE webhook_id = w.id AND account_id = w.account_id AND attempts > 0 ORDER BY id DESC LIMIT 1) d ON true
      WHERE w.account_id = $1 ORDER BY w.created_at`,
     [accountId],
   );
@@ -75,11 +75,11 @@ export async function removeWebhook(pool: pg.Pool, accountId: string, webhookId:
 // A test reaches only the webhook asked about, so it is queued here and not through audit(), which fans out.
 export async function testWebhook(pool: pg.Pool, accountId: string, webhookId: string): Promise<boolean> {
   const queued = await pool.query(
-    `WITH hook AS (SELECT id FROM webhooks WHERE id = $2 AND account_id = $1 AND disabled_at IS NULL),
+    `WITH hook AS (SELECT id, account_id FROM webhooks WHERE id = $2 AND account_id = $1 AND disabled_at IS NULL),
      event AS (
        INSERT INTO audit_events (account_id, actor, action, detail) SELECT $1, 'user', 'webhook.test', jsonb_build_object('webhookId', $2::text) FROM hook RETURNING id
      )
-     INSERT INTO webhook_deliveries (webhook_id, event_id, next_attempt_at) SELECT hook.id, event.id, now() FROM hook, event RETURNING id`,
+     INSERT INTO webhook_deliveries (webhook_id, account_id, event_id, next_attempt_at) SELECT hook.id, hook.account_id, event.id, now() FROM hook, event RETURNING id`,
     [accountId, webhookId],
   );
   return (queued.rowCount ?? 0) === 1;
@@ -102,10 +102,11 @@ export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Sen
     `WITH due AS (
        SELECT id FROM webhook_deliveries WHERE delivered_at IS NULL AND gave_up_at IS NULL AND next_attempt_at <= $1 ORDER BY next_attempt_at LIMIT 20 FOR UPDATE SKIP LOCKED
      ), leased AS (
-       UPDATE webhook_deliveries d SET next_attempt_at = $1::timestamptz + interval '5 minutes' FROM due WHERE d.id = due.id RETURNING d.id, d.attempts, d.webhook_id, d.event_id
+       UPDATE webhook_deliveries d SET next_attempt_at = $1::timestamptz + interval '5 minutes' FROM due WHERE d.id = due.id RETURNING d.id, d.attempts, d.webhook_id, d.account_id, d.event_id
      )
      SELECT leased.id::text, leased.attempts, w.id AS webhook_id, w.url, w.format, w.secret_sealed, e.id::text AS event_id, e.account_id, e.wallet_id, e.agent_id, e.actor, e.action, e.detail, e.created_at
-     FROM leased JOIN webhooks w ON w.id = leased.webhook_id AND w.disabled_at IS NULL JOIN audit_events e ON e.id = leased.event_id`,
+     FROM leased JOIN webhooks w ON w.id = leased.webhook_id AND w.account_id = leased.account_id AND w.disabled_at IS NULL
+     JOIN audit_events e ON e.id = leased.event_id AND e.account_id = leased.account_id`,
     [new Date(now)],
   );
   const open = sealer(gatewaySecret, "webhook-secret");
@@ -132,7 +133,7 @@ export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Sen
     if (status >= 200 && status < 300) {
       delivered += 1;
       await pool.query("UPDATE webhook_deliveries SET delivered_at = $2, attempts = attempts + 1, last_status = $3, last_error = NULL WHERE id = $1", [row.id, new Date(now), status]);
-      await pool.query("UPDATE webhooks SET failures = 0 WHERE id = $1", [row.webhook_id]);
+      await pool.query("UPDATE webhooks SET failures = 0 WHERE id = $1 AND account_id = $2", [row.webhook_id, row.account_id]);
       continue;
     }
     const attempts = row.attempts + 1;
@@ -145,7 +146,7 @@ export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Sen
       new Date(now + (retry ?? 0)),
       retry === undefined ? new Date(now) : null,
     ]);
-    await pool.query(`UPDATE webhooks SET failures = failures + 1, disabled_at = CASE WHEN failures + 1 >= ${DISABLE_AFTER_FAILURES} THEN now() ELSE disabled_at END WHERE id = $1`, [row.webhook_id]);
+    await pool.query(`UPDATE webhooks SET failures = failures + 1, disabled_at = CASE WHEN failures + 1 >= ${DISABLE_AFTER_FAILURES} THEN now() ELSE disabled_at END WHERE id = $1 AND account_id = $2`, [row.webhook_id, row.account_id]);
   }
   return delivered;
 }
