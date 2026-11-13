@@ -82,3 +82,19 @@ test("a swap is priced by what it sells, so a bad quote cannot slip a large sell
     }
   }
 });
+
+test("an approved send that waited past its hour is refused, not spent", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    const asked = await swap("stale-approval", 15);
+    const approvalId = String(asked.body?.approvalId);
+    assert.equal((await approve(approvalId)).statusCode, 200);
+    await pool.query("UPDATE approvals SET created_at = created_at - interval '30 days', decided_at = decided_at - interval '30 days', expires_at = expires_at - interval '30 days' WHERE id = $1", [approvalId]);
+    const late = await swap("stale-approval", 15);
+    assert.equal(late.isError, true);
+    assert.match(late.text, /expired/);
+    assert.equal(sent.length, 0);
+  } finally {
+    await drop();
+  }
+});

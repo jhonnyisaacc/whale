@@ -25,6 +25,10 @@ export function approvalAction(approvalId: string, command: HostedCommand) {
   return { kind: "approval.approve", approvalId, command };
 }
 
+function statusAt(row: { status: Approval["status"]; expires_at: Date }, now: number): Approval["status"] {
+  return (row.status === "pending" || row.status === "approved") && row.expires_at.getTime() <= now ? "expired" : row.status;
+}
+
 export async function requestApproval(
   pool: pg.Pool,
   agent: AgentContext,
@@ -32,14 +36,14 @@ export async function requestApproval(
   now = Date.now(),
 ): Promise<{ id: string; status: string; expiresAt: string }> {
   return inTransaction(pool, async (client) => {
-    const existing = await client.query<{ id: string; status: string; expires_at: Date; command: unknown }>(
+    const existing = await client.query<{ id: string; status: Approval["status"]; expires_at: Date; command: unknown }>(
       "SELECT id, status, expires_at, command FROM approvals WHERE agent_id = $1 AND idempotency_key = $2 FOR UPDATE",
       [agent.agentId, input.idempotencyKey],
     );
     const row = existing.rows[0];
     if (row) {
       if (bindingOf(row.command) !== bindingOf(input.command)) throw new Error("this idempotencyKey was already used for a different command");
-      return { id: row.id, status: row.expires_at.getTime() <= now && row.status === "pending" ? "expired" : row.status, expiresAt: row.expires_at.toISOString() };
+      return { id: row.id, status: statusAt(row, now), expiresAt: row.expires_at.toISOString() };
     }
     const expiresAt = new Date(now + APPROVAL_TTL_MS);
     const created = await client.query<{ id: string }>(
@@ -63,12 +67,12 @@ export async function consumeApproval(pool: pg.Pool, agent: AgentContext, idempo
     const row = found.rows[0];
     if (!row) return "missing";
     if (bindingOf(row.command) !== bindingOf(command)) return "conflict";
-    if (row.status === "approved") {
+    const status = statusAt(row, now);
+    if (status === "approved") {
       await client.query("UPDATE approvals SET status = 'used' WHERE id = $1", [row.id]);
       return "used";
     }
-    if (row.status === "pending" && row.expires_at.getTime() <= now) return "expired";
-    return row.status === "used" ? "missing" : row.status;
+    return status === "used" ? "missing" : status;
   });
 }
 
@@ -125,7 +129,7 @@ export async function listApprovals(pool: pg.Pool, accountId: string, status: st
     command: row.command,
     estimateUsd: row.estimate_usd,
     reason: row.reason,
-    status: row.status === "pending" && row.expires_at.getTime() <= now ? "expired" : row.status,
+    status: statusAt(row, now),
     createdAt: row.created_at.toISOString(),
     expiresAt: row.expires_at.toISOString(),
   }));
