@@ -26,7 +26,8 @@ test("a passkey registers once per challenge and approves exactly the action it 
     const credential = authenticator.register(options.challenge);
     const added = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential, label: "MacBook" } });
     assert.equal(added.statusCode, 201);
-    const replay = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential, label: "again" } });
+    const readd = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "passkey.add", credentialId: credential.id } } })).json();
+    const replay = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential, label: "again", assertion: authenticator.assert(readd.challenge) } });
     assert.match(replay.json().detail, /expired or was already used/);
     const listed = (await app.inject({ method: "GET", url: "/api/passkeys", headers: user.headers })).json().passkeys;
     assert.deepEqual(listed.map((entry: { label: string }) => entry.label), ["MacBook"]);
@@ -47,7 +48,7 @@ test("a passkey registers once per challenge and approves exactly the action it 
     const theirs = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: other.headers, payload: { action } })).json();
     assert.equal(theirs.error, "no_passkey");
     const counter = await pool.query("SELECT sign_count FROM passkeys");
-    assert.equal(Number(counter.rows[0].sign_count), 2);
+    assert.equal(Number(counter.rows[0].sign_count), 3);
   } finally {
     await drop();
   }
@@ -62,6 +63,45 @@ test("a registration from another origin or an unknown challenge is refused", { 
     assert.match(foreign.json().detail, /origin/);
     const unknown = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: authenticator.register("z".repeat(43)), label: "x" } });
     assert.match(unknown.json().detail, /expired or was already used/);
+  } finally {
+    await drop();
+  }
+});
+
+test("a second passkey needs a step-up from an existing passkey bound to the new credential id", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, user, drop } = await harness();
+  const register = async (authenticator: ReturnType<typeof softAuthenticator>) => {
+    const options = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers: user.headers, payload: {} })).json();
+    return authenticator.register(options.challenge);
+  };
+  const approval = async (authenticator: ReturnType<typeof softAuthenticator>, credentialId: string) => {
+    const options = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "passkey.add", credentialId } } })).json();
+    return authenticator.assert(options.challenge);
+  };
+  try {
+    const first = softAuthenticator(RP);
+    const added = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: await register(first), label: "MacBook" } });
+    assert.equal(added.statusCode, 201);
+
+    const credential = await register(softAuthenticator(RP));
+    const bare = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential, label: "Phone" } });
+    assert.equal(bare.statusCode, 428);
+    assert.equal(bare.json().error, "step_up_required");
+
+    const elsewhere = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential, label: "Phone", assertion: await approval(first, "c".repeat(43)) } });
+    assert.equal(elsewhere.statusCode, 403);
+    assert.equal(elsewhere.json().error, "step_up_failed");
+
+    const assertion = await approval(first, credential.id);
+    const approved = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential, label: "Phone", assertion } });
+    assert.equal(approved.statusCode, 201);
+
+    const third = await register(softAuthenticator(RP));
+    const replayed = await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: third, label: "Tablet", assertion } });
+    assert.equal(replayed.statusCode, 403);
+
+    const listed = (await app.inject({ method: "GET", url: "/api/passkeys", headers: user.headers })).json().passkeys;
+    assert.deepEqual(listed.map((entry: { label: string }) => entry.label), ["MacBook", "Phone"]);
   } finally {
     await drop();
   }

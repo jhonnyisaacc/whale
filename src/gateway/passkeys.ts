@@ -124,6 +124,24 @@ export async function registerPasskey(
   });
 }
 
+export type PasskeyRefusal = { refused: "step_up_required" | "step_up_failed" | "passkey_rejected"; detail?: string };
+
+export async function addPasskey(
+  pool: pg.Pool,
+  config: GatewayConfig,
+  input: { accountId: string; payload: RegistrationPayload; label: string; assertion: AssertionPayload | null },
+  now = Date.now(),
+): Promise<Registration | PasskeyRefusal> {
+  const existing = await pool.query("SELECT 1 FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL LIMIT 1", [input.accountId]);
+  if ((existing.rowCount ?? 0) > 0) {
+    if (!input.assertion) return { refused: "step_up_required" };
+    const approved = await verifyStepUp(pool, config, input.accountId, { kind: "passkey.add", credentialId: input.payload.id }, input.assertion, now);
+    if (approved !== true) return { refused: "step_up_failed", detail: approved };
+  }
+  const added = await registerPasskey(pool, config, { accountId: input.accountId, payload: input.payload, label: input.label }, undefined, now);
+  return typeof added === "string" ? { refused: "passkey_rejected", detail: added } : added;
+}
+
 export async function stepUpOptions(pool: pg.Pool, config: GatewayConfig, accountId: string, action: unknown, now = Date.now()) {
   const keys = await pool.query<{ credential_id: string }>("SELECT credential_id FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL", [accountId]);
   if (keys.rows.length === 0) return null;
