@@ -4,6 +4,7 @@ import test from "node:test";
 import bs58 from "bs58";
 import { privateKeyToAccount } from "viem/accounts";
 import { buildGateway } from "../src/gateway/app.js";
+import { unfreezeAction } from "../src/gateway/policy-changes.js";
 import { signerCodeAction } from "../src/gateway/routes-signers.js";
 import { enqueueJob, LEASE_MS, registrationMessage } from "../src/gateway/signers.js";
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
@@ -81,5 +82,51 @@ test("a self-hosted signer registers with a passkey-issued code and proofs of bo
   } finally {
     await app.close();
     await drop();
+  }
+});
+
+async function registeredSigner(options: { signerPollMs?: number } = {}) {
+  const { pool, drop } = await migratedSchema();
+  const clock = { now: Date.now() };
+  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: null, delegation: null, now: () => clock.now, signerPollMs: options.signerPollMs ?? 10 });
+  const user = await signedInAccount(pool);
+  const authenticator = softAuthenticator(RP);
+  const passkeyOptions = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers: user.headers, payload: {} })).json();
+  await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: authenticator.register(passkeyOptions.challenge), label: "Mac" } });
+  const approve = async (action: Record<string, unknown>) => {
+    const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action } })).json();
+    return authenticator.assert(stepUp.challenge);
+  };
+  const newWallet = async (label: string) => (await app.inject({ method: "POST", url: "/api/wallets", headers: user.headers, payload: { label, level: "self_hosted" } })).json().id as string;
+  const issueCode = async (walletId: string) =>
+    (await app.inject({ method: "POST", url: `/api/wallets/${walletId}/signer/code`, headers: user.headers, payload: { assertion: await approve(signerCodeAction(walletId)) } })).json().code as string;
+  const walletId = await newWallet("home");
+  const registered = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, await issueCode(walletId)) });
+  assert.equal(registered.statusCode, 201, registered.body);
+  const auth = { authorization: `Bearer ${registered.json().token as string}` };
+  const pull = () => app.inject({ method: "GET", url: "/signer/v1/jobs?wait=0", headers: auth });
+  const answer = (jobId: string, payload: Record<string, unknown>) => app.inject({ method: "POST", url: `/signer/v1/jobs/${jobId}/result`, headers: auth, payload });
+  const status = async (id = walletId) => (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets.find((wallet: { id: string }) => wallet.id === id).status as string;
+  const close = async () => {
+    await app.close();
+    await drop();
+  };
+  return { app, pool, clock, user, approve, newWallet, issueCode, walletId, auth, pull, answer, status, close };
+}
+
+test("a self-hosted wallet with a registered signer comes back active after a freeze and unfreeze", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const { app, user, walletId } = signer;
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${walletId}/freeze`, headers: user.headers, payload: {} })).statusCode, 200);
+    const thawed = await app.inject({ method: "POST", url: `/api/wallets/${walletId}/unfreeze`, headers: user.headers, payload: { assertion: await signer.approve(unfreezeAction(walletId)) } });
+    assert.equal(thawed.statusCode, 200, thawed.body);
+    assert.equal(await signer.status(), "active");
+    const jobId = await enqueueJob(signer.pool, { accountId: user.accountId, walletId, kind: "evm", payload: {}, ttlMs: 60_000 }, signer.clock.now);
+    const pulled = await signer.pull();
+    assert.equal(pulled.statusCode, 200, pulled.body);
+    assert.equal(pulled.json().id, jobId);
+  } finally {
+    await signer.close();
   }
 });

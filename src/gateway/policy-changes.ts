@@ -161,12 +161,14 @@ export async function freezeWallets(pool: pg.Pool, accountId: string, walletId: 
   });
 }
 
-// Unfreezing loosens the wallet, so it takes a passkey. The wallet returns to active only if its enclave was complete.
 export async function unfreezeWallet(pool: pg.Pool, config: GatewayConfig, accountId: string, walletId: string, assertion: AssertionPayload, now = Date.now()): Promise<true | string> {
   const approved = await verifyStepUp(pool, config, accountId, unfreezeAction(walletId), assertion, now);
   if (approved !== true) return approved;
   const updated = await pool.query(
-    `UPDATE wallets SET status = CASE WHEN level = 'enclave' AND turnkey_delegate_user_id IS NOT NULL THEN 'active' ELSE 'pending' END
+    `UPDATE wallets SET status = CASE
+       WHEN level = 'enclave' AND turnkey_delegate_user_id IS NOT NULL THEN 'active'
+       WHEN level = 'self_hosted' AND EXISTS (SELECT 1 FROM signers s WHERE s.wallet_id = wallets.id) THEN 'active'
+       ELSE 'pending' END
      WHERE id = $1 AND account_id = $2 AND status = 'frozen' RETURNING id`,
     [walletId, accountId],
   );
