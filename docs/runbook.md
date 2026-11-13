@@ -78,7 +78,7 @@ Redirect URIs must be https, a loopback `http` address, or an app scheme such as
 - The authorization code grant returns a one-hour access token `wat_...`, bound to the MCP resource, and a 30-day refresh token `wrt_...`.
 - A refresh rotates both tokens.
 
-A replayed code, or a refresh token presented after rotation, revokes every OAuth token of that agent. `POST /oauth/revoke` revokes one token. The tokens are stored as SHA-256 only.
+A replayed code, or a refresh token presented after rotation, revokes every OAuth token of that agent. `POST /oauth/revoke` on an access token revokes that token. On a refresh token it revokes every OAuth token of that agent, because the agent is the grant (RFC 7009 2.1). The tokens are stored as SHA-256 only.
 
 ## Start the executor
 

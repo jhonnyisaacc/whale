@@ -166,6 +166,21 @@ test("a loopback redirect matches on any port, and nothing else about it may dif
   }
 });
 
+test("revoking a refresh token also stops the access tokens of that grant", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, form, connect, mcp, drop } = await harness();
+  try {
+    const clientId = await register(form, app);
+    const { code, verifier } = await connect(clientId);
+    const pair = (await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier })).json();
+    assert.equal((await mcp(pair.access_token)).statusCode, 200);
+    assert.equal((await form("/oauth/revoke", { token: pair.refresh_token })).statusCode, 200);
+    assert.equal((await mcp(pair.access_token)).statusCode, 401);
+    assert.equal((await form("/oauth/token", { grant_type: "refresh_token", refresh_token: pair.refresh_token, client_id: clientId })).json().error, "invalid_grant");
+  } finally {
+    await drop();
+  }
+});
+
 test("a metadata-document client must name itself by its own URL, and a denial goes back to the client", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, authorize, drop } = await harness({
     [CIMD]: { client_id: CIMD, client_name: "Cursor", redirect_uris: [REDIRECT] },

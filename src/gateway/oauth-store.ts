@@ -91,7 +91,7 @@ async function issuePair(client: pg.PoolClient, agentId: string, audience: strin
   return { access_token: `wat_${accessId}_${accessSecret}`, token_type: "Bearer", expires_in: ACCESS_TTL_MS / 1000, refresh_token: `wrt_${refreshId}_${refreshSecret}`, scope: "wallet" };
 }
 
-async function revokeOAuthCredentials(client: pg.PoolClient, agentId: string): Promise<void> {
+async function revokeOAuthCredentials(client: pg.Pool | pg.PoolClient, agentId: string): Promise<void> {
   await client.query("UPDATE agent_credentials SET revoked_at = now() WHERE agent_id = $1 AND kind <> 'api_key' AND revoked_at IS NULL", [agentId]);
 }
 
@@ -158,7 +158,9 @@ export async function revokeToken(pool: pg.Pool, token: string): Promise<void> {
   const match = REFRESH_TOKEN.exec(token) ?? ACCESS_TOKEN.exec(token);
   if (!match) return;
   const [, id, secret] = match as unknown as [string, string, string];
-  const found = await pool.query<{ secret_hash: Buffer }>("SELECT secret_hash FROM agent_credentials WHERE id = $1 AND kind <> 'api_key'", [id]);
+  const found = await pool.query<{ secret_hash: Buffer; kind: string; agent_id: string }>("SELECT secret_hash, kind, agent_id FROM agent_credentials WHERE id = $1 AND kind <> 'api_key'", [id]);
   const row = found.rows[0];
-  if (row && timingSafeEqual(row.secret_hash, secretHash(secret))) await pool.query("UPDATE agent_credentials SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [id]);
+  if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret))) return;
+  if (row.kind === "oauth_refresh") await revokeOAuthCredentials(pool, row.agent_id);
+  else await pool.query("UPDATE agent_credentials SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [id]);
 }
