@@ -12,7 +12,7 @@ export WHALE_SIGNER_PASSPHRASE='at least twelve characters'
 ./target/release/whale-signer sign --keystore keystore.json --policy policy.json --ledger ledger.json < job.json
 ```
 
-`init` refuses to overwrite a keystore. `sign` prints one JSON decision and exits:
+`init` creates the keystore readable only by its owner (mode 0600), and refuses if the file already exists. `sign` prints one JSON decision and exits:
 - 0 when it signed;
 - 3 when it refused;
 - 2 on a usage or file error.

@@ -1,5 +1,5 @@
 use serde_json::Value;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use whale_signer::{keystore, ledger, policy, run_job};
@@ -26,20 +26,29 @@ fn passphrase() -> Result<String, String> {
     std::env::var("WHALE_SIGNER_PASSPHRASE").map_err(|_| "set WHALE_SIGNER_PASSPHRASE".to_string())
 }
 
+fn create_private(path: &PathBuf) -> Result<std::fs::File, String> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(path).map_err(|error| match error.kind() {
+        std::io::ErrorKind::AlreadyExists => format!(
+            "{} already exists; refusing to overwrite a keystore",
+            path.display()
+        ),
+        _ => format!("cannot create the keystore: {error}"),
+    })
+}
+
 fn run(args: &[String]) -> Result<ExitCode, String> {
     let command = args.get(1).map(String::as_str).ok_or(USAGE)?;
     let keystore_path = flag(args, "--keystore").ok_or(USAGE)?;
     match command {
         "init" => {
-            if keystore_path.exists() {
-                return Err(format!(
-                    "{} already exists; refusing to overwrite a keystore",
-                    keystore_path.display()
-                ));
-            }
             let keys = keystore::generate()?;
             let sealed = keystore::seal(&keys, &passphrase()?)?;
-            std::fs::write(&keystore_path, sealed.to_string())
+            create_private(&keystore_path)?
+                .write_all(sealed.to_string().as_bytes())
                 .map_err(|error| format!("cannot write the keystore: {error}"))?;
             println!(
                 "{}",
