@@ -221,7 +221,7 @@ async function raceBehindWalletLock(gateway: Awaited<ReturnType<typeof enclaveGa
   }
   while (answered === 0 && (await passkeys()) < bothRegistered) await new Promise((resolve) => setTimeout(resolve, 5));
   open();
-  return ((await racing) ?? []).map((response) => response.statusCode).sort();
+  return ((await racing) ?? []).map((response) => [response.statusCode, response.json().error ?? null] as const).sort((x, y) => x[0] - y[0]);
 }
 
 test("two concurrent stepped-up enclave creates for one wallet reach Turnkey once", { skip: !TEST_DATABASE_URL }, async () => {
@@ -229,7 +229,7 @@ test("two concurrent stepped-up enclave creates for one wallet reach Turnkey onc
   try {
     await gateway.plainPasskey();
     const walletId = await gateway.newWallet();
-    assert.deepEqual(await raceBehindWalletLock(gateway, walletId), [201, 409]);
+    assert.deepEqual(await raceBehindWalletLock(gateway, walletId), [[201, null], [409, "enclave_in_progress"]]);
     assert.equal(gateway.fake.created.length, 1);
     assert.deepEqual(await gateway.trackedSubOrgs(), [...gateway.fake.orgs.keys()].sort());
     const passkeys = await gateway.pool.query("SELECT 1 FROM passkeys WHERE account_id = $1", [gateway.user.accountId]);
@@ -243,7 +243,7 @@ test("two concurrent first-passkey enclave creates on the session alone let one 
   const gateway = await enclaveGateway();
   try {
     const walletId = await gateway.newWallet();
-    assert.deepEqual(await raceBehindWalletLock(gateway, walletId), [201, 428]);
+    assert.deepEqual(await raceBehindWalletLock(gateway, walletId), [[201, null], [428, "step_up_required"]]);
     assert.equal(gateway.fake.created.length, 1);
     assert.deepEqual(await gateway.trackedSubOrgs(), [...gateway.fake.orgs.keys()].sort());
     const passkeys = await gateway.pool.query("SELECT 1 FROM passkeys WHERE account_id = $1", [gateway.user.accountId]);
