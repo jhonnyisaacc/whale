@@ -154,17 +154,17 @@ test("two widenings that race answer one 202 and one 409", { skip: !TEST_DATABAS
     const [a, b] = [{ ...DEFAULT_POLICY, maxTxUsd: 70 }, { ...DEFAULT_POLICY, maxTxUsd: 80 }];
     const [approveA, approveB] = [await approve(widenAction(wallet.id, 1, a)), await approve(widenAction(wallet.id, 1, b))];
     const lock = await holdLock(pool, "SELECT 1 FROM policy_changes WHERE status = 'pending' FOR UPDATE", []);
-    const racing = [put({ baseVersion: 1, document: a, assertion: approveA }), put({ baseVersion: 1, document: b, assertion: approveB })];
-    await lock.waitingBehind(2).catch(async (error: unknown) => {
-      throw new Error(`${String(error)}: ${(await Promise.all(racing)).map((reply) => `${reply.statusCode} ${reply.body}`).join(" | ")}`);
-    });
+    const earlier = put({ baseVersion: 1, document: a, assertion: approveA });
+    await lock.waitingBehind(1);
+    const later = put({ baseVersion: 1, document: b, assertion: approveB });
+    await lock.waitingBehind(2);
     await lock.release();
-    const replies = await Promise.all(racing);
-    assert.deepEqual(replies.map((reply) => reply.statusCode).sort(), [202, 409], replies.map((reply) => reply.body).join(" "));
-    assert.equal(replies.find((reply) => reply.statusCode === 409)?.json().error, "conflict");
+    const [winner, loser] = [await earlier, await later];
+    assert.equal(winner.statusCode, 202, winner.body);
+    assert.equal(loser.statusCode, 409, loser.body);
+    assert.equal(loser.json().error, "conflict");
     const pending = await pool.query("SELECT document->>'maxTxUsd' AS max FROM policy_changes WHERE status = 'pending'");
-    assert.equal(pending.rows.length, 1);
-    assert.equal(Number(pending.rows[0].max), replies[0]?.statusCode === 202 ? 70 : 80);
+    assert.deepEqual(pending.rows.map((row) => Number(row.max)), [70]);
   } finally {
     await drop();
   }
