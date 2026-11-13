@@ -73,6 +73,15 @@ test("swapped gateway settings exit with a fixed message that never prints the k
   }
 });
 
+test("an API key that is not a valid header value exits with a fixed message that never prints it", () => {
+  for (const key of ["whale_000000000000_SECRET\nx", "whale_000000000000_SECRET\rx", "whale_000000000000 SECRET"]) {
+    const result = runServer("", { WHALE_GATEWAY_URL: "https://whale.example", WHALE_API_KEY: key });
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, "whale: WHALE_API_KEY must be one line of printable characters with no spaces\n");
+    assert.equal(result.stdout, "");
+  }
+});
+
 test("a malformed stdin line gets a JSON-RPC error and the server keeps serving", () => {
   const result = runServer(`not json\nnull\n${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "ping" })}\n`);
   assert.equal(result.status, 0);
