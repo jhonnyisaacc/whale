@@ -85,7 +85,6 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
     return reply.redirect(`/connect?request=${id}`, 302);
   });
 
-  // Public on purpose: the consent page names the client before the user is sent to Google.
   app.get("/oauth/requests/:id", async (request, reply) => {
     const params = requestId.safeParse(request.params);
     const pending = params.success ? await pendingRequest(pool, params.data.id, now()) : null;
