@@ -110,7 +110,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
 
   // What the browser submits to Turnkey under the user's passkey. Policies need the delegate's user id, so they appear
   // once the delegate exists.
-  app.get("/api/wallets/:id/enclave/delegation", async (request, reply) => {
+  app.get("/api/wallets/:id/enclave/delegation", { config: perMinute(10) }, async (request, reply) => {
     const session = await requireSession(pool, request, reply);
     if (!session) return reply;
     if (!deps.turnkey || !deps.delegation) return reply.code(503).send({ error: "enclave_unavailable" });

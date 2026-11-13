@@ -180,3 +180,15 @@ test("a failure after Turnkey creates the sub-organization still leaves it recor
     await gateway.close();
   }
 });
+
+test("reading the delegation is rate limited per route", { skip: !TEST_DATABASE_URL }, async () => {
+  const gateway = await enclaveGateway();
+  try {
+    const url = `/api/wallets/${randomUUID()}/enclave/delegation`;
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i += 1) statuses.push((await gateway.app.inject({ method: "GET", url, headers: gateway.user.headers })).statusCode);
+    assert.deepEqual(statuses, [...Array(10).fill(404), 429]);
+  } finally {
+    await gateway.close();
+  }
+});
