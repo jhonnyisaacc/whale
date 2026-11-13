@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { cargoManifestSourceProblems } from "./cargo-sources.js";
 
 function path(relative: string): URL {
   return new URL(`../../${relative}`, import.meta.url);
@@ -99,6 +100,29 @@ test("the Rust signer pins every crate exactly and commits its lockfile", () => 
   assert.match(manifest, /^\[profile\.release\]\noverflow-checks = true$/m, "release builds refuse integer overflow");
   assert.equal(existsSync(path("signer/Cargo.lock")), true, "Cargo.lock is committed");
   assert.match(read("signer/rust-toolchain.toml"), /channel = "\d+\.\d+\.\d+"/);
+});
+
+test("the Rust signer manifest takes every crate from crates.io", () => {
+  assert.deepEqual(cargoManifestSourceProblems(read("signer/Cargo.toml")), []);
+});
+
+test("the Cargo manifest check refuses git, path, registry, patch, and replace in every table form", () => {
+  const pinned = '[package]\nname = "x"\n\n[dependencies]\nhex = "=0.4.3"\nk256 = { version = "=0.14.0", features = ["ecdsa", "std"] }\n';
+  assert.deepEqual(cargoManifestSourceProblems(pinned), []);
+  const bad = [
+    '[dependencies]\nfoo = { git = "https://example.com/foo", version = "=1.0.0" }\n',
+    '[dev-dependencies]\nfoo = { version = "=1.0.0", path = "../foo" }\n',
+    '[build-dependencies]\nfoo = { version = "=1.0.0", registry = "corp" }\n',
+    '[dependencies.foo]\nversion = "=1.0.0"\ngit = "https://example.com/foo"\n',
+    '[dependencies]\nfoo.version = "=1.0.0"\nfoo.path = "../foo"\n',
+    "[target.'cfg(unix)'.dependencies]\nfoo = { version = \"=1.0.0\", git = \"https://example.com/foo\" }\n",
+    '[target."cfg(target_os = \\"linux\\")".dependencies.foo]\nversion = "=1.0.0"\nregistry-index = "https://example.com/index"\n',
+    '[workspace.dependencies]\nfoo = { version = "=1.0.0", path = "foo" }\n',
+    '[patch.crates-io]\nsha2 = { version = "=0.11.1" }\n',
+    '[patch."https://github.com/example/repo"]\n',
+    '[replace]\n"sha2:0.11.1" = { version = "=0.11.1" }\n',
+  ];
+  for (const manifest of bad) assert.notDeepEqual(cargoManifestSourceProblems(pinned + manifest), [], manifest);
 });
 
 test("workflows pin every action and service image, and install only from the lockfile", () => {
