@@ -192,3 +192,42 @@ pub fn route(
     };
     Ok((key, u128::from(sold_amount(data, route.shared)?)))
 }
+
+#[cfg(test)]
+mod tests {
+    const MAINNET_ROUTES: [(&str, &str, u64); 5] = [
+        (
+            "3aTpUqqiTisfuhR89KvYfdWMTDcuhKG3BQCGV2DUSezqcbGxc5dmp3QDfAR11TfnzrK6aPb3yfRUgzxe5MmXQPkv",
+            "e517cb977ae3ad2a020000004b000000006400012f0000640102bd4e0000000000006073030000000000f40100",
+            20_157,
+        ),
+        (
+            "4tGfDQYjqvTrdNsaraqaMt429QVVVjvYa1kpr8VL4eMk7GQf6C4eb7fJnLTcStQLFpTgN5P8MpyuwVoVrkBMTKCv",
+            "e517cb977ae3ad2a01000000c100640001bb88080300000000f987d836000000002c0100",
+            50_890_939,
+        ),
+        (
+            "4vr3xFNZpm3FmXP5SxmYCa25PA5rbRAf4rr7ztESmKLoG7JXJcpiH6rXD4opokW1XWpmZGmhejk9wMqjo2vZLHoC",
+            "e517cb977ae3ad2a010000004b000000006400014544662500000000b6537e00000000002c0100",
+            627_459_141,
+        ),
+        (
+            "4gDWUMjxN23zPjz8rbJcMhr4HGUqGetvZ2BMZRAnAkGXLnijZMWxQ4yjspsnUZvpFJvwgaNGbwP4nrxMQ9avrxhX",
+            "e517cb977ae3ad2a010000006c640001a2cd3f4600000000fd460600000000002c0100",
+            1_178_586_530,
+        ),
+        (
+            "w8otunqkYXmAeJqpJgsUppEWZZJjWkRFzoDneERFupYXBKmqA7X3ueeNvRpUrBiU2sMjN6F19WcpYpYBKrgB1gH",
+            "e517cb977ae3ad2a01000000c20064000105e128f0060000001d770e0000000000640000",
+            29_799_014_661,
+        ),
+    ];
+
+    #[test]
+    fn mainnet_routes_decode_to_what_their_source_account_lost() {
+        for (signature, data, lost) in MAINNET_ROUTES {
+            let data = hex::decode(data).expect("hex");
+            assert_eq!(super::sold_amount(&data, false), Ok(lost), "{signature}");
+        }
+    }
+}
