@@ -104,12 +104,23 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   }
 
   const value = await executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });
-  const refused = await inTransaction(pool, async (client) => {
-    const overDaily = priced ? await recordSpend(client, agent, command, priced) : null;
-    if (overDaily) return overDaily;
-    if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) return "this approval was already used. Ask again with a new idempotencyKey";
-    await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
-    return null;
-  });
-  return refused ? deny(refused) : { ok: true, value };
+  try {
+    await inTransaction(pool, async (client) => {
+      if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) throw new Refused(await lapsedApproval(pool, agent, command));
+      const overDaily = priced ? await recordSpend(client, agent, command, priced) : null;
+      if (overDaily) throw new Refused(overDaily);
+      await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
+    });
+  } catch (error) {
+    if (error instanceof Refused) return deny(error.message);
+    throw error;
+  }
+  return { ok: true, value };
+}
+
+class Refused extends Error {}
+
+async function lapsedApproval(pool: pg.Pool, agent: AgentContext, command: Send): Promise<string> {
+  const now = await approvalFor(pool, agent, command.idempotencyKey, command);
+  return now === "expired" ? "the approval request expired. Ask again with a new idempotencyKey" : "this approval was already used. Ask again with a new idempotencyKey";
 }

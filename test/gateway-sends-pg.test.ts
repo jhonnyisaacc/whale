@@ -20,8 +20,10 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
   const failures: Error[] = [];
+  const during: (() => Promise<unknown>)[] = [];
   const executor: ExecutorClient = {
     run: async (request) => {
+      await during.shift()?.();
       const failure = failures.shift();
       if (failure) throw failure;
       sent.push(request);
@@ -61,7 +63,7 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
     const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "approval.approve", approvalId, command: approval.command } } })).json();
     return app.inject({ method: "POST", url: `/api/approvals/${approvalId}/approve`, headers: user.headers, payload: { assertion: authenticator.assert(stepUp.challenge) } });
   };
-  return { app, pool, user, walletId, sent, failures, call, swap, approve, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, user, walletId, sent, failures, during, call, swap, approve, drop: async () => (await app.close(), await drop()) };
 }
 
 test("a swap is priced by what it sells, so a bad quote cannot slip a large sell past the cap or the threshold", { skip: !TEST_DATABASE_URL }, async () => {
@@ -222,6 +224,25 @@ test("a key spent on a small swap cannot be approved for a larger one and record
     assert.equal((await pool.query("SELECT count(*)::int AS n FROM approvals")).rows[0].n, 0);
     assert.equal(sent.length, 1);
     assert.deepEqual(await spends(pool), [{ idempotency_key: "approved-reuse", usd: 1, day: new Date().toISOString().slice(0, 10) }]);
+  } finally {
+    await drop();
+  }
+});
+
+test("an approval that expires while the executor runs is refused as expired and counts nothing", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, during, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    const asked = await swap("expires-mid-run", 15);
+    assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
+    during.push(() => pool.query("UPDATE approvals SET expires_at = now() - interval '1 second' WHERE idempotency_key = 'expires-mid-run'"));
+    const late = await swap("expires-mid-run", 15);
+    assert.equal(late.isError, true);
+    assert.match(late.text, /expired/);
+    const spends = await pool.query("SELECT 1 FROM agent_spends WHERE idempotency_key = 'expires-mid-run'");
+    assert.equal(spends.rowCount, 0);
+    const planned = await pool.query("SELECT 1 FROM audit_events WHERE action = 'mcp.swap_planned' AND detail->>'idempotencyKey' = 'expires-mid-run'");
+    assert.equal(planned.rowCount, 0);
+    assert.match((await swap("expires-mid-run", 15)).text, /expired/);
   } finally {
     await drop();
   }
