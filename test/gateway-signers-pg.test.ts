@@ -17,10 +17,21 @@ const RP = { rpId: "whale.example", origin: "https://whale.example" };
 const evm = privateKeyToAccount(`0x${"42".repeat(32)}`);
 const solanaKey = createPrivateKey({ key: Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), Buffer.alloc(32, 0x24)]), format: "der", type: "pkcs8" });
 const solanaAddress = bs58.encode(createPublicKey(solanaKey).export({ format: "der", type: "spki" }).subarray(12));
+const officeKeys = {
+  evm: privateKeyToAccount(`0x${"43".repeat(32)}`),
+  solanaKey: createPrivateKey({ key: Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), Buffer.alloc(32, 0x25)]), format: "der", type: "pkcs8" }),
+};
 
-async function proofs(walletId: string, code: string) {
+async function proofs(walletId: string, code: string, keys = { evm, solanaKey }) {
   const message = registrationMessage(walletId, code);
-  return { code, walletId, evmAddress: evm.address, solanaAddress, evmSignature: await evm.signMessage({ message }), solanaSignature: bs58.encode(sign(null, Buffer.from(message), solanaKey)) };
+  return {
+    code,
+    walletId,
+    evmAddress: keys.evm.address,
+    solanaAddress: bs58.encode(createPublicKey(keys.solanaKey).export({ format: "der", type: "spki" }).subarray(12)),
+    evmSignature: await keys.evm.signMessage({ message }),
+    solanaSignature: bs58.encode(sign(null, Buffer.from(message), keys.solanaKey)),
+  };
 }
 
 test("a self-hosted signer registers with a passkey-issued code and proofs of both keys, then pulls and answers jobs", { skip: !TEST_DATABASE_URL }, async () => {
@@ -140,12 +151,36 @@ test("a second registration for a wallet, or the same keys on another wallet, is
     const { app, walletId } = signer;
     const again = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, signer.spareCode as string) });
     assert.equal(again.statusCode, 400, again.body);
-    assert.match(again.json().detail, /already has a signer/);
+    assert.match(again.json().detail, /not waiting for a signer/);
     const other = await signer.newWallet("office");
     const reused = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(other, await signer.issueCode(other)) });
     assert.equal(reused.statusCode, 400, reused.body);
     assert.match(reused.json().detail, /another wallet/);
     assert.equal(await signer.status(other), "pending");
+  } finally {
+    await signer.close();
+  }
+});
+
+test("a code issued before a freeze registers nothing, and the wallet comes back still waiting for a signer", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const { app, pool, user } = signer;
+    const walletId = await signer.newWallet("office");
+    const code = await signer.issueCode(walletId);
+    const unused = await signer.issueCode(walletId);
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${walletId}/freeze`, headers: user.headers, payload: {} })).statusCode, 200);
+    const refused = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, code, officeKeys) });
+    assert.equal(refused.statusCode, 400, refused.body);
+    assert.equal(refused.json().error, "registration_refused");
+    const thawed = await app.inject({ method: "POST", url: `/api/wallets/${walletId}/unfreeze`, headers: user.headers, payload: { assertion: await signer.approve(unfreezeAction(walletId)) } });
+    assert.equal(thawed.statusCode, 200, thawed.body);
+    assert.equal(await signer.status(walletId), "pending");
+    const left = await pool.query("SELECT (SELECT count(*)::int FROM signers WHERE wallet_id = $1) AS signers, (SELECT count(*)::int FROM wallet_addresses WHERE wallet_id = $1) AS addresses", [walletId]);
+    assert.deepEqual(left.rows[0], { signers: 0, addresses: 0 });
+    const voided = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, unused, officeKeys) });
+    assert.equal(voided.statusCode, 400, voided.body);
+    assert.match(voided.json().detail, /unknown, used, expired/);
   } finally {
     await signer.close();
   }

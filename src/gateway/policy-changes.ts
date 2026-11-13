@@ -152,6 +152,7 @@ export async function freezeWallets(pool: pg.Pool, accountId: string, walletId: 
     );
     const walletIds = frozen.rows.map((row) => row.id);
     for (const id of walletIds) await audit(client, { accountId, walletId: id, actor: "user", action: "wallet.frozen", detail: { at: new Date(now).toISOString() } });
+    await client.query("UPDATE signer_registrations SET expires_at = $2 WHERE wallet_id = ANY($1::uuid[]) AND used_at IS NULL AND expires_at > $2", [walletIds, new Date(now)]);
     const cancelled = await client.query<{ id: string; wallet_id: string }>(
       "UPDATE policy_changes SET status = 'cancelled', decided_at = $2 WHERE wallet_id = ANY($1::uuid[]) AND status = 'pending' RETURNING id, wallet_id",
       [walletIds, new Date(now)],

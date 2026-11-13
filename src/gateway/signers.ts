@@ -48,41 +48,41 @@ function provesSolana(message: string | Buffer, address: string, signature: stri
 
 export type Registration = { code: string; walletId: string; evmAddress: string; solanaAddress: string; evmSignature: string; solanaSignature: string };
 
-// The code is spent before the proofs are checked, so a guessed or stolen code gets one try.
 export async function registerSigner(pool: pg.Pool, input: Registration, now = Date.now()): Promise<{ signerId: string; token: string } | string> {
-  return inTransaction(pool, async (client) => {
-    const spent = await client.query<{ account_id: string; wallet_id: string }>(
-      "UPDATE signer_registrations SET used_at = $2 WHERE code_hash = $1 AND used_at IS NULL AND expires_at > $2 RETURNING account_id, wallet_id",
-      [secretHash(input.code), new Date(now)],
-    );
-    const row = spent.rows[0];
-    if (!row || row.wallet_id !== input.walletId) return "the registration code is unknown, used, expired, or for another wallet";
-    const message = registrationMessage(input.walletId, input.code);
-    if (!(await provesEvm(message, input.evmAddress, input.evmSignature))) return "the EVM signature does not prove the EVM address";
-    if (!provesSolana(message, input.solanaAddress, input.solanaSignature)) return "the Solana signature does not prove the Solana address";
-    await client.query("SELECT 1 FROM wallets WHERE id = $1 FOR UPDATE", [row.wallet_id]);
-    const existing = await client.query("SELECT 1 FROM signers WHERE wallet_id = $1", [row.wallet_id]);
-    if ((existing.rowCount ?? 0) > 0) return "this wallet already has a signer";
-    const taken = await client.query("SELECT 1 FROM wallet_addresses WHERE (family = 'evm' AND lower(address) = lower($1)) OR (family = 'solana' AND address = $2)", [
-      input.evmAddress,
-      input.solanaAddress,
-    ]);
-    if ((taken.rowCount ?? 0) > 0) return "these keys already belong to another wallet";
-    const signerId = randomBytes(8).toString("hex");
-    const secret = randomBytes(32).toString("base64url");
-    await client.query("INSERT INTO signers (id, account_id, wallet_id, token_hash, evm_address, solana_address) VALUES ($1, $2, $3, $4, $5, $6)", [
-      signerId,
-      row.account_id,
-      row.wallet_id,
-      secretHash(secret),
-      input.evmAddress,
-      input.solanaAddress,
-    ]);
-    await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2), ($1, 'solana', $3)", [row.wallet_id, input.evmAddress, input.solanaAddress]);
-    await client.query("UPDATE wallets SET status = 'active' WHERE id = $1 AND status = 'pending'", [row.wallet_id]);
-    await audit(client, { accountId: row.account_id, walletId: row.wallet_id, actor: "system", action: "signer.registered", detail: { signerId } });
-    return { signerId, token: `wsig_${signerId}_${secret}` };
-  });
+  return inTransaction(pool, (client) => registerLocked(client, input, now));
+}
+
+async function registerLocked(client: pg.PoolClient, input: Registration, now: number): Promise<{ signerId: string; token: string } | string> {
+  const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = $1 FOR UPDATE", [input.walletId]);
+  const spent = await client.query<{ account_id: string; wallet_id: string }>(
+    "UPDATE signer_registrations SET used_at = $2 WHERE code_hash = $1 AND used_at IS NULL AND expires_at > $2 RETURNING account_id, wallet_id",
+    [secretHash(input.code), new Date(now)],
+  );
+  const row = spent.rows[0];
+  if (!row || row.wallet_id !== input.walletId) return "the registration code is unknown, used, expired, or for another wallet";
+  if (wallet.rows[0]?.status !== "pending") return "the wallet is not waiting for a signer";
+  const message = registrationMessage(input.walletId, input.code);
+  if (!(await provesEvm(message, input.evmAddress, input.evmSignature))) return "the EVM signature does not prove the EVM address";
+  if (!provesSolana(message, input.solanaAddress, input.solanaSignature)) return "the Solana signature does not prove the Solana address";
+  const taken = await client.query("SELECT 1 FROM wallet_addresses WHERE (family = 'evm' AND lower(address) = lower($1)) OR (family = 'solana' AND address = $2)", [
+    input.evmAddress,
+    input.solanaAddress,
+  ]);
+  if ((taken.rowCount ?? 0) > 0) return "these keys already belong to another wallet";
+  const signerId = randomBytes(8).toString("hex");
+  const secret = randomBytes(32).toString("base64url");
+  await client.query("INSERT INTO signers (id, account_id, wallet_id, token_hash, evm_address, solana_address) VALUES ($1, $2, $3, $4, $5, $6)", [
+    signerId,
+    row.account_id,
+    row.wallet_id,
+    secretHash(secret),
+    input.evmAddress,
+    input.solanaAddress,
+  ]);
+  await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2), ($1, 'solana', $3)", [row.wallet_id, input.evmAddress, input.solanaAddress]);
+  await client.query("UPDATE wallets SET status = 'active' WHERE id = $1 AND status = 'pending'", [row.wallet_id]);
+  await audit(client, { accountId: row.account_id, walletId: row.wallet_id, actor: "system", action: "signer.registered", detail: { signerId } });
+  return { signerId, token: `wsig_${signerId}_${secret}` };
 }
 
 export type SignerContext = { signerId: string; accountId: string; walletId: string };
