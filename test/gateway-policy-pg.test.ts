@@ -169,3 +169,24 @@ test("two widenings that race answer one 202 and one 409", { skip: !TEST_DATABAS
     await drop();
   }
 });
+
+test("freezing cancels a pending widening, so it never applies after unfreezing", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, wallet, approve, put, advance, now, drop } = await harness();
+  try {
+    const wider = { ...DEFAULT_POLICY, maxTxUsd: 80 };
+    const scheduled = await put({ baseVersion: 1, document: wider, assertion: await approve(widenAction(wallet.id, 1, wider)) });
+    assert.equal(scheduled.statusCode, 202);
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: user.headers, payload: {} })).statusCode, 200);
+    assert.equal((await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/policy/pending`, headers: user.headers })).json().pending, null);
+    const thawed = await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/unfreeze`, headers: user.headers, payload: { assertion: await approve(unfreezeAction(wallet.id)) } });
+    assert.equal(thawed.statusCode, 200);
+    advance(WIDEN_DELAY_MS + 1);
+    assert.equal(await applyDueChanges(pool, now()), 0);
+    const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
+    assert.deepEqual([listed.policyVersion, listed.policy.maxTxUsd], [1, DEFAULT_POLICY.maxTxUsd]);
+    const cancelled = await pool.query("SELECT detail FROM audit_events WHERE action = 'policy.widen_cancelled'");
+    assert.deepEqual(cancelled.rows.map((row) => row.detail), [{ changeId: scheduled.json().changeId, reason: "frozen" }]);
+  } finally {
+    await drop();
+  }
+});

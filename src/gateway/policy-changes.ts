@@ -128,12 +128,20 @@ export async function pendingChange(pool: pg.Pool, accountId: string, walletId: 
 }
 
 export async function freezeWallets(pool: pg.Pool, accountId: string, walletId: string | null, now = Date.now()): Promise<number> {
-  const frozen = await pool.query<{ id: string }>(
-    "UPDATE wallets SET status = 'frozen' WHERE account_id = $1 AND ($2::uuid IS NULL OR id = $2::uuid) AND status IN ('pending', 'active') RETURNING id",
-    [accountId, walletId],
-  );
-  for (const row of frozen.rows) await audit(pool, { accountId, walletId: row.id, actor: "user", action: "wallet.frozen", detail: { at: new Date(now).toISOString() } });
-  return frozen.rows.length;
+  return inTransaction(pool, async (client) => {
+    const frozen = await client.query<{ id: string }>(
+      "UPDATE wallets SET status = 'frozen' WHERE account_id = $1 AND ($2::uuid IS NULL OR id = $2::uuid) AND status IN ('pending', 'active') RETURNING id",
+      [accountId, walletId],
+    );
+    const walletIds = frozen.rows.map((row) => row.id);
+    for (const id of walletIds) await audit(client, { accountId, walletId: id, actor: "user", action: "wallet.frozen", detail: { at: new Date(now).toISOString() } });
+    const cancelled = await client.query<{ id: string; wallet_id: string }>(
+      "UPDATE policy_changes SET status = 'cancelled', decided_at = $2 WHERE wallet_id = ANY($1::uuid[]) AND status = 'pending' RETURNING id, wallet_id",
+      [walletIds, new Date(now)],
+    );
+    for (const row of cancelled.rows) await audit(client, { accountId, walletId: row.wallet_id, actor: "user", action: "policy.widen_cancelled", detail: { changeId: row.id, reason: "frozen" } });
+    return walletIds.length;
+  });
 }
 
 // Unfreezing loosens the wallet, so it takes a passkey. The wallet returns to active only if its enclave was complete.
