@@ -65,7 +65,7 @@ EVM: set `MEV_RPC_URL_1=https://rpc.flashbots.net` for Ethereum. Other chains us
 
 | Family | Swap | Transfer | Source |
 | --- | --- | --- | --- |
-| EVM | 180,000 gas | 65,000 gas | `eth_gasPrice` from `RPC_URL_<chainId>`, priced in the native coin |
+| EVM | 180,000 gas | 65,000 gas | `eth_gasPrice` from `RPC_URL_<chainId>` and the `RPC_URLS_<chainId>` list, priced in the native coin |
 | Solana | 5,000 lamports plus the median recent priority fee over 200,000 compute units | Same, over 30,000 units | The Solana RPC |
 
 The native coin price comes from CoinGecko. A chain whose RPC or price does not answer within 2.5 s falls back to the gas ceiling above and is marked `static`. Results cache for 30 s. These numbers compare chains. They are not a fee promise: multi-hop routes cost more, and OP-stack chains add an L1 data fee that is left out.

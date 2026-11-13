@@ -1,6 +1,7 @@
 import { chainByKey, feeRankOf, gasCeilingUsd } from "./chains.js";
 import { NATIVE_COINGECKO_ID } from "./prices.js";
-import { evmReadClient, solanaConnection } from "./rpc.js";
+import { rpcLists } from "./config/load.js";
+import { evmReadClient, firstOk, solanaConnection } from "./rpc.js";
 import { readVendorText, vendorResponse } from "./vendor-fetch.js";
 
 // Typical work per operation. These are planning numbers for comparing chains, not a fee promise: a route with many
@@ -30,19 +31,16 @@ function median(values: readonly number[]): number | null {
 }
 
 export function envCostReaders(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = fetch): CostReaders {
-  const rpcOf = (key: string) => {
-    const spec = chainByKey(key);
-    return spec ? env[spec.rpcEnv] ?? spec.defaultRpc : null;
-  };
+  const rpcs = rpcLists(env);
   return {
     async evmGasPriceWei(chainKey) {
-      const url = rpcOf(chainKey);
-      return url ? within(evmReadClient([url]).getGasPrice()) : null;
+      const urls = rpcs[chainKey];
+      return urls ? within(evmReadClient(urls).getGasPrice()) : null;
     },
     async solanaPriorityMicroLamports() {
-      const url = rpcOf("solana");
-      if (!url) return null;
-      const fees = await within(solanaConnection(url).getRecentPrioritizationFees());
+      const urls = rpcs.solana;
+      if (!urls) return null;
+      const fees = await within(firstOk(urls.map((url) => () => solanaConnection(url).getRecentPrioritizationFees())));
       return fees ? median(fees.map((entry) => entry.prioritizationFee)) : null;
     },
     async nativeUsd(symbols) {

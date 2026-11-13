@@ -219,7 +219,7 @@ export function rpcListEnv(rpcEnv: string): string | null {
   return rpcEnv.includes("RPC_URL") ? rpcEnv.replace("RPC_URL", "RPC_URLS") : null;
 }
 
-function rpcLists(env: NodeJS.ProcessEnv): Record<string, string[]> {
+export function rpcLists(env: NodeJS.ProcessEnv): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const chain of CHAINS) {
     const listEnv = rpcListEnv(chain.rpcEnv);

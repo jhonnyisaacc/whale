@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
 import type { CommandDeps } from "../src/commands.js";
 import { registerHostedRoutes } from "../src/executor-server/hosted.js";
@@ -42,6 +44,26 @@ test("a price feed that answers 200 with a body that is not JSON falls back to t
   const html: typeof fetch = async () => new Response("<html>rate limited</html>", { status: 200, headers: { "content-type": "text/html" } });
   const costs = await networkCosts(["base"], { ...envCostReaders({}, html), evmGasPriceWei: async () => GWEI / 100n });
   assert.deepEqual(costs.map((cost) => [cost.chainKey, cost.source]), [["base", "static"]]);
+});
+
+test("live gas reads use the RPC_URLS_<id> list, falling through to the next URL when one fails", async () => {
+  const server = createServer((request, response) => {
+    let raw = "";
+    request.on("data", (chunk: Buffer) => (raw += chunk.toString()));
+    request.on("end", () => {
+      if (request.url === "/down") return response.writeHead(500).end();
+      const body = JSON.parse(raw) as { id: number };
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: "0x3b9aca00" }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    const live = envCostReaders({ RPC_URLS_8453: `http://127.0.0.1:${port}/down,http://127.0.0.1:${port}/up` });
+    assert.equal(await live.evmGasPriceWei("base"), GWEI);
+  } finally {
+    server.close();
+  }
 });
 
 test("costs are cached for thirty seconds per chain set", async () => {
