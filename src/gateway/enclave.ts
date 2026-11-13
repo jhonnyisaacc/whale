@@ -56,10 +56,12 @@ async function recordSubOrg(pool: pg.Pool, accountId: string, walletId: string, 
   });
 }
 
-async function releaseClaim(pool: pg.Pool, accountId: string, walletId: string, credentialId: string): Promise<void> {
+async function releaseClaim(pool: pg.Pool, accountId: string, walletId: string, credentialId: string, reason: string): Promise<void> {
   await inTransaction(pool, async (client) => {
     const released = await client.query("UPDATE wallets SET root_credential_id = NULL, root_claimed_at = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [walletId, credentialId]);
-    if (released.rowCount === 1) await client.query("DELETE FROM passkeys WHERE credential_id = $1 AND account_id = $2", [credentialId, accountId]);
+    if (released.rowCount !== 1) return;
+    await client.query("DELETE FROM passkeys WHERE credential_id = $1 AND account_id = $2", [credentialId, accountId]);
+    await audit(client, { accountId, walletId, actor: "system", action: "passkey.removed", detail: { credentialId, reason } });
   });
 }
 
@@ -69,7 +71,7 @@ async function settleClaim(pool: pg.Pool, turnkey: TurnkeyParent | null, account
   if (!wallet.claim_abandoned || !turnkey) return "enclave_in_progress";
   const found = await turnkey.findSubOrganization(subOrgName(wallet.id));
   if (!found) {
-    await releaseClaim(pool, accountId, wallet.id, wallet.root_credential_id);
+    await releaseClaim(pool, accountId, wallet.id, wallet.root_credential_id, "turnkey_has_no_sub_organization");
     return "free";
   }
   await recordSubOrg(pool, accountId, wallet.id, wallet.root_credential_id, found);
@@ -137,8 +139,11 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
         },
       });
     } catch (error) {
-      if (error instanceof TurnkeyRefused) await releaseClaim(pool, session.accountId, wallet.id, credentialId);
-      else await pool.query("UPDATE wallets SET root_claimed_at = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [wallet.id, credentialId]);
+      if (error instanceof TurnkeyRefused) {
+        await releaseClaim(pool, session.accountId, wallet.id, credentialId, "turnkey_refused");
+        return reply.code(502).send({ error: "turnkey_refused", detail: error.message });
+      }
+      await pool.query("UPDATE wallets SET root_claimed_at = NULL WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL", [wallet.id, credentialId]);
       throw error;
     }
     await recordSubOrg(pool, session.accountId, wallet.id, credentialId, created);

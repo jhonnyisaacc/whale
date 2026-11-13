@@ -242,7 +242,10 @@ for (const fault of ["unavailable", "refused"] as const) {
         return app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave`, headers: user.headers, payload: { credential: authenticator.register(options.challenge), label: "Mac" } });
       };
       fake.faults.nextCreate = fault;
-      assert.equal((await submit()).statusCode, 500);
+      const failed = await submit();
+      assert.deepEqual([failed.statusCode, failed.json().error], fault === "refused" ? [502, "turnkey_refused"] : [500, "internal_error"]);
+      const removed = await gateway.pool.query("SELECT detail FROM audit_events WHERE action = 'passkey.removed'");
+      assert.deepEqual(removed.rows.map((row) => row.detail), fault === "refused" ? [{ credentialId: authenticator.credentialId.toString("base64url"), reason: "turnkey_refused" }] : []);
       const claim = (await gateway.pool.query("SELECT root_credential_id FROM wallets WHERE id = $1", [walletId])).rows[0]?.root_credential_id;
       assert.equal(claim, fault === "refused" ? null : authenticator.credentialId.toString("base64url"));
       const retried = await submit();
