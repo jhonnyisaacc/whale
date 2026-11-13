@@ -250,12 +250,13 @@ impl Policy {
                         .reasons
                         .push("an approval may only name a listed router and send no value".into());
                 }
-                match self.daily_limits.get(&key(token)) {
-                    Some(limit) if amount <= *limit => {}
-                    _ => decision
-                        .reasons
-                        .push("an approval may not exceed the token's daily limit".into()),
+                if self.settlers.values().any(|set| set.contains(&spender)) {
+                    decision.reasons.push(format!(
+                        "an approval may not name 0x{}, a pinned Settler, whose actions can spend it",
+                        hex::encode(spender)
+                    ));
                 }
+                self.spend(&mut decision, key(token), amount);
             }
             Call::Swap { router, terms } => {
                 if !routers.contains(&router) {

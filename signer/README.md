@@ -40,7 +40,7 @@ Everything not listed is refused. See `vectors/policy.json` for a full example.
 | --- | --- |
 | Native transfer | `to` is in `evm.destinations`, and the value fits the `<chainId>:native` daily limit |
 | ERC-20 `transfer` | Recipient in `evm.destinations`, no native value, and the amount fits the `<chainId>:<token>` daily limit |
-| ERC-20 `approve` | Spender is a router listed for the chain, and the amount is at most the token's daily limit. An unlimited approval is refused |
+| ERC-20 `approve` | Spender is a router listed for the chain and is not a Settler in `evm.settlers`, no native value, and the amount counts against the `<chainId>:<token>` daily limit. An unlimited approval is refused. A swap that needs an approval first therefore counts twice |
 | KyberSwap `swap` / `swapSimpleMode`, 0x `AllowanceHolder.exec` into `Settler.execute`, direct `Settler.execute` | The router is listed. The decoded recipient is this wallet. For 0x, the call reaches a Settler listed in `evm.settlers` for the chain, and `exec`'s `operator` equals its `target`. For KyberSwap, the executor (`caller` or `callTarget`), a nonzero `approveTarget`, every `srcReceivers` entry, and every `feeReceivers` entry are listed in `evm.kyberExecutors` for the chain, and the `srcAmounts` add up to no more than `amount`. The sold token and amount count against the daily limit. Native value stays at or under `evm.maxValueWei` |
 | Anything else | Refused, unless `allowUndecodedRouterCalls` is true and the target is a listed router |
 

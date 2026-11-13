@@ -173,3 +173,64 @@ fn concurrent_jobs_never_sign_past_the_daily_limit() {
         );
     }
 }
+
+fn approve_job(nonce: u64, spender: &str, amount: u128) -> Value {
+    serde_json::json!({
+        "id": format!("approve-{nonce}"),
+        "kind": "evm",
+        "chainId": 8453,
+        "tx": {
+            "nonce": nonce.to_string(),
+            "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            "value": "0",
+            "data": format!("0x095ea7b3{:0>64}{amount:064x}", spender.trim_start_matches("0x")),
+            "gas": "100000",
+            "maxFeePerGas": "1000000000",
+            "maxPriorityFeePerGas": "1000000"
+        }
+    })
+}
+
+#[test]
+fn approvals_never_name_a_settler_and_count_against_the_day() {
+    let settler = "0x5555555555555555555555555555555555555555";
+    let holder = "0x0000000000001fF3684f28c67538d4D072C22734";
+    let mut file = load("policy.json");
+    file["evm"]["routers"]["8453"]
+        .as_array_mut()
+        .unwrap()
+        .push(settler.into());
+    let policy = Policy::parse(&file).expect("policy");
+    let keys = keys();
+    let ledger = fresh_ledger("ledger-approvals");
+    let to_settler = run_job(
+        &approve_job(0, settler, 1_000_000),
+        &policy,
+        &keys,
+        &ledger,
+        DAY,
+    );
+    assert_eq!(to_settler["decision"], "refused", "{to_settler}");
+    assert!(
+        to_settler["reasons"].to_string().contains("pinned Settler"),
+        "{to_settler}"
+    );
+    let decisions: Vec<Value> = (1..=2)
+        .map(|nonce| {
+            run_job(
+                &approve_job(nonce, holder, 6_000_000),
+                &policy,
+                &keys,
+                &ledger,
+                DAY,
+            )["decision"]
+                .clone()
+        })
+        .collect();
+    assert_eq!(
+        decisions,
+        ["signed", "refused"],
+        "two 6 USDC approvals against a 10 USDC day"
+    );
+    let _ = std::fs::remove_file(ledger);
+}
