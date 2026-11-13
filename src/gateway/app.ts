@@ -12,6 +12,7 @@ import { delegationFromEnv, turnkeyParentFromEnv, type DelegationConfig, type Tu
 import { registerPasskeyRoutes } from "./routes-passkeys.js";
 import { registerPolicyRoutes } from "./routes-policy.js";
 import { registerWalletRoutes } from "./routes-wallets.js";
+import { registerStatic } from "./static.js";
 import type { MetadataFetch } from "./oauth-clients.js";
 
 export type GatewayDeps = {
@@ -25,6 +26,7 @@ export type GatewayDeps = {
   fetchDocument?: MetadataFetch;
   turnkey?: TurnkeyParent | null;
   delegation?: DelegationConfig | null;
+  webDir?: string;
 };
 
 export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> {
@@ -44,5 +46,6 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   });
   registerOAuthRoutes(app, { config: deps.config, pool: deps.pool, now, ...(deps.fetchDocument ? { fetchDocument: deps.fetchDocument } : {}) });
   registerMcpRoutes(app, { config: deps.config, pool: deps.pool, executor: deps.executor ?? (deps.config.executor ? executorClient(deps.config.executor, fetchImpl) : null) });
+  if (deps.webDir !== undefined) registerStatic(app, deps.webDir);
   return app;
 }

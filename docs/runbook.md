@@ -26,11 +26,29 @@ The file mode is `0600`. `*.keystore.json` is gitignored. Live mode refuses `KEY
 
 ```bash
 pnpm run build
+pnpm --filter @whale/web run build
 ```
+
+The first command builds the server into `dist/`. The second builds the dashboard into `web/dist`. The gateway refuses to start without `web/dist/index.html`. The executor, the CLI, and the MCP server need only the first command.
 
 ## Migrate the hosted schema
 
 `DATABASE_URL=... pnpm run migrate` applies the numbered files in `migrations/` under an advisory lock. A second run prints `migrations: up to date`. It refuses to run when an applied file changed or when the database is ahead of the build. The executor tables still create themselves at boot.
+
+## Dashboard
+
+`web/` is a Vite and React app in the pnpm workspace. `pnpm run check` builds it. `pnpm --filter @whale/web run dev` serves it on `http://localhost:5173` and proxies the server routes to a gateway on port 8080. For local sign-in, start that gateway with `GATEWAY_PUBLIC_URL=http://localhost:5173` and register `http://localhost:5173/auth/google/callback` on the Google client.
+
+The gateway serves `web/dist`:
+- Each page goes out with `no-cache` and a CSP that allows only this origin, plus `https://api.turnkey.com` for the delegation step.
+- Hashed assets cache for a year.
+- Unknown paths under `/api/`, `/auth/`, `/oauth/`, `/mcp`, and `/.well-known/` stay JSON 404s.
+
+The pages are:
+- **Sign-in.**
+- **Wallets:** create an enclave wallet.
+- **Wallet:** enclave setup, deposit addresses, the policy editor with step-up and the pending widening, agents with one-time keys, freeze and unfreeze.
+- **`/connect`:** the OAuth consent page. It names the client first and offers Google only after that.
 
 ## Start the gateway
 

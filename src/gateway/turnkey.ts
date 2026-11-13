@@ -120,6 +120,13 @@ function normalized(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+export function allowPoliciesMatch(policies: SubOrgState["policies"], expected: { effect: string; consensus: string; condition: string }[]): boolean {
+  const key = (policy: { effect: string; consensus: string; condition: string }) => `${policy.effect}|${normalized(policy.consensus)}|${normalized(policy.condition)}`;
+  const wanted = expected.map(key);
+  const allows = policies.filter((policy) => policy.effect === "EFFECT_ALLOW").map(key);
+  return allows.length === wanted.length && wanted.every((entry) => allows.includes(entry));
+}
+
 // Whale activates a wallet only after reading Turnkey and finding: the user's passkey as the only root, Whale's key on
 // a separate non-root user, and no allow policy beyond the expected ones. The browser's word is never enough.
 export function verifyDelegation(
@@ -136,9 +143,7 @@ export function verifyDelegation(
   if (delegates.length !== 1 || !delegate) return { problems: [...problems, "exactly one user must hold Whale's delegate key"] };
   if (state.rootUserIds.includes(delegate.userId)) problems.push("Whale's delegate must not be root");
   if (delegate.credentialIds.length > 0 || delegate.apiPublicKeys.length !== 1) problems.push("Whale's delegate must hold only its one API key");
-  const wanted = input.expected(delegate.userId).map((policy) => `${policy.effect}|${normalized(policy.consensus)}|${normalized(policy.condition)}`);
-  const allows = state.policies.filter((policy) => policy.effect === "EFFECT_ALLOW").map((policy) => `${policy.effect}|${normalized(policy.consensus)}|${normalized(policy.condition)}`);
-  if (allows.length !== wanted.length || !wanted.every((entry) => allows.includes(entry))) problems.push("the allow policies must be exactly the ones Whale rendered");
+  if (!allowPoliciesMatch(state.policies, input.expected(delegate.userId))) problems.push("the allow policies must be exactly the ones Whale rendered");
   return problems.length === 0 ? { delegateUserId: delegate.userId } : { problems };
 }
 

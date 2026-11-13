@@ -6,7 +6,7 @@ import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
 import { addPasskey, assertionPayload, REFUSED_STATUS, registrationOptions, registrationPayload } from "./passkeys.js";
 import { storedPolicySchema } from "./policy.js";
-import { DELEGATE_USER_NAME, expectedPolicies, TurnkeyNotSubmitted, turnkeyTransports, verifyDelegation, type CreatedSubOrg, type CreateOutcome, type DelegationConfig, type NotSubmittedReason, type TurnkeyParent } from "./turnkey.js";
+import { allowPoliciesMatch, DELEGATE_USER_NAME, expectedPolicies, TurnkeyNotSubmitted, turnkeyTransports, verifyDelegation, type CreatedSubOrg, type CreateOutcome, type DelegationConfig, type NotSubmittedReason, type TurnkeyParent } from "./turnkey.js";
 import type { Registration } from "./webauthn.js";
 
 const walletParam = z.object({ id: z.uuid() });
@@ -189,11 +189,14 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const state = await deps.turnkey.readSubOrganization(wallet.turnkey_sub_org_id);
     const delegate = state.users.find((user) => user.apiPublicKeys.some((key) => key.toLowerCase() === deps.delegation?.delegatePublicKey));
     const policy = storedPolicySchema.parse(wallet.document);
+    const policies = delegate ? expectedPolicies({ delegateUserId: delegate.userId, walletId: wallet.turnkey_wallet_id, solanaAddress: wallet.solana, policy, config: deps.delegation }) : null;
     return {
       subOrganizationId: wallet.turnkey_sub_org_id,
+      rootCredentialId: wallet.root_credential_id,
       delegateUser: { userName: DELEGATE_USER_NAME, apiKeys: [{ apiKeyName: "whale-executor", publicKey: deps.delegation.delegatePublicKey, curveType: "API_KEY_CURVE_P256" }], authenticators: [], oauthProviders: [], userTags: [] },
       delegateUserId: delegate?.userId ?? null,
-      policies: delegate ? expectedPolicies({ delegateUserId: delegate.userId, walletId: wallet.turnkey_wallet_id, solanaAddress: wallet.solana, policy, config: deps.delegation }) : null,
+      policies,
+      policiesInPlace: policies !== null && allowPoliciesMatch(state.policies, policies),
     };
   });
 

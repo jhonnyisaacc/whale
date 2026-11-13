@@ -25,6 +25,10 @@ function listSetting(yaml: string, key: string): string[] {
     .map((line) => line.slice(2).replace(/\s+#.*$/, ""));
 }
 
+function workspacePackages(): string[] {
+  return listSetting(read("pnpm-workspace.yaml"), "packages");
+}
+
 function registryImages(yaml: string): string[] {
   const lines = yaml.split("\n");
   const indent = (line: string) => line.length - line.trimStart().length;
@@ -62,20 +66,20 @@ test("installs wait a week, keep publisher trust, and run no dependency build sc
   assert.deepEqual(listSetting(workspace, "trustPolicyExclude"), ["undici-types@6.21.0"], "a new trust exception needs review here");
 });
 
-test("package.json pins every dependency and the package manager, and runs no lifecycle script", () => {
-  const pkg = JSON.parse(read("package.json")) as {
-    packageManager?: string;
-    scripts: Record<string, string>;
-    dependencies: Record<string, string>;
-    devDependencies: Record<string, string>;
-  };
-  for (const [name, version] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
-    assert.match(version, /^\d+\.\d+\.\d+$/, `${name} is pinned to an exact version`);
+test("every package.json pins every dependency, the root pins the package manager, and none runs a lifecycle script", () => {
+  const manifests = ["package.json", ...workspacePackages().map((dir) => `${dir}/package.json`)];
+  assert.ok(manifests.includes("web/package.json"), "the web workspace is checked");
+  for (const manifest of manifests) {
+    const pkg = JSON.parse(read(manifest)) as { scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    for (const [name, version] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
+      assert.match(version, /^\d+\.\d+\.\d+$/, `${manifest}: ${name} is pinned to an exact version`);
+    }
+    for (const hook of ["preinstall", "install", "postinstall", "prepare", "prepack", "postpack", "prepublish", "prepublishOnly"]) {
+      assert.equal(hook in (pkg.scripts ?? {}), false, `${manifest}: ${hook} runs on install or publish`);
+    }
   }
-  assert.match(pkg.packageManager ?? "", /^pnpm@\d+\.\d+\.\d+\+sha512\.[0-9a-f]{128}$/);
-  for (const hook of ["preinstall", "install", "postinstall", "prepare", "prepack", "postpack", "prepublish", "prepublishOnly"]) {
-    assert.equal(hook in pkg.scripts, false, `${hook} runs on install or publish`);
-  }
+  const root = JSON.parse(read("package.json")) as { packageManager?: string };
+  assert.match(root.packageManager ?? "", /^pnpm@\d+\.\d+\.\d+\+sha512\.[0-9a-f]{128}$/);
   for (const lockfile of ["package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lock", "bun.lockb"]) {
     assert.equal(existsSync(path(lockfile)), false, `${lockfile} would bypass the pnpm policy`);
   }

@@ -3,8 +3,8 @@ import type pg from "pg";
 import { z } from "zod";
 import { createAgent, listAgents, revokeAgent, rotateApiKey } from "./agents.js";
 import { perMinute, requireSession } from "./http.js";
-import { agentLimitsSchema, limitsWithin } from "./policy.js";
-import { createWallet, LEVELS, listWallets } from "./wallets.js";
+import { ACTIONS, agentLimitsSchema, HOSTED_CHAINS, limitsWithin } from "./policy.js";
+import { AVAILABLE_LEVELS, createWallet, LEVELS, listWallets } from "./wallets.js";
 
 const idParam = z.object({ id: z.uuid() });
 const label = z.string().trim().min(1).max(64);
@@ -21,6 +21,8 @@ function notFound(reply: FastifyReply) {
 }
 
 export function registerWalletRoutes(app: FastifyInstance, pool: pg.Pool): void {
+  app.get("/api/meta", async () => ({ hostedChains: HOSTED_CHAINS, actions: ACTIONS, levels: LEVELS, availableLevels: AVAILABLE_LEVELS }));
+
   app.get("/api/wallets", async (request, reply) => {
     const session = await requireSession(pool, request, reply);
     if (!session) return reply;

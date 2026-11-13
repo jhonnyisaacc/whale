@@ -150,7 +150,10 @@ test("an enclave wallet gets its passkey as Turnkey root, then activates only af
     state.users.push({ userId: delegateUserId, userName: "whale-delegate", credentialIds: [], apiPublicKeys: [DELEGATE_KEY] });
     const after = (await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/enclave/delegation`, headers: user.headers })).json();
     assert.equal(after.delegateUserId, delegateUserId);
+    assert.equal(after.policiesInPlace, false);
     state.policies = after.policies;
+    const retry = (await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/enclave/delegation`, headers: user.headers })).json();
+    assert.equal(retry.policiesInPlace, true);
     state.rootUserIds.push(delegateUserId);
     assert.match(JSON.stringify((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/enclave/confirm`, headers: user.headers, payload: {} })).json().problems), /must not be root/);
     state.rootUserIds.pop();
