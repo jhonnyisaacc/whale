@@ -51,7 +51,7 @@ export function migrationLabel(migration: Pick<Migration, "version" | "name">): 
 }
 
 // Each migration runs in its own transaction with its ledger row, so a failure leaves no half-applied file.
-export async function migrate(connection: string | pg.ClientConfig, dir: string): Promise<string[]> {
+export async function migrate(connection: string | pg.ClientConfig, dir: string, { lockTimeoutMs = 5_000 }: { lockTimeoutMs?: number } = {}): Promise<string[]> {
   const local = loadMigrations(dir);
   const client = new pg.Client(typeof connection === "string" ? { connectionString: connection } : connection);
   await client.connect();
@@ -64,6 +64,7 @@ export async function migrate(connection: string | pg.ClientConfig, dir: string)
       for (const migration of pendingMigrations(local, applied.rows)) {
         await client.query("BEGIN");
         try {
+          await client.query("SELECT set_config('lock_timeout', $1, true)", [`${lockTimeoutMs}ms`]);
           await client.query(migration.sql);
           await client.query("INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)", [migration.version, migration.name, migration.checksum]);
           await client.query("COMMIT");

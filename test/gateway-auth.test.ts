@@ -80,6 +80,7 @@ test("gateway boot refuses signing credentials, closed flags, plain http, and sh
     GOOGLE_CLIENT_ID: CLIENT_ID,
     GOOGLE_CLIENT_SECRET: "secret",
     GATEWAY_SECRET: Buffer.alloc(32, 1).toString("base64url"),
+    GATEWAY_TRUST_PROXY_HOPS: "1",
   };
   assert.equal(loadGatewayConfig(base).publicUrl.origin, "https://whale.example");
   assert.equal(loadGatewayConfig({ ...base, GATEWAY_PUBLIC_URL: "http://localhost:5173" }).publicUrl.origin, "http://localhost:5173");
@@ -90,4 +91,21 @@ test("gateway boot refuses signing credentials, closed flags, plain http, and sh
   assert.throws(() => loadGatewayConfig({ ...base, GATEWAY_PUBLIC_URL: "https://whale.example/app" }), /bare origin/);
   assert.throws(() => loadGatewayConfig({ ...base, GATEWAY_SECRET: "c2hvcnQ" }), /32 random bytes/);
   assert.throws(() => loadGatewayConfig({ ...base, GOOGLE_CLIENT_ID: "abc" }), /not a Google OAuth client id/);
+});
+
+test("a deployed gateway must name its proxy hops, and localhost defaults to none", () => {
+  const base = {
+    GATEWAY_PUBLIC_URL: "https://whale.example",
+    DATABASE_URL: "postgres://x",
+    GOOGLE_CLIENT_ID: CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: "secret",
+    GATEWAY_SECRET: Buffer.alloc(32, 1).toString("base64url"),
+  };
+  assert.throws(() => loadGatewayConfig(base), /GATEWAY_TRUST_PROXY_HOPS is required/);
+  assert.throws(() => loadGatewayConfig({ ...base, GATEWAY_TRUST_PROXY_HOPS: " " }), /GATEWAY_TRUST_PROXY_HOPS is required/);
+  assert.equal(loadGatewayConfig({ ...base, GATEWAY_TRUST_PROXY_HOPS: "1" }).trustProxyHops, 1);
+  assert.equal(loadGatewayConfig({ ...base, GATEWAY_TRUST_PROXY_HOPS: "0" }).trustProxyHops, 0);
+  assert.equal(loadGatewayConfig({ ...base, GATEWAY_PUBLIC_URL: "http://localhost:5173" }).trustProxyHops, 0);
+  assert.equal(loadGatewayConfig({ ...base, GATEWAY_PUBLIC_URL: "https://127.0.0.1:8443" }).trustProxyHops, 0);
+  assert.throws(() => loadGatewayConfig({ ...base, GATEWAY_TRUST_PROXY_HOPS: "4" }), /0 to 3/);
 });

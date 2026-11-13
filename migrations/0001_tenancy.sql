@@ -58,9 +58,9 @@ CREATE TABLE wallet_addresses (
   wallet_id uuid NOT NULL REFERENCES wallets (id),
   family text NOT NULL CHECK (family IN ('evm', 'solana')),
   address text NOT NULL,
-  PRIMARY KEY (wallet_id, family),
-  UNIQUE (family, address)
+  PRIMARY KEY (wallet_id, family)
 );
+CREATE UNIQUE INDEX wallet_addresses_unique ON wallet_addresses (family, (CASE WHEN family = 'evm' THEN lower(address) ELSE address END));
 
 CREATE TABLE policies (
   wallet_id uuid PRIMARY KEY REFERENCES wallets (id),
@@ -131,3 +131,5 @@ END
 $$;
 CREATE TRIGGER audit_events_no_change BEFORE UPDATE OR DELETE ON audit_events
   FOR EACH ROW EXECUTE FUNCTION audit_events_append_only();
+CREATE TRIGGER audit_events_no_truncate BEFORE TRUNCATE ON audit_events
+  FOR EACH STATEMENT EXECUTE FUNCTION audit_events_append_only();

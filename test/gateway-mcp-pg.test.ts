@@ -26,7 +26,9 @@ async function harness() {
   const policy = await pool.query("SELECT document FROM policies WHERE wallet_id = $1", [walletId]);
   const document = { ...policy.rows[0].document, actions: ["swap", "transfer"], destinations: [{ family: "evm", address: COLD, label: "cold" }] };
   await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify(document)]);
-  const { apiKey, agentId } = await createAgent(pool, { accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap", "transfer"], maxTxUsd: 20, dailyUsd: 40 } });
+  const agent = await createAgent(pool, { accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap", "transfer"], maxTxUsd: 20, dailyUsd: 40 } });
+  if ("refused" in agent) throw new Error(agent.refused);
+  const { apiKey, agentId } = agent;
   const rpc = (body: unknown, headers: Record<string, string> = {}, remoteAddress = "127.0.0.1") =>
     app.inject({ method: "POST", url: "/mcp", remoteAddress, headers: { authorization: `Bearer ${apiKey}`, accept: "application/json, text/event-stream", ...headers }, payload: body as Record<string, unknown> });
   const call = async (name: string, args: Record<string, unknown>) => (await rpc({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } })).json().result;

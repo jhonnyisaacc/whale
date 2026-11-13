@@ -42,7 +42,7 @@ The gateway is the public process from ADR 0003. `pnpm run start:gateway` applie
 | `DATABASE_URL` | Required. The role needs DDL rights while migrations run at boot. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | A Google OAuth web client. Register the callback URL above as its only redirect URI. |
 | `GATEWAY_SECRET` | At least 32 random bytes, base64url. It seals the short-lived login state. Rotating it cancels logins in flight, not sessions. |
-| `GATEWAY_TRUST_PROXY_HOPS` | 0 to 3. Set 1 behind one proxy so rate limits see the client address. |
+| `GATEWAY_TRUST_PROXY_HOPS` | 0 to 3. Required when `GATEWAY_PUBLIC_URL` is not `localhost`, `127.0.0.1`, or `[::1]`. Set 1 behind one proxy, such as Railway, so rate limits see the client address. With 0 behind a proxy, every client shares one rate-limit bucket. Defaults to 0 on localhost. |
 
 Boot refuses `TURNKEY_API_PRIVATE_KEY`, `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `WHALE_BROADCAST`, and `EXECUTOR_AUTH_TOKEN`, because the gateway holds no signing credential. `HOSTED_LIVE` throws until ADR 0003 is accepted.
 

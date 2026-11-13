@@ -43,7 +43,7 @@ test("any loosening is a widening, and only tightening is a narrowing", () => {
     { maxSlippageBps: 101 },
     { destinations: [...base.destinations, { family: "evm", address: "0x2222222222222222222222222222222222222222", label: "new" }] },
     { tokenAllowlist: null },
-    { tokenAllowlist: [{ chain: "solana", address: "So11111111111111111111111111111111111111112" }] },
+    { tokenAllowlist: [{ chain: "solana", address: "Sa11111111111111111111111111111111111111112" }] },
     { maxTxUsd: 10, chains: [...base.chains, "optimism"] },
   ];
   for (const change of widened) assert.equal(changeDirection(base, { ...base, ...change }), "widen", JSON.stringify(change));
@@ -70,4 +70,13 @@ test("API keys carry a public id and a 256-bit secret", () => {
   assert.match(first.key, /^whale_[0-9a-f]{12}_[A-Za-z0-9_-]{43}$/);
   assert.notEqual(first.secret, second.secret);
   assert.equal(Buffer.from(first.secret, "base64url").byteLength, 32);
+});
+
+test("Solana destinations that differ only in case are distinct, and EVM ones are the same", () => {
+  const lower = "Sa11111111111111111111111111111111111111112";
+  const upper = "SA11111111111111111111111111111111111111112";
+  const solana = policy({ destinations: [{ family: "solana", address: lower, label: "a" }, { family: "solana", address: upper, label: "b" }] });
+  assert.equal(walletPolicySchema.safeParse(solana).success, true);
+  const evm = policy({ destinations: [{ family: "evm", address: EVM.replace("0x1", "0xA"), label: "a" }, { family: "evm", address: EVM.replace("0x1", "0xa"), label: "b" }] });
+  assert.equal(walletPolicySchema.safeParse(evm).success, false);
 });
