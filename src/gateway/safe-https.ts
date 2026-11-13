@@ -2,7 +2,6 @@ import { lookup } from "node:dns/promises";
 import { request, type RequestOptions } from "node:https";
 import { BlockList, isIP } from "node:net";
 
-// Two lists: Node matches an IPv4 address against IPv6 rules too, so a mapped-range rule would block every IPv4 address.
 const blocked4 = new BlockList();
 const blocked6 = new BlockList();
 for (const [network, prefix] of [
@@ -15,7 +14,6 @@ export function publicAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 4) return !blocked4.check(address, "ipv4");
   if (family !== 6) return false;
-  // IPv4-mapped IPv6 reaches the IPv4 host behind it. Refuse the whole range rather than decode it.
   if (address.toLowerCase().startsWith("::ffff:")) return false;
   return !blocked6.check(address, "ipv6");
 }
@@ -29,9 +27,6 @@ export function publicHttpsUrl(raw: string): boolean {
   }
 }
 
-// Node asks for every address when it races IPv4 and IPv6, and for one address otherwise. Either way the socket
-// connects to an address this function checked, so a DNS answer that flips to a private address after the check
-// (rebinding) never reaches it.
 const guardedLookup: RequestOptions["lookup"] = (hostname, options, callback) => {
   lookup(hostname, { all: true })
     .then((addresses) => {
@@ -45,28 +40,42 @@ const guardedLookup: RequestOptions["lookup"] = (hostname, options, callback) =>
     .catch((error: Error) => callback(error, "", 4));
 };
 
-export type SafeResponse = { status: number; body: string };
+export type SafeResponse = { status: number; body: string; truncated: boolean };
+export type SafeInit = { method: "GET" | "POST"; headers?: Record<string, string>; body?: string; maxBytes: number; timeoutMs: number };
 
-// Outbound calls to user-supplied URLs: https on 443 only, public addresses only, no redirects, capped body, short timeout.
-export function safeRequest(raw: string, init: { method: "GET" | "POST"; headers?: Record<string, string>; body?: string; maxBytes: number; timeoutMs: number }): Promise<SafeResponse> {
+export function pinnedRequest(url: URL, init: SafeInit, send: typeof request = request): Promise<SafeResponse> {
   return new Promise((resolve, reject) => {
-    if (!publicHttpsUrl(raw)) {
-      reject(new Error("only public https URLs are allowed"));
-      return;
-    }
-    const req = request(new URL(raw), { method: init.method, headers: init.headers ?? {}, timeout: init.timeoutMs, lookup: guardedLookup }, (response) => {
+    const deadline = setTimeout(() => req.destroy(new Error("timed out")), init.timeoutMs);
+    const settle = <T>(finish: (value: T) => void) => (value: T) => {
+      clearTimeout(deadline);
+      finish(value);
+    };
+    const req = send(url, { method: init.method, headers: init.headers ?? {}, lookup: guardedLookup }, (response) => {
       let size = 0;
+      let cut = false;
       const chunks: Buffer[] = [];
+      const finish = (truncated: boolean) => settle(resolve)({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8"), truncated });
       response.on("data", (chunk: Buffer) => {
-        size += chunk.byteLength;
-        if (size > init.maxBytes) req.destroy(new Error("response is too large"));
-        else chunks.push(chunk);
+        if (cut) return;
+        if (size + chunk.byteLength <= init.maxBytes) {
+          size += chunk.byteLength;
+          chunks.push(chunk);
+          return;
+        }
+        cut = true;
+        chunks.push(chunk.subarray(0, init.maxBytes - size));
+        finish(true);
+        req.destroy();
       });
-      response.on("end", () => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
-      response.on("error", reject);
+      response.on("end", () => finish(false));
+      response.on("error", settle(reject));
     });
-    req.on("timeout", () => req.destroy(new Error("request timed out")));
-    req.on("error", reject);
+    req.on("error", settle(reject));
     req.end(init.body);
   });
+}
+
+export function safeRequest(raw: string, init: SafeInit): Promise<SafeResponse> {
+  if (!publicHttpsUrl(raw)) return Promise.reject(new Error("only public https URLs are allowed"));
+  return pinnedRequest(new URL(raw), init);
 }
