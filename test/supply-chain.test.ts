@@ -130,6 +130,8 @@ test("the Cargo source check refuses git, path, registry, patch, and replace in 
     '[build_dependencies]\nfoo = { version = "=1.0.0", git = "https://example.com/foo" }\n',
   ];
   for (const manifest of bad) assert.notDeepEqual(cargoManifestSourceProblems(pinned + manifest), [], manifest);
+  assert.notDeepEqual(cargoManifestSourceProblems('[package]\nname = "x"\nworkspace = ".."\n'), []);
+  assert.notDeepEqual(cargoManifestSourceProblems('patch = { crates-io = { sha2 = { path = "../sha2" } } }\n'), []);
   const lock = (source: string) => `version = 4\n\n[[package]]\nname = "foo"\nversion = "1.0.0"\n${source}\n[[package]]\nname = "whale-signer"\nversion = "0.1.0"\n`;
   assert.deepEqual(cargoLockSourceProblems(lock('source = "registry+https://github.com/rust-lang/crates.io-index"\n'), "whale-signer"), []);
   for (const source of ['source = "git+https://example.com/foo#abc"\n', 'source = "registry+https://example.com/index"\n', 'source = "sparse+https://example.com/index/"\n', ""]) {

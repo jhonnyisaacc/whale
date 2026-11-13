@@ -104,6 +104,7 @@ export function cargoManifestSourceProblems(manifest: string): string[] {
   const problems = new Set<string>();
   for (const { path } of tomlEntries(manifest)) {
     if (path[0] === "patch" || path[0] === "replace") problems.add(`[${path[0]}] redirects a crate away from crates.io`);
+    if (path.join(".") === "package.workspace") problems.add("package.workspace moves [patch] and Cargo.lock into an unchecked parent manifest");
     path.forEach((part, index) => {
       if (DEPENDENCY_TABLES.has(part) && path.length === index + 3 && SOURCE_KEYS.has(path[index + 2])) {
         problems.add(`${path.join(".")} pulls a crate from outside crates.io`);
