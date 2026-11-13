@@ -34,6 +34,7 @@ const COMPUTE_BUDGET: &str = "ComputeBudget111111111111111111111111111111";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 const JITO_TIPS: [&str; 8] = [
     "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
     "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
@@ -326,6 +327,13 @@ impl Policy {
             .iter()
             .filter_map(|item| solana::key(item).ok())
             .collect();
+        let known = |text: &str| solana::key(text).expect("a built-in key is valid base58");
+        let wrapped_sol = crate::pda::associated_token_address(
+            &own,
+            &known(WSOL_MINT),
+            &known(TOKEN),
+            &known(ASSOCIATED_TOKEN),
+        );
         let static_key = |index: usize| message.keys.get(index).copied();
         let (mut unit_limit, mut unit_price, mut tipped) = (1_400_000u128, 0u128, 0u128);
         for (position, instruction) in message.instructions.iter().enumerate() {
@@ -365,7 +373,7 @@ impl Policy {
                     {
                         if tips.contains(&to) {
                             tipped += value;
-                        } else if to == own {
+                        } else if to == own || Some(to) == wrapped_sol {
                         } else if self.solana_destinations.contains(&to) {
                             self.spend(&mut decision, "solana:native".into(), value);
                         } else {

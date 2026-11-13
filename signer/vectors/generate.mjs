@@ -1,5 +1,6 @@
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { writeFileSync } from "node:fs";
+import { PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import { encodeFunctionData, maxUint256, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -87,9 +88,14 @@ const message = ({ signers = 1, keys, instructions, version = null, lookups = []
 const transfer = (system, to, lamports) => ix(system, [0, to], Buffer.concat([u32(2), u64(lamports)]));
 const price = (compute, micro) => ix(compute, [], Buffer.concat([Buffer.from([3]), u64(micro)]));
 const limit = (compute, units) => ix(compute, [], Buffer.concat([Buffer.from([2]), u32(units)]));
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const WSOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+const WRAPPED_SOL = PublicKey.findProgramAddressSync([solanaOwn, TOKEN_PROGRAM.toBuffer(), WSOL_MINT.toBuffer()], ATA_PROGRAM)[0].toBuffer();
 const keys = [solanaOwn, SOL_DEST, SYSTEM, COMPUTE];
 const solanaCases = [
   ["sol transfer to a listed destination", message({ keys, instructions: [limit(3, 200_000), price(3, 1_000), transfer(2, 1, 1_000_000)] }), "signed"],
+  ["sol transfer into this wallet's wrapped SOL account", message({ keys: [solanaOwn, WRAPPED_SOL, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 5_000_000_000)] }), "signed"],
   ["sol transfer to a stranger", message({ keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "listed destination"],
   ["a second required signer", message({ signers: 2, keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "only signer"],
   ["a program the policy does not list", message({ keys: [solanaOwn, STRANGER], instructions: [ix(1, [0], Buffer.from([1]))] }), "refused", "does not list"],

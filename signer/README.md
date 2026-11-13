@@ -54,7 +54,7 @@ The instruction rules:
 
 | Program | What is allowed |
 | --- | --- |
-| System | Only SOL transfers from this wallet: to itself, to a Jito tip account, or to a listed destination within the `solana:native` daily limit |
+| System | Only SOL transfers from this wallet: to itself, to its wrapped SOL account, to a Jito tip account, or to a listed destination within the `solana:native` daily limit |
 | Token and Token-2022 | `SyncNative`, `CloseAccount` back to this wallet, and `InitializeAccount3` owned by it. `TransferChecked` only to a listed token account, counted against `solana:<mint>` |
 | Associated Token Account | A create funded by this wallet, for itself or a listed destination |
 | Compute Budget | Unit price times unit limit, plus tips, at or under `solana.maxPriorityLamports` |

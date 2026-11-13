@@ -13,6 +13,16 @@
       "signature": "3soqqYWGdctF11V5tDp3xCAm6EHScUFvhrcgUkpGkggtNmhCXPkBhS7E3WJkecqMmN3gi1GUKgoHdgd1jsdobe8G"
     },
     {
+      "name": "sol transfer into this wallet's wrapped SOL account",
+      "job": {
+        "id": "sol transfer into this wallet's wrapped SOL account",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu40AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgIAAQwCAAAAAPIFKgEAAAA="
+      },
+      "expect": "signed",
+      "signature": "oJrW8u1CJnJmN2p1tzhsa6XJghraQtY1f9zBwVoahEtdXahvkV4g3823zZdcgP3QHN32CFF6FrXa1QejKYbdwyf"
+    },
+    {
       "name": "sol transfer to a stranger",
       "job": {
         "id": "sol transfer to a stranger",
