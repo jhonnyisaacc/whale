@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 *.keystore.json
+signer/target/

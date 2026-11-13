@@ -1,0 +1,126 @@
+{
+  "seed": "2222222222222222222222222222222222222222222222222222222222222222",
+  "own": "Bow1CGKGDB9mNxeWdw85E2aCthQ1oZX4oFEe7fYT17ew",
+  "cases": [
+    {
+      "name": "sol transfer to a listed destination",
+      "job": {
+        "id": "sol transfer to a listed destination",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDAwAFAkANAwADAAkD6AMAAAAAAAACAgABDAIAAABAQg8AAAAAAA=="
+      },
+      "expect": "signed",
+      "signature": "3soqqYWGdctF11V5tDp3xCAm6EHScUFvhrcgUkpGkggtNmhCXPkBhS7E3WJkecqMmN3gi1GUKgoHdgd1jsdobe8G"
+    },
+    {
+      "name": "sol transfer into this wallet's wrapped SOL account",
+      "job": {
+        "id": "sol transfer into this wallet's wrapped SOL account",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu40AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgIAAQwCAAAAAPIFKgEAAAA="
+      },
+      "expect": "signed",
+      "signature": "oJrW8u1CJnJmN2p1tzhsa6XJghraQtY1f9zBwVoahEtdXahvkV4g3823zZdcgP3QHN32CFF6FrXa1QejKYbdwyf"
+    },
+    {
+      "name": "an associated token account for a listed destination",
+      "job": {
+        "id": "an associated token account for a listed destination",
+        "kind": "solana",
+        "message": "AQAGB6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFI0DhoPAm22emH7QexJS8QoOKORFDTtT+BYdXwcQkwkzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM8b6evO+2606PWXzaqvJdDGuU0Cp4TF6I2LYTOuURVEGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqYyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBBgYAAQIDBAUBAQ=="
+      },
+      "expect": "signed",
+      "signature": "FYqugSHbzwkE9s5a5oPVjcZZEwdDqjSYgXTSY3rhdfg6z5W16f3ZZym8EQBRTVixp82KPsx28UdaMohTVZM5jKe"
+    },
+    {
+      "name": "an associated token account for this wallet",
+      "job": {
+        "id": "an associated token account for this wallet",
+        "kind": "solana",
+        "message": "AQAFBqCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwV+csSJu2/vU6Oj63TcT6Uv/n6ABTOPRQN3CZet+a4aPG+nrzvtutOj1l82qryXQxrlNAqeExeiNi2EzrlEVRBgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKmMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAQUGAAEAAgMEAQE="
+      },
+      "expect": "signed",
+      "signature": "5e7pqXFXXz4rUJy5YRawtFybmWij51MzVDGjwnvckUhLriFKUgnd1t8PNAmKvMamfjSpaQed4gaMWbH3xCVcYmAB"
+    },
+    {
+      "name": "sol transfer to a stranger",
+      "job": {
+        "id": "sol transfer to a stranger",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwREREREREREREREREREREREREREREREREREREREREREQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgIAAQwCAAAAAQAAAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "listed destination"
+    },
+    {
+      "name": "a second required signer",
+      "job": {
+        "id": "a second required signer",
+        "kind": "solana",
+        "message": "AgACBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwREREREREREREREREREREREREREREREREREREREREREQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgIAAQwCAAAAAQAAAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "only signer"
+    },
+    {
+      "name": "a program the policy does not list",
+      "job": {
+        "id": "a program the policy does not list",
+        "kind": "solana",
+        "message": "AQABAqCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwREREREREREREREREREREREREREREREREREREREREREQJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEBAQABAQ=="
+      },
+      "expect": "refused",
+      "reason": "does not list"
+    },
+    {
+      "name": "priority a fraction of a lamport above the cap",
+      "job": {
+        "id": "priority a fraction of a lamport above the cap",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkCAwAFAkANAwADAAkDIaEHAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "100001 lamports"
+    },
+    {
+      "name": "priority above the cap",
+      "job": {
+        "id": "priority above the cap",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkCAwAFAsBcFQADAAkDgJaYAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "priority fees"
+    },
+    {
+      "name": "a jupiter v0 swap with a lookup table",
+      "job": {
+        "id": "a jupiter v0 swap with a lookup table",
+        "kind": "solana",
+        "message": "gAEAAgOgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMCAAUC4JMEAAIACQNkAAAAAAAAAAEDAAMECOUXy5d6460qAQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHAgECAA=="
+      },
+      "expect": "refused",
+      "reason": "no instruction rule"
+    },
+    {
+      "name": "a v0 sol transfer with a lookup table",
+      "job": {
+        "id": "a v0 sol transfer with a lookup table",
+        "kind": "solana",
+        "message": "gAEAAwSgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8DMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwMABQJADQMAAwAJA2QAAAAAAAAAAgIAAQwCAAAA6AMAAAAAAAABBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+      },
+      "expect": "signed",
+      "signature": "4NxyDanuEs61tthnv2uqyGgbQgbg9uJxxLWuetWmvvqFHfNXbpxZydDcpT25yMnSqUNySB6GD9o14hHQcxewaUFk"
+    },
+    {
+      "name": "a transfer whose destination comes from a lookup table",
+      "job": {
+        "id": "a transfer whose destination comes from a lookup table",
+        "kind": "solana",
+        "message": "gAEAAQKgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAQIAAgwCAAAABQAAAAAAAAABBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+      },
+      "expect": "refused",
+      "reason": "lookup table"
+    }
+  ]
+}
