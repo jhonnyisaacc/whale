@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { authenticateApiKey, type AgentContext } from "./agents.js";
@@ -31,9 +30,9 @@ function challenge(config: GatewayConfig, reply: FastifyReply, error?: string) {
 export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; executor: ExecutorClient | null; authenticate?: BearerAuth }): void {
   const { config, pool } = deps;
   const authenticate: BearerAuth = deps.authenticate ?? ((token) => authenticateApiKey(pool, token));
-  const limited = {
-    rateLimit: { max: 120, timeWindow: "1 minute", keyGenerator: (request: FastifyRequest) => createHash("sha256").update(bearer(request) || request.ip).digest("hex") },
-  };
+  const limited = { rateLimit: { max: 120, timeWindow: "1 minute" } };
+  const agentIds = new WeakMap<FastifyRequest, string>();
+  const perAgent = app.createRateLimit({ max: 120, timeWindow: "1 minute", keyGenerator: (request) => agentIds.get(request) ?? request.ip });
 
   app.get("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
   app.delete("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
@@ -48,6 +47,9 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     if (!token) return challenge(config, reply);
     const agent = await authenticate(token);
     if (!agent) return challenge(config, reply, "invalid_token");
+    agentIds.set(request, agent.agentId);
+    const limit = await perAgent(request);
+    if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate_limit" });
 
     const body = request.body as Rpc | Rpc[] | null;
     if (Array.isArray(body) || typeof body !== "object" || body === null || body.jsonrpc !== "2.0" || typeof body.method !== "string") {
