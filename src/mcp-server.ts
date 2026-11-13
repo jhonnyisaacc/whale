@@ -94,11 +94,15 @@ if (entry.endsWith("mcp-server.js")) {
     process.stderr.write("whale: set both WHALE_GATEWAY_URL and WHALE_API_KEY to use a hosted gateway, or neither to use local tools\n");
     process.exit(1);
   }
-  if (apiKey && !/^[\x21-\x7e]+$/.test(apiKey)) {
-    process.stderr.write("whale: WHALE_API_KEY must be one line of printable characters with no spaces\n");
-    process.exit(1);
+  const { checkApiKey, createBridge, mcpEndpoint } = await import("./hosted-client.js");
+  if (apiKey) {
+    try {
+      checkApiKey(apiKey);
+    } catch {
+      process.stderr.write("whale: WHALE_API_KEY must be one line of printable characters with no spaces\n");
+      process.exit(1);
+    }
   }
-  const { createBridge, mcpEndpoint } = await import("./hosted-client.js");
   if (gatewayUrl) {
     try {
       mcpEndpoint(gatewayUrl);

@@ -36,7 +36,12 @@ export function mcpEndpoint(gatewayUrl: string): string {
   return new URL("/mcp", url.origin).toString();
 }
 
+export function checkApiKey(apiKey: string): void {
+  if (!/^[\x21-\x7e]+$/.test(apiKey)) throw new Error("the API key must be one line of printable characters with no spaces");
+}
+
 export function createHostedClient(options: HostedClientOptions) {
+  checkApiKey(options.apiKey);
   const endpoint = mcpEndpoint(options.gatewayUrl);
   const fetchImpl = options.fetchImpl ?? fetch;
   let id = 0;
@@ -82,6 +87,7 @@ export function createHostedClient(options: HostedClientOptions) {
 }
 
 export function createBridge(options: HostedClientOptions) {
+  checkApiKey(options.apiKey);
   const endpoint = mcpEndpoint(options.gatewayUrl);
   const fetchImpl = options.fetchImpl ?? fetch;
   return async (message: unknown): Promise<unknown> => {

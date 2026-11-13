@@ -30,3 +30,14 @@ test("the gateway's refusal reason reaches the caller", async () => {
   const reply = (await createBridge({ gatewayUrl, apiKey: "whale_key", fetchImpl: revoked })({ jsonrpc: "2.0", id: 6, method: "ping" })) as { error: { message: string } };
   assert.match(reply.error.message, /refused this API key: invalid_token/);
 });
+
+test("a key that cannot be a header value is refused before any request, without echoing it", async () => {
+  let called = false;
+  const fetchImpl = (async () => ((called = true), new Response("{}"))) as typeof fetch;
+  for (const apiKey of ["whale_000000000000_SECRET\nx", "whale_000000000000_SECRET\rx", "whale_000000000000 SECRET", ""]) {
+    for (const make of [() => createHostedClient({ gatewayUrl, apiKey, fetchImpl }), () => createBridge({ gatewayUrl, apiKey, fetchImpl })]) {
+      assert.throws(make, (error: Error) => error.message === "the API key must be one line of printable characters with no spaces");
+    }
+  }
+  assert.equal(called, false);
+});
