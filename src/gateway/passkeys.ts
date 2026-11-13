@@ -23,14 +23,18 @@ export function relyingParty(config: GatewayConfig): RelyingParty {
 }
 
 function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value)
+  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${Array.from(value, canonical).join(",")}]`;
+  const proto: unknown = typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
+  if (proto === Object.prototype || proto === null) {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
       .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
       .join(",")}}`;
   }
-  return JSON.stringify(value);
+  throw new TypeError("cannot bind a step-up to a value that is not plain JSON");
 }
 
 // A step-up signature approves one exact action. The challenge stores the hash of that action, so an assertion

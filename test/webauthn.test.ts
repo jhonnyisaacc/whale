@@ -72,3 +72,15 @@ test("an action binding ignores key order and changes with any value", () => {
   assert.equal(bindingOf({ a: 1, b: { c: [1, 2] } }), bindingOf({ b: { c: [1, 2] }, a: 1 }));
   assert.notEqual(bindingOf({ a: 1, b: { c: [1, 2] } }), bindingOf({ a: 1, b: { c: [2, 1] } }));
 });
+
+test("an action binding refuses values that JSON cannot carry exactly", () => {
+  class Thing {
+    readonly at = 1;
+  }
+  for (const value of [new Date(0), new Map([["a", 1]]), new Set([1]), new Thing(), NaN, Infinity, -Infinity, undefined, 1n, () => 1, Symbol("s")]) {
+    assert.throws(() => bindingOf({ kind: "x", value }), /cannot bind/);
+    assert.throws(() => bindingOf([value]), /cannot bind/);
+  }
+  assert.throws(() => bindingOf({ list: [1, , 2] }), /cannot bind/);
+  assert.equal(typeof bindingOf({ a: null, b: [true, "s", 1.5], c: Object.assign(Object.create(null), { d: 0 }) }), "string");
+});
