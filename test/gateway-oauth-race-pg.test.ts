@@ -4,7 +4,7 @@ import type pg from "pg";
 import type { AgentLimits } from "../src/gateway/policy.js";
 import { buildGateway } from "../src/gateway/app.js";
 import { pkceChallenge, randomToken } from "../src/gateway/google.js";
-import { approveRequest, createRequest, exchangeCode, refreshTokens } from "../src/gateway/oauth-store.js";
+import { approveRequest, createRequest, denyRequest, exchangeCode, refreshTokens } from "../src/gateway/oauth-store.js";
 import { createWallet } from "../src/gateway/wallets.js";
 import { gatewayConfig, ORIGIN, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
@@ -118,6 +118,26 @@ test("a replayed code during a legitimate refresh leaves no credential of the fa
     assert.deepEqual(replayed, { error: "invalid_grant" });
     assert.ok("refresh_token" in second);
     assert.equal(await liveCredentials(), 0);
+  } finally {
+    await drop();
+  }
+});
+
+test("deny racing approve on one request lets exactly one of them win", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, request, approve, drop } = await setup();
+  try {
+    const { id } = await request();
+    const approving = held(pool, "INSERT INTO oauth_codes");
+    const approved = approve(approving.pool, id);
+    await approving.reached;
+    const denied = denyRequest(pool, id, ORIGIN);
+    await approving.blocking();
+    approving.open();
+
+    const redirect = new URL((await approved) as string);
+    assert.ok(redirect.searchParams.get("code"));
+    assert.equal(await denied, null);
+    assert.equal(await approve(pool, id), null);
   } finally {
     await drop();
   }

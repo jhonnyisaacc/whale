@@ -55,10 +55,12 @@ export async function pendingRequest(client: pg.Pool | pg.PoolClient, id: string
 }
 
 export async function denyRequest(pool: pg.Pool, id: string, issuer: string, now = Date.now()): Promise<string | null> {
-  const request = await pendingRequest(pool, id, now);
-  if (!request) return null;
-  await pool.query("UPDATE oauth_requests SET decided_at = $2 WHERE id = $1 AND decided_at IS NULL", [id, new Date(now)]);
-  return withParams(request.redirectUri, { error: "access_denied", state: request.state, iss: issuer });
+  const denied = await pool.query<{ redirect_uri: string; state: string | null }>(
+    "UPDATE oauth_requests SET decided_at = $2 WHERE id = $1 AND decided_at IS NULL AND expires_at > $2 RETURNING redirect_uri, state",
+    [id, new Date(now)],
+  );
+  const request = denied.rows[0];
+  return request ? withParams(request.redirect_uri, { error: "access_denied", state: request.state, iss: issuer }) : null;
 }
 
 // Approval creates the agent this client acts as, and a single-use code bound to the request's client, redirect,
