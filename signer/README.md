@@ -12,7 +12,7 @@ export WHALE_SIGNER_PASSPHRASE='at least twelve characters'
 ./target/release/whale-signer sign --keystore keystore.json --policy policy.json --ledger ledger.json < job.json
 ```
 
-`init` creates the keystore readable only by its owner (mode 0600), and refuses if the file already exists. `sign` prints one JSON decision and exits:
+`init` refuses if the file already exists. On Unix it creates the keystore readable only by its owner (mode 0600). Other platforms have no such mode, so the file inherits the permissions of its directory, and `init` prints a warning to stderr. `sign` prints one JSON decision and exits:
 - 0 when it signed;
 - 3 when it refused;
 - 2 on a usage or file error.
@@ -43,6 +43,12 @@ Everything not listed is refused. See `vectors/policy.json` for a full example.
 | ERC-20 `approve` | Spender is a router listed for the chain and is not a Settler in `evm.settlers`, no native value, and the amount counts against the `<chainId>:<token>` daily limit. An unlimited approval is refused. A swap that needs an approval first therefore counts twice |
 | KyberSwap `swap` / `swapSimpleMode`, 0x `AllowanceHolder.exec` into `Settler.execute`, direct `Settler.execute` | The router is listed. The decoded recipient is this wallet. For 0x, the call reaches a Settler listed in `evm.settlers` for the chain, and `exec`'s `operator` equals its `target`. For KyberSwap, the executor (`caller` or `callTarget`), a nonzero `approveTarget`, every `srcReceivers` entry, and every `feeReceivers` entry are listed in `evm.kyberExecutors` for the chain, and the `srcAmounts` add up to no more than `amount`. The sold token and amount count against the daily limit. Native value stays at or under `evm.maxValueWei` |
 | Anything else | Refused, unless `allowUndecodedRouterCalls` is true and the target is a listed router |
+
+**The recipient rules do not bound loss. The daily limits do.** The swap rules stop a naive or buggy client from naming another recipient where the ABI puts it. A compromised Whale does not have to make that mistake:
+- The signer never reads 0x `Settler.execute` `actions`. `exec(Settler, USDC, amount, Settler, execute({recipient: this wallet, buyToken: 0, minAmountOut: 0}, [TRANSFER_FROM(attacker, ...)]))` passes every rule, and Settler sends the lent `amount` to the attacker.
+- KyberSwap's `targetData` is chosen by Whale and runs in the listed executor, so it decides where the sold tokens go.
+
+So each swap can lose its whole sold amount. What a compromised Whale can move in a day is bounded by the daily limits, the fee caps, and `evm.maxValueWei`, not by who the calldata names. [ADR 0004](../docs/adr/0004-smart-account-level.md) reaches the same conclusion for the smart account level. Set each limit to what you accept losing in a day.
 
 Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`.
 

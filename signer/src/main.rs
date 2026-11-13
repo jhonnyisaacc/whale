@@ -10,6 +10,9 @@ const USAGE: &str =
   address  print the EVM and Solana addresses
   sign     read one job as JSON on stdin, check it against the policy, and sign it or refuse";
 
+#[cfg(not(unix))]
+const NON_UNIX_KEYSTORE_WARNING: &str = "warning: this platform has no Unix file modes, so the keystore inherits the permissions of its directory";
+
 fn flag(args: &[String], name: &str) -> Option<PathBuf> {
     args.windows(2)
         .find(|pair| pair[0] == name)
@@ -45,6 +48,8 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     let keystore_path = flag(args, "--keystore").ok_or(USAGE)?;
     match command {
         "init" => {
+            #[cfg(not(unix))]
+            eprintln!("{NON_UNIX_KEYSTORE_WARNING}");
             let keys = keystore::generate()?;
             let sealed = keystore::seal(&keys, &passphrase()?)?;
             create_private(&keystore_path)?
