@@ -139,6 +139,16 @@
       "signature": "4NxyDanuEs61tthnv2uqyGgbQgbg9uJxxLWuetWmvvqFHfNXbpxZydDcpT25yMnSqUNySB6GD9o14hHQcxewaUFk"
     },
     {
+      "name": "a jupiter swap from SOL to USDC that creates both token accounts",
+      "job": {
+        "id": "a jupiter swap from SOL to USDC that creates both token accounts",
+        "kind": "solana",
+        "message": "AQAKC6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu40j7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqAabiFf+q4GE+2h/Y0YYwDXaxDncGus7VZig8AAAAAABxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQgJAAUC4JMEAAkACQOghgEAAAAAAAcGAAEAAwUGAQEFAgABDAIAAAAA4fUFAAAAAAYBAQERBwYAAgAEBQYBAQgJBgABAggECAoIGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQYDAQAAAQk="
+      },
+      "expect": "signed",
+      "signature": "5aKaGdmhbPYQFb29wAq1LkAEbXwgGJJBJWXiqj1i8oFkX71KpPeGH8SwRX2zszHZP4ZQhjFfqFVuNGnmQarhSi3D"
+    },
+    {
       "name": "a jupiter route into this wallet's USDC account",
       "job": {
         "id": "a jupiter route into this wallet's USDC account",

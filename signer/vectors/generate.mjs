@@ -134,7 +134,23 @@ function jupiterCases() {
   const ownUsdc2022 = ata(solanaOwn, USDC_MINT_ID, TOKEN_2022_ID);
   const sharedKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_2022_ID)), Buffer.alloc(32, 0x61), Buffer.alloc(32, 0x62), Buffer.alloc(32, 0x63), Buffer.alloc(32, 0x64), ownUsdc2022, Buffer.alloc(32, 0x65), Buffer.from(bs58.decode(USDC_MINT_ID)), JUPITER, COMPUTE];
   const shared = message({ keys: sharedKeys, instructions: [ix(9, [1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 1, 9, 9], Buffer.concat([Buffer.from("c1209b3341d69c81", "hex"), Buffer.alloc(8, 2)]))] });
+  const usdc = Buffer.from(bs58.decode(USDC_MINT_ID));
+  const swapKeys = [solanaOwn, WRAPPED_SOL, ownUsdc, WSOL_MINT.toBuffer(), usdc, SYSTEM, TOKEN_PROGRAM.toBuffer(), ATA_PROGRAM.toBuffer(), JUPITER, COMPUTE, Buffer.alloc(32, 0x52)];
+  const swap = message({
+    keys: swapKeys,
+    instructions: [
+      limit(9, 300_000),
+      price(9, 100_000),
+      ix(7, [0, 1, 0, 3, 5, 6], Buffer.from([1])),
+      transfer(5, 1, 100_000_000),
+      ix(6, [1], Buffer.from([17])),
+      ix(7, [0, 2, 0, 4, 5, 6], Buffer.from([1])),
+      ix(8, [6, 0, 1, 2, 8, 4, 8, 10, 8], Buffer.concat([Buffer.from("e517cb977ae3ad2a", "hex"), Buffer.alloc(16, 1)])),
+      ix(6, [1, 0, 0], Buffer.from([9])),
+    ],
+  });
   return [
+    ["a jupiter swap from SOL to USDC that creates both token accounts", swap, "signed"],
     ["a jupiter route into this wallet's USDC account", routeMessage(), "signed"],
     ["a jupiter shared route into this wallet's Token-2022 account", shared, "signed"],
     ["a jupiter route whose output mint comes from a lookup table", routeMessage({ mintFromLookup: true }), "signed"],

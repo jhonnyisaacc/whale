@@ -78,6 +78,8 @@ Jupiter v6, when listed in `solana.programs`, is decoded the way the app signing
 
 The signer derives those addresses itself, with the runtime's program-derived-address search. Jupiter transactions often load the output mint from an address lookup table. The signer then cannot read the mint, so a destination passes if it is this wallet's account for wrapped SOL, USDC, or USDT, the mints the app quotes against. The app signing policy does the same. Every other Jupiter account must be static.
 
+A Jupiter swap usually comes with one or two associated token account creates, for wrapped SOL and for the output mint. Each create counts its 4,454,400 lamport rent bound against `solana:native`, also when it is idempotent and the account already exists, because the signer cannot see whether it does. A SOL to USDC swap that creates both, at 300,000 units and 100,000 micro-lamports per unit, counts 8,943,800 lamports with its fee, so a `solana:native` limit of 0.1 SOL allows 11 such swaps a day. Rent for this wallet's own accounts stays in its accounts and is recoverable by closing them, but it still leaves the spendable balance, so it counts.
+
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom.
 
 ## Supply chain

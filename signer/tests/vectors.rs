@@ -316,6 +316,37 @@ fn a_token_account_created_for_this_wallet_also_counts_its_rent_against_the_nati
 }
 
 #[test]
+fn a_jupiter_swap_that_creates_two_token_accounts_fits_eleven_times_in_a_tenth_of_a_sol() {
+    let mut file = load("policy.json");
+    file["solana"]["dailyLimits"]["solana:native"] = "100000000".into();
+    let policy = Policy::parse(&file).expect("policy");
+    let keys = keys();
+    let solana = load("solana.json");
+    let swap = solana["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| {
+            case["name"] == "a jupiter swap from SOL to USDC that creates both token accounts"
+        })
+        .unwrap()["job"]
+        .clone();
+    let ledger = fresh_ledger("ledger-jupiter-swap");
+    let decisions: Vec<Value> = (0..12)
+        .map(|_| run_job(&swap, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .collect();
+    let mut expected = vec!["signed"; 11];
+    expected.push("refused");
+    assert_eq!(
+        decisions, expected,
+        "two 4454400 lamport rent bounds, a 5000 lamport fee, and 30000 lamports of priority per swap"
+    );
+    let written: Value = serde_json::from_str(&std::fs::read_to_string(&ledger).unwrap()).unwrap();
+    assert_eq!(written["spent"]["solana:native"], "98381800");
+    let _ = std::fs::remove_file(ledger);
+}
+
+#[test]
 fn associated_token_addresses_match_web3() {
     let solana = load("solana.json");
     let ata = whale_signer::solana::key("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
