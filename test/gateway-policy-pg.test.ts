@@ -214,3 +214,16 @@ test("the widening delay runs on the database clock, so a skewed replica cannot 
     await drop();
   }
 });
+
+test("reading the pending change, which runs the sweep, is rate limited", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, user, wallet, drop } = await harness();
+  try {
+    const read = () => app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/policy/pending`, headers: user.headers });
+    for (let index = 0; index < 30; index += 1) assert.equal((await read()).statusCode, 200);
+    const limited = await read();
+    assert.equal(limited.statusCode, 429);
+    assert.deepEqual(limited.json(), { error: "rate_limit" });
+  } finally {
+    await drop();
+  }
+});

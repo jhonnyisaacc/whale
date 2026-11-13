@@ -21,7 +21,7 @@ export function registerPolicyRoutes(app: FastifyInstance, deps: { config: Gatew
   const { config, pool } = deps;
   const now = deps.now ?? Date.now;
 
-  app.get("/api/wallets/:id/policy/pending", async (request, reply) => {
+  app.get("/api/wallets/:id/policy/pending", { config: perMinute(30) }, async (request, reply) => {
     const session = await requireSession(pool, request, reply);
     if (!session) return reply;
     const walletId = walletIdOf(request);
