@@ -49,7 +49,12 @@ function provesSolana(message: string | Buffer, address: string, signature: stri
 export type Registration = { code: string; walletId: string; evmAddress: string; solanaAddress: string; evmSignature: string; solanaSignature: string };
 
 export async function registerSigner(pool: pg.Pool, input: Registration, now = Date.now()): Promise<{ signerId: string; token: string } | string> {
-  return inTransaction(pool, (client) => registerLocked(client, input, now));
+  try {
+    return await inTransaction(pool, (client) => registerLocked(client, input, now));
+  } catch (error) {
+    if ((error as { constraint?: string }).constraint === "wallet_addresses_unique") return "these keys already belong to another wallet";
+    throw error;
+  }
 }
 
 async function registerLocked(client: pg.PoolClient, input: Registration, now: number): Promise<{ signerId: string; token: string } | string> {

@@ -209,6 +209,32 @@ test("a wallet whose signer was revoked comes back waiting, and only the same ke
   }
 });
 
+test("the same keys registering on two wallets at once is refused rather than failing", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const { app, pool } = signer;
+    const office = await signer.newWallet("office");
+    const lab = await signer.newWallet("lab");
+    const payload = await proofs(office, await signer.issueCode(office), officeKeys);
+    const blocker = await pool.connect();
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2)", [lab, officeKeys.evm.address]);
+      const racing = app.inject({ method: "POST", url: "/signer/v1/register", payload });
+      await sleep(300);
+      await blocker.query("COMMIT");
+      const raced = await racing;
+      assert.equal(raced.statusCode, 400, raced.body);
+      assert.match(raced.json().detail, /another wallet/);
+    } finally {
+      blocker.release();
+    }
+    assert.equal(await signer.status(office), "pending");
+  } finally {
+    await signer.close();
+  }
+});
+
 test("a refusal with many long reasons is stored, trimmed, and not handed out again", { skip: !TEST_DATABASE_URL }, async () => {
   const signer = await registeredSigner();
   try {
