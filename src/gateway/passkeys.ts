@@ -92,8 +92,6 @@ export async function registrationOptions(pool: pg.Pool, config: GatewayConfig, 
   };
 }
 
-// The caller decides what the new passkey is for. A plain passkey stores it here; an enclave wallet also hands the
-// same attestation to Turnkey, inside the same transaction, so both sides agree on the root credential.
 export async function registerPasskey(
   pool: pg.Pool,
   config: GatewayConfig,
