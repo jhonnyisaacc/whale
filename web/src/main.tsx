@@ -1,6 +1,8 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { api, type Me } from "./api.js";
+import { Activity } from "./pages/Activity.js";
+import { Approvals } from "./pages/Approvals.js";
 import { Connect } from "./pages/Connect.js";
 import { Login } from "./pages/Login.js";
 import { WalletDetail } from "./pages/WalletDetail.js";
@@ -30,6 +32,8 @@ function App() {
   if (path === "/connect") page = <Connect requestId={query.get("request") ?? ""} />;
   else if (me === undefined) page = <p className="muted">Loading…</p>;
   else if (me === null || path === "/login") page = <Login error={query.get("error")} returnTo={path === "/login" ? "/" : `${path}${window.location.search}`} />;
+  else if (path === "/approvals") page = <Approvals />;
+  else if (path === "/activity") page = <Activity />;
   else if (path.startsWith("/wallets/")) page = <WalletDetail walletId={path.slice("/wallets/".length)} chains={meta.hostedChains} />;
   else page = <Wallets />;
 
@@ -39,6 +43,9 @@ function App() {
         <Link to="/">Whale</Link>
         {me ? (
           <span className="row">
+            <Link to="/">Wallets</Link>
+            <Link to="/approvals">Approvals</Link>
+            <Link to="/activity">Activity</Link>
             <span className="muted">{me.email}</span>
             <button onClick={() => void logout()}>Sign out</button>
           </span>
