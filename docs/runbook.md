@@ -179,6 +179,8 @@ It then stores the addresses, activates the wallet, and returns a signer token `
 - A job is leased for 60 seconds. An unanswered lease goes back to the queue.
 - A frozen wallet's signer still authenticates but gets no work.
 - A revoked signer gets 401.
+- An answer is stored only while the wallet is active and the job has not expired. A signed answer must sign exactly the job's payload with the registered key, or it gets 422.
+- A long-poll ends when its client hangs up, so no job is leased to a closed connection.
 
 Nothing creates signing jobs while hosted live is closed. `enqueueJob` is what the live path will call.
 
