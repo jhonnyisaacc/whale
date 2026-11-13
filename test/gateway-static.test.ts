@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import Fastify from "fastify";
+import pg from "pg";
+import { buildGateway } from "../src/gateway/app.js";
 import { PAGE_CSP, registerStatic } from "../src/gateway/static.js";
+import { gatewayConfig } from "./gateway-fixtures.js";
 
 function site(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "whale-web-"));
@@ -17,7 +20,7 @@ function site(): string {
 
 test("the dashboard serves its page under a strict CSP and only hashed assets beside it", async () => {
   const app = Fastify();
-  assert.equal(registerStatic(app, site()), true);
+  registerStatic(app, site());
   app.get("/api/real", async () => ({ ok: true }));
   try {
     const page = await app.inject({ method: "GET", url: "/wallets/123?x=1" });
@@ -35,8 +38,19 @@ test("the dashboard serves its page under a strict CSP and only hashed assets be
       assert.notEqual(reply.headers["content-type"], "text/html; charset=utf-8", url);
     }
     assert.equal((await app.inject({ method: "POST", url: "/wallets", payload: {} })).statusCode, 404);
-    assert.equal(registerStatic(Fastify(), path.join(tmpdir(), "no-such-web-dir")), false);
   } finally {
     await app.close();
+  }
+});
+
+test("the gateway refuses to boot when the dashboard build is missing", async () => {
+  const pool = new pg.Pool({ connectionString: "postgres://unused@127.0.0.1:1/unused" });
+  try {
+    await assert.rejects(
+      buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: null, delegation: null, webDir: path.join(tmpdir(), "no-such-web-dir") }),
+      /dashboard build missing.*pnpm --filter @whale\/web run build/,
+    );
+  } finally {
+    await pool.end();
   }
 });

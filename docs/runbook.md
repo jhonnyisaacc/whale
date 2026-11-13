@@ -26,7 +26,10 @@ The file mode is `0600`. `*.keystore.json` is gitignored. Live mode refuses `KEY
 
 ```bash
 pnpm run build
+pnpm --filter @whale/web run build
 ```
+
+The first command builds the server into `dist/`. The second builds the dashboard into `web/dist`. The gateway refuses to start without `web/dist/index.html`. The executor, the CLI, and the MCP server need only the first command.
 
 ## Migrate the hosted schema
 

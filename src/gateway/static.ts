@@ -33,9 +33,9 @@ export const PAGE_CSP = [
 // The build output is fixed for the life of the process, so it is read once at boot and served from memory: a request
 // never touches the file system. Hashed asset names never change content, so they cache for a year. The page itself
 // is never cached, so a deploy reaches every browser on its next load.
-export function registerStatic(app: FastifyInstance, dir: string = WEB_DIST_DIR): boolean {
+export function registerStatic(app: FastifyInstance, dir: string): void {
   const index = path.join(dir, "index.html");
-  if (!existsSync(index)) return false;
+  if (!existsSync(index)) throw new Error(`dashboard build missing: ${index} does not exist. Run pnpm --filter @whale/web run build before starting the gateway.`);
   const page = readFileSync(index);
   const assetsDir = path.join(dir, "assets");
   const assets = new Map<string, { type: string; body: Buffer }>();
@@ -59,5 +59,4 @@ export function registerStatic(app: FastifyInstance, dir: string = WEB_DIST_DIR)
     }
     return reply.header("content-type", "text/html; charset=utf-8").header("cache-control", "no-cache").header("content-security-policy", PAGE_CSP).send(page);
   });
-  return true;
 }

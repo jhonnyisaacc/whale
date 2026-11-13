@@ -26,7 +26,7 @@ export type GatewayDeps = {
   fetchDocument?: MetadataFetch;
   turnkey?: TurnkeyParent | null;
   delegation?: DelegationConfig | null;
-  webDir?: string | null;
+  webDir?: string;
 };
 
 export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> {
@@ -46,6 +46,6 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   });
   registerOAuthRoutes(app, { config: deps.config, pool: deps.pool, now, ...(deps.fetchDocument ? { fetchDocument: deps.fetchDocument } : {}) });
   registerMcpRoutes(app, { config: deps.config, pool: deps.pool, executor: deps.executor ?? (deps.config.executor ? executorClient(deps.config.executor, fetchImpl) : null) });
-  if (deps.webDir !== null) registerStatic(app, deps.webDir);
+  if (deps.webDir !== undefined) registerStatic(app, deps.webDir);
   return app;
 }
