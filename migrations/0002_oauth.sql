@@ -39,6 +39,5 @@ CREATE INDEX oauth_codes_request_idx ON oauth_codes (request_id);
 
 ALTER TABLE agents ADD COLUMN oauth_client_id text REFERENCES oauth_clients (id);
 ALTER TABLE agent_credentials ADD COLUMN audience text;
-ALTER TABLE agent_credentials ADD COLUMN rotated_at timestamptz;
 ALTER TABLE agent_credentials ADD CONSTRAINT agent_credentials_oauth_audience CHECK (kind = 'api_key' OR audience IS NOT NULL);
 CREATE INDEX agent_credentials_oauth_expires_idx ON agent_credentials (expires_at) WHERE kind <> 'api_key';

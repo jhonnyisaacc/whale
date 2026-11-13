@@ -67,8 +67,7 @@ test("discovery metadata names the MCP resource, a path-free issuer, PKCE S256, 
 });
 
 test("a registered client completes code + PKCE, uses the token on MCP, and replay or refresh reuse revokes the family", { skip: !TEST_DATABASE_URL }, async () => {
-  let clock = Date.now();
-  const { app, pool, form, authorize, connect, mcp, user, drop } = await harness({}, () => clock);
+  const { app, pool, form, authorize, connect, mcp, user, drop } = await harness();
   try {
     assert.equal((await app.inject({ method: "POST", url: "/oauth/register", payload: { redirect_uris: ["http://evil.example/cb"] } })).statusCode, 400);
     const clientId = await register(form, app);
@@ -112,7 +111,6 @@ test("a registered client completes code + PKCE, uses the token on MCP, and repl
     assert.match(rotated.access_token, /^wat_/);
     assert.equal((await mcp(rotated.access_token)).statusCode, 200);
     assert.equal((await form("/oauth/token", { grant_type: "refresh_token", refresh_token: rotated.refresh_token, client_id: "dcr_other" })).json().error, "invalid_grant");
-    clock += 11_000;
     const reused = await form("/oauth/token", { grant_type: "refresh_token", refresh_token: second.refresh_token, client_id: clientId });
     assert.equal(reused.json().error, "invalid_grant");
     assert.equal((await mcp(rotated.access_token)).statusCode, 401);
@@ -200,32 +198,42 @@ test("a metadata document that fails to load is not fetched again for a minute",
   }
 });
 
-test("two refreshes at once both succeed, and reuse after the grace window still ends the family", { skip: !TEST_DATABASE_URL }, async () => {
+test("two refreshes at once with one token get one pair, and the loser's invalid_grant revokes that pair too", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, form, connect, mcp, drop } = await harness();
+  try {
+    const clientId = await register(form, app);
+    const { code, verifier } = await connect(clientId);
+    const pair = (await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier })).json();
+    const refresh = (token: string) => form("/oauth/token", { grant_type: "refresh_token", refresh_token: token, client_id: clientId });
+
+    const replies = await Promise.all([refresh(pair.refresh_token), refresh(pair.refresh_token)]);
+    assert.deepEqual(replies.map((reply) => reply.statusCode).sort(), [200, 400]);
+    const winner = replies.find((reply) => reply.statusCode === 200)?.json();
+    assert.equal(replies.find((reply) => reply.statusCode === 400)?.json().error, "invalid_grant");
+    assert.equal((await mcp(winner.access_token)).statusCode, 401);
+    assert.equal((await refresh(winner.refresh_token)).json().error, "invalid_grant");
+  } finally {
+    await drop();
+  }
+});
+
+test("a stolen refresh token replayed five seconds after rotation is refused and revokes the legitimate chain", { skip: !TEST_DATABASE_URL }, async () => {
   let clock = Date.now();
   const { app, form, connect, mcp, drop } = await harness({}, () => clock);
   try {
     const clientId = await register(form, app);
-    const tokens = async () => {
-      const { code, verifier } = await connect(clientId);
-      return (await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier })).json();
-    };
+    const { code, verifier } = await connect(clientId);
+    const stolen = (await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier })).json().refresh_token;
     const refresh = (token: string) => form("/oauth/token", { grant_type: "refresh_token", refresh_token: token, client_id: clientId });
 
-    const pair = await tokens();
-    const [first, second] = await Promise.all([refresh(pair.refresh_token), refresh(pair.refresh_token)]);
-    assert.deepEqual([first.statusCode, second.statusCode], [200, 200]);
-    assert.equal((await mcp(first.json().access_token)).statusCode, 200);
-    assert.equal((await mcp(second.json().access_token)).statusCode, 200);
+    const legit = (await refresh(stolen)).json();
+    assert.equal((await mcp(legit.access_token)).statusCode, 200);
 
-    clock += 11_000;
-    assert.equal((await refresh(pair.refresh_token)).json().error, "invalid_grant");
-    assert.equal((await mcp(first.json().access_token)).statusCode, 401);
-    assert.equal((await mcp(second.json().access_token)).statusCode, 401);
-
-    const other = await tokens();
-    const rotated = (await refresh(other.refresh_token)).json();
-    assert.equal((await form("/oauth/revoke", { token: rotated.refresh_token })).statusCode, 200);
-    assert.equal((await refresh(other.refresh_token)).json().error, "invalid_grant");
+    clock += 5_000;
+    const replay = await refresh(stolen);
+    assert.deepEqual([replay.statusCode, replay.json().error, replay.json().access_token], [400, "invalid_grant", undefined]);
+    assert.equal((await mcp(legit.access_token)).statusCode, 401);
+    assert.equal((await refresh(legit.refresh_token)).json().error, "invalid_grant");
   } finally {
     await drop();
   }
