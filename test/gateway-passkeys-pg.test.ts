@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildGateway } from "../src/gateway/app.js";
-import { newChallenge, verifyStepUp } from "../src/gateway/passkeys.js";
+import { randomBytes } from "node:crypto";
+import { addPasskey, MAX_PASSKEYS, newChallenge, registrationOptions, stepUpOptions, verifyStepUp } from "../src/gateway/passkeys.js";
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
 import { softAuthenticator } from "./webauthn-fixtures.js";
@@ -143,6 +144,75 @@ test("used and expired challenges leave the table", { skip: !TEST_DATABASE_URL }
     assert.equal(await rows(), 1);
     assert.equal(await verifyStepUp(pool, gatewayConfig(), user.accountId, action, authenticator.assert(stepUp.challenge)), true);
     assert.equal(await rows(), 0);
+  } finally {
+    await drop();
+  }
+});
+
+const ROUNDS = 10;
+const RACERS = 4;
+
+async function racingRegistrations(pool: Awaited<ReturnType<typeof migratedSchema>>["pool"], accountId: string, approver: ReturnType<typeof softAuthenticator> | null) {
+  const config = gatewayConfig();
+  const attempts = await Promise.all(
+    Array.from({ length: RACERS }, async () => {
+      const options = await registrationOptions(pool, config, { accountId, email: null });
+      const payload = softAuthenticator(RP).register(options.challenge);
+      const stepUp = approver ? await stepUpOptions(pool, config, accountId, { kind: "passkey.add", credentialId: payload.id }) : null;
+      return { payload, assertion: approver && stepUp ? approver.assert(stepUp.challenge) : null };
+    }),
+  );
+  return Promise.all(attempts.map(({ payload, assertion }, index) => addPasskey(pool, config, { accountId, payload, label: `racer ${index}`, assertion })));
+}
+
+test("parallel session-only registrations land exactly one passkey, and the rest keep their challenge and answer step_up_required", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, drop } = await harness();
+  try {
+    for (let round = 0; round < ROUNDS; round += 1) {
+      const { accountId } = await signedInAccount(pool);
+      const results = await racingRegistrations(pool, accountId, null);
+      const refusals = results.flatMap((result) => ("refused" in result ? [result.refused] : []));
+      assert.deepEqual(refusals, Array(RACERS - 1).fill("step_up_required"), `round ${round}`);
+      const live = await pool.query("SELECT count(*)::int AS n FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL", [accountId]);
+      assert.equal(live.rows[0].n, 1, `round ${round}`);
+      const unused = await pool.query("SELECT count(*)::int AS n FROM webauthn_challenges WHERE account_id = $1 AND purpose = 'register'", [accountId]);
+      assert.equal(unused.rows[0].n, RACERS - 1, `round ${round}`);
+    }
+  } finally {
+    await drop();
+  }
+});
+
+test("parallel stepped-up registrations never take an account past the passkey cap", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, drop } = await harness();
+  try {
+    for (let round = 0; round < ROUNDS; round += 1) {
+      const { accountId } = await signedInAccount(pool);
+      const approver = softAuthenticator(RP, false);
+      const options = await registrationOptions(pool, gatewayConfig(), { accountId, email: null });
+      assert.ok(!("refused" in (await addPasskey(pool, gatewayConfig(), { accountId, payload: approver.register(options.challenge), label: "approver", assertion: null }))));
+      for (let filler = 1; filler < MAX_PASSKEYS - 1; filler += 1) {
+        await pool.query("INSERT INTO passkeys (credential_id, account_id, public_key, sign_count, label) VALUES ($1, $2, $3, 0, $4)", [randomBytes(32).toString("base64url"), accountId, randomBytes(77), `filler ${filler}`]);
+      }
+      const results = await racingRegistrations(pool, accountId, approver);
+      assert.equal(results.filter((result) => !("refused" in result)).length, 1, `round ${round}`);
+      const live = await pool.query("SELECT count(*)::int AS n FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL", [accountId]);
+      assert.equal(live.rows[0].n, MAX_PASSKEYS, `round ${round}`);
+    }
+  } finally {
+    await drop();
+  }
+});
+
+test("a step-up action holding a number JSON cannot represent is refused with 400", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, user, drop } = await harness();
+  try {
+    const authenticator = softAuthenticator(RP);
+    const options = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers: user.headers, payload: {} })).json();
+    assert.equal((await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: authenticator.register(options.challenge), label: "MacBook" } })).statusCode, 201);
+    const huge = await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: { ...user.headers, "content-type": "application/json" }, payload: '{"action":{"kind":"x","n":1e400}}' });
+    assert.equal(huge.statusCode, 400);
+    assert.equal(huge.json().error, "invalid_request");
   } finally {
     await drop();
   }

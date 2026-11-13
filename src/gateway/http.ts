@@ -31,7 +31,7 @@ export function clearedCookie(name: string): string {
 // Only a same-origin path survives, so a crafted return_to cannot bounce a fresh session to another site.
 export function safeReturnTo(raw: unknown): string {
   if (typeof raw !== "string" || raw.length > 512) return "/";
-  if (!raw.startsWith("/") || raw.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(raw)) return "/";
+  if (!raw.startsWith("/") || raw.startsWith("//") || /[^\x20-\x7e]|["\\]/.test(raw)) return "/";
   return raw;
 }
 
