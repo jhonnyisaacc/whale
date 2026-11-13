@@ -4,9 +4,7 @@ import type { CommandDeps } from "../src/commands.js";
 import { registerHostedRoutes } from "../src/executor-server/hosted.js";
 import { buildApp } from "../src/http.js";
 import { cachedNetworkCosts, networkCosts, type CostReaders } from "../src/network-costs.js";
-import { x402Quote } from "../src/gateway/x402.js";
-import type { AgentContext } from "../src/gateway/agents.js";
-import { DEFAULT_POLICY } from "../src/gateway/policy.js";
+import { x402Quote, type JudgePayment } from "../src/gateway/x402.js";
 
 const GWEI = 1_000_000_000n;
 
@@ -69,39 +67,28 @@ test("the executor answers a costs command on the hosted route without reaching 
   }
 });
 
-const AGENT: AgentContext = {
-  agentId: "a",
-  accountId: "b",
-  walletId: "c",
-  walletStatus: "active",
-  live: false,
-  limits: { chains: ["base", "solana"], actions: ["swap"], maxTxUsd: 5, dailyUsd: 10 },
-  policy: DEFAULT_POLICY,
-};
 const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const fits: JudgePayment = async () => ({ verdict: "fits", reasons: [] });
 
-test("an x402 challenge becomes a plan: the cheapest option inside the agent's limits, and nothing paid", async () => {
+test("an x402 challenge becomes a plan: the cheapest option that fits, and nothing paid", async () => {
   const challenge = {
     x402Version: 1,
     accepts: [
-      { scheme: "exact", network: "ethereum", maxAmountRequired: "10000", asset: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", payTo: "0x1" },
       { scheme: "exact", network: "base", maxAmountRequired: "20000", asset: BASE_USDC, payTo: "0x2" },
       { scheme: "exact", network: "base-sepolia", maxAmountRequired: "1", asset: BASE_USDC, payTo: "0x3" },
       { scheme: "exact", network: "base", maxAmountRequired: "9000000", asset: BASE_USDC, payTo: "0x4" },
       { scheme: "upto", network: "base", maxAmountRequired: "1", asset: BASE_USDC, payTo: "0x5" },
     ],
   };
-  const quote = await x402Quote("https://paid.example/data", AGENT, async () => ({ status: 402, body: JSON.stringify(challenge) }));
+  const quote = await x402Quote("https://paid.example/data", fits, async () => ({ status: 402, body: JSON.stringify(challenge) }));
   assert.equal(quote.status, "plan");
   if (quote.status !== "plan") return;
   assert.equal(quote.paid, false);
   assert.deepEqual(quote.best && [quote.best.chain, quote.best.usd, quote.best.payTo], ["base", 0.02, "0x2"]);
   const reasons = quote.options.map((entry) => entry.reasons.join("; "));
-  assert.match(reasons[0] ?? "", /outside this agent's chains/);
-  assert.match(reasons[2] ?? "", /not a supported mainnet/);
-  assert.match(reasons[3] ?? "", /above this agent's 5 USD/);
-  assert.match(reasons[4] ?? "", /scheme upto/);
-  assert.deepEqual(await x402Quote("https://free.example", AGENT, async () => ({ status: 200, body: "" })), { status: "no_payment_required", httpStatus: 200 });
-  assert.equal((await x402Quote("https://odd.example", AGENT, async () => ({ status: 402, body: "pay me" }))).status, "unreadable");
-  assert.equal((await x402Quote("https://down.example", AGENT, async () => Promise.reject(new Error("host resolves to a private address")))).status, "unreadable");
+  assert.match(reasons[1] ?? "", /not a supported mainnet/);
+  assert.match(reasons[3] ?? "", /scheme upto/);
+  assert.deepEqual(await x402Quote("https://free.example", fits, async () => ({ status: 200, body: "" })), { status: "no_payment_required", httpStatus: 200 });
+  assert.equal((await x402Quote("https://odd.example", fits, async () => ({ status: 402, body: "pay me" }))).status, "unreadable");
+  assert.equal((await x402Quote("https://down.example", fits, async () => Promise.reject(new Error("host resolves to a private address")))).status, "unreadable");
 });

@@ -1,7 +1,5 @@
 import { z } from "zod";
 import { QUOTE_ASSETS } from "../chains.js";
-import type { AgentContext } from "./agents.js";
-import { effectiveLimits } from "./policy.js";
 import { safeRequest, type SafeResponse } from "./safe-https.js";
 
 // x402 names networks either by short name or by CAIP-2 id. Test networks map to nothing, so they never fit.
@@ -33,7 +31,10 @@ const requirementSchema = z
   .loose();
 const challengeSchema = z.object({ x402Version: z.number().int(), accepts: z.array(z.unknown()).min(1).max(16) }).loose();
 
-export type X402Option = { network: string; chain: string | null; asset: string; symbol: string | null; amount: string; usd: number | null; payTo: string; fits: boolean; reasons: string[] };
+export type X402Payment = { chainKey: string; token: string; to: string; amount: string; usd: number };
+export type X402Verdict = { verdict: "fits" | "needs_approval" | "refused"; reasons: string[] };
+export type JudgePayment = (payment: X402Payment) => Promise<X402Verdict>;
+export type X402Option = { network: string; chain: string | null; asset: string; symbol: string | null; amount: string; usd: number | null; payTo: string } & X402Verdict;
 export type X402Quote =
   | { status: "no_payment_required"; httpStatus: number }
   | { status: "plan"; paid: false; note: string; options: X402Option[]; best: X402Option | null }
@@ -42,8 +43,7 @@ export type X402Quote =
 export type Fetch402 = (url: string) => Promise<SafeResponse>;
 export const fetch402: Fetch402 = (url) => safeRequest(url, { method: "GET", headers: { accept: "application/json" }, maxBytes: 64 * 1024, timeoutMs: 5_000 });
 
-function option(raw: z.infer<typeof requirementSchema>, agent: AgentContext): X402Option {
-  const limits = effectiveLimits(agent.limits, agent.policy);
+async function option(raw: z.infer<typeof requirementSchema>, judge: JudgePayment): Promise<X402Option> {
   const chain = NETWORKS[raw.network] ?? null;
   const amount = raw.maxAmountRequired ?? raw.amount ?? "0";
   const known = chain ? QUOTE_ASSETS[chain]?.find((entry) => entry.address.toLowerCase() === raw.asset.toLowerCase()) : undefined;
@@ -52,15 +52,19 @@ function option(raw: z.infer<typeof requirementSchema>, agent: AgentContext): X4
   const reasons: string[] = [];
   if (raw.scheme !== "exact") reasons.push(`scheme ${raw.scheme} is not supported`);
   if (!chain) reasons.push(`network ${raw.network} is not a supported mainnet`);
-  else if (!limits.chains.includes(chain)) reasons.push(`${chain} is outside this agent's chains`);
   if (usd === null) reasons.push("the asset is not a known stablecoin, so the price is unknown");
-  else if (usd > limits.maxTxUsd) reasons.push(`${usd} USD is above this agent's ${limits.maxTxUsd} USD per-transaction cap`);
-  return { network: raw.network, chain, asset: raw.asset, symbol: known?.symbol ?? null, amount, usd, payTo: raw.payTo, fits: reasons.length === 0, reasons };
+  const base = { network: raw.network, chain, asset: raw.asset, symbol: known?.symbol ?? null, amount, usd, payTo: raw.payTo };
+  if (reasons.length > 0 || chain === null || usd === null) return { ...base, verdict: "refused", reasons };
+  return { ...base, ...(await judge({ chainKey: chain, token: raw.asset, to: raw.payTo, amount, usd })) };
+}
+
+function cheapest(options: X402Option[], verdict: X402Verdict["verdict"]): X402Option | null {
+  return options.filter((entry) => entry.verdict === verdict).sort((left, right) => (left.usd ?? Infinity) - (right.usd ?? Infinity))[0] ?? null;
 }
 
 // Reads a paid resource's 402 challenge and says which payment option this agent could make. It pays nothing: a live
 // x402 payment is a send with no simulation step, and AGENTS.md does not allow a send path that skips one.
-export async function x402Quote(url: string, agent: AgentContext, fetchImpl: Fetch402 = fetch402): Promise<X402Quote> {
+export async function x402Quote(url: string, judge: JudgePayment, fetchImpl: Fetch402 = fetch402): Promise<X402Quote> {
   let response: SafeResponse;
   try {
     response = await fetchImpl(url);
@@ -74,10 +78,12 @@ export async function x402Quote(url: string, agent: AgentContext, fetchImpl: Fet
   } catch {
     return { status: "unreadable", reason: "the 402 body is not an x402 payment challenge" };
   }
-  const options = challenge.accepts.flatMap((entry) => {
-    const parsed = requirementSchema.safeParse(entry);
-    return parsed.success ? [option(parsed.data, agent)] : [];
-  });
-  const best = options.filter((entry) => entry.fits).sort((left, right) => (left.usd ?? Infinity) - (right.usd ?? Infinity))[0] ?? null;
+  const options = await Promise.all(
+    challenge.accepts.flatMap((entry) => {
+      const parsed = requirementSchema.safeParse(entry);
+      return parsed.success ? [option(parsed.data, judge)] : [];
+    }),
+  );
+  const best = cheapest(options, "fits") ?? cheapest(options, "needs_approval");
   return { status: "plan", paid: false, note: "Hosted x402 payments are not enabled. Nothing was paid.", options, best };
 }

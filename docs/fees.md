@@ -76,12 +76,10 @@ The hosted MCP tool `network_costs` returns these numbers for the agent's chains
 
 ## x402
 
-The hosted tool `x402_quote` fetches a URL through the same guarded client as webhooks. On a 402 it reads the `accepts` list and marks each option as fitting or not:
-- The scheme must be `exact`.
-- The network must be a supported mainnet.
-- The chain must be inside the agent's chains.
-- The asset must be a known stablecoin.
-- The amount must be within the agent's per-transaction cap.
+The hosted tool `x402_quote` fetches a URL through the same guarded client as webhooks. On a 402 it reads the `accepts` list. An option is refused unless the scheme is `exact`, the network is a supported mainnet, and the asset is a known stablecoin. Every other option goes through the checks the hosted `transfer` tool applies to the same payment:
+- The chain must be inside the agent's chains, and the agent must be allowed to transfer.
+- The token must be on the wallet's token list, and `payTo` must be on the wallet's destination list.
+- The amount must be within the agent's per-transaction cap, and today's total must stay within the agent's and the wallet's daily caps.
 
-It returns the cheapest option that fits. It pays nothing. A live x402 payment would be a send with no simulation step, and the send rules do not allow that path.
+An option that passes is `fits`, or `needs_approval` when the owner set an approval threshold, because a transfer out then waits for a passkey approval. `best` is the cheapest option that fits, or else the cheapest that needs approval. It pays nothing. A live x402 payment would be a send with no simulation step, and the send rules do not allow that path.
 

@@ -5,9 +5,9 @@ import type { HostedCommand } from "../hosted-commands.js";
 import { audit } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
 import type { ExecutorClient } from "./executor-client.js";
-import { planSend } from "./mcp-sends.js";
+import { dailyRefusal, perTxRefusal, planSend, today, transferApprovalReason } from "./mcp-sends.js";
 import { effectiveLimits, type WalletPolicy } from "./policy.js";
-import { x402Quote, type Fetch402 } from "./x402.js";
+import { x402Quote, type Fetch402, type X402Payment, type X402Verdict } from "./x402.js";
 import type { WalletView } from "./wallets.js";
 
 const amount = { type: "string", description: "Positive integer in the token's smallest unit (wei, lamports, 6-decimal USDC units)." };
@@ -23,7 +23,7 @@ export const HOSTED_TOOLS = [
   { name: "swap", description: "Plan a swap and return the route it would take. Checks this agent's chains, actions, and per-transaction and daily USD caps, the wallet's daily USD cap, and the wallet's slippage and token list. Above the owner's approval threshold, or whenever Whale cannot price what it sells, it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 }, idempotencyKey: key }, required: ["chain", "sellToken", "buyToken", "sellAmount", "idempotencyKey"], additionalProperties: false } },
   { name: "transfer", description: "Plan a transfer to an address on the wallet's destination list. Checks this agent's chains and actions and the wallet's token list, not its USD limits. When the owner set an approval threshold it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, token, to: { type: "string", description: "A destination the wallet owner listed in the dashboard." }, amount, idempotencyKey: key }, required: ["chain", "token", "to", "amount", "idempotencyKey"], additionalProperties: false } },
   { name: "network_costs", description: "Estimate what a swap and a transfer cost right now on each chain this agent may use, cheapest first. Moves no money.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
-  { name: "x402_quote", description: "Read an x402 paid resource's payment challenge and say which option this agent could pay within its limits. Pays nothing.", inputSchema: { type: "object", properties: { url: { type: "string", description: "The https URL that answers 402 Payment Required." } }, required: ["url"], additionalProperties: false } },
+  { name: "x402_quote", description: "Read an x402 paid resource's payment challenge and mark each option fits, needs_approval, or refused by the checks the transfer tool applies to the same payment, including the destination list and the daily caps. Pays nothing.", inputSchema: { type: "object", properties: { url: { type: "string", description: "The https URL that answers 402 Payment Required." } }, required: ["url"], additionalProperties: false } },
 ] as const;
 
 const x402Args = z.object({ url: z.string().url().max(512) }).strict();
@@ -67,6 +67,15 @@ export function denyReason(agent: AgentContext, command: HostedCommand): string 
     if (!listed) return "the destination is not on the wallet's destination list. The owner adds destinations in the dashboard";
   }
   return null;
+}
+
+async function paymentVerdict(pool: pg.Pool, agent: AgentContext, payment: X402Payment): Promise<X402Verdict> {
+  const command: HostedCommand = { kind: "transfer", chainKey: payment.chainKey, token: payment.token, to: payment.to, amount: payment.amount, idempotencyKey: "x402-quote" };
+  const refusals = [denyReason(agent, command), perTxRefusal(agent, payment.usd, "the payment is about"), await dailyRefusal(pool, agent, { usd: payment.usd, day: today() }, "the payment")];
+  const reasons = refusals.filter((reason): reason is string => reason !== null);
+  if (reasons.length > 0) return { verdict: "refused", reasons };
+  const approval = transferApprovalReason(agent);
+  return approval ? { verdict: "needs_approval", reasons: [approval] } : { verdict: "fits", reasons: [] };
 }
 
 export function commandFor(name: string, args: unknown, wallet: WalletView, agent: AgentContext): HostedCommand | string {
@@ -116,7 +125,7 @@ export async function callHostedTool(env: ToolEnv, name: string, args: unknown):
   if (name === "x402_quote") {
     const parsed = x402Args.safeParse(args);
     if (!parsed.success) return { ok: false, error: "arguments do not match the tool schema" };
-    return { ok: true, value: await x402Quote(parsed.data.url, agent, env.fetch402) };
+    return { ok: true, value: await x402Quote(parsed.data.url, (payment) => paymentVerdict(env.pool, agent, payment), env.fetch402) };
   }
   if (name === "network_costs") {
     if (!env.executor) return { ok: false, error: "network costs are not configured on this deployment" };
