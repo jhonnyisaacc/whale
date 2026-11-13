@@ -92,7 +92,7 @@ export async function decideApproval(
     if (verified !== true) return verified;
   }
   const status = input.approve ? "approved" : "denied";
-  const updated = await pool.query("UPDATE approvals SET status = $2, decided_at = $3 WHERE id = $1 AND status = 'pending'", [input.approvalId, status, new Date(now)]);
+  const updated = await pool.query("UPDATE approvals SET status = $2, decided_at = $3 WHERE id = $1 AND status = 'pending' AND expires_at > $3", [input.approvalId, status, new Date(now)]);
   if ((updated.rowCount ?? 0) === 0) return "not_pending";
   await audit(pool, { accountId: input.accountId, walletId: row.wallet_id, agentId: row.agent_id, actor: "user", action: `approval.${status}`, detail: { approvalId: input.approvalId } });
   return true;

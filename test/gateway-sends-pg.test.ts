@@ -157,3 +157,19 @@ test("with no approval threshold, a swap Whale cannot price still waits for the 
     await drop();
   }
 });
+
+test("approving an approval past its hour answers 409 and leaves nothing to spend", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    const asked = await swap("late-approve", 15);
+    const approvalId = String(asked.body?.approvalId);
+    await pool.query("UPDATE approvals SET expires_at = now() - interval '1 second' WHERE id = $1", [approvalId]);
+    assert.equal((await approve(approvalId)).statusCode, 409);
+    const row = await pool.query("SELECT status, decided_at FROM approvals WHERE id = $1", [approvalId]);
+    assert.deepEqual(row.rows[0], { status: "pending", decided_at: null });
+    assert.match((await swap("late-approve", 15)).text, /expired/);
+    assert.equal(sent.length, 0);
+  } finally {
+    await drop();
+  }
+});
