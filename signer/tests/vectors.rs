@@ -135,3 +135,41 @@ fn a_sealed_keystore_opens_only_with_its_passphrase() {
     assert!(keystore::open(&sealed, "wrong horse battery").is_err());
     assert!(keystore::seal(&keys, "short").is_err());
 }
+
+#[test]
+fn concurrent_jobs_never_sign_past_the_daily_limit() {
+    let policy = Policy::parse(&load("policy.json")).expect("policy");
+    let keys = keys();
+    let evm = load("evm.json");
+    let swap = evm["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "0x exec into settler for this wallet")
+        .unwrap()["job"]
+        .clone();
+    for round in 0..25 {
+        let ledger = fresh_ledger(&format!("ledger-concurrent-{round}"));
+        let start = std::sync::Barrier::new(8);
+        let signed = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        start.wait();
+                        run_job(&swap, &policy, &keys, &ledger, DAY)["decision"] == "signed"
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap())
+                .filter(|signed| *signed)
+                .count()
+        });
+        let _ = std::fs::remove_file(&ledger);
+        assert_eq!(
+            signed, 3,
+            "round {round}: 3 USDC a time against a 10 USDC day"
+        );
+    }
+}

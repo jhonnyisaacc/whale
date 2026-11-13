@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct Ledger {
     day: String,
     spent: BTreeMap<String, u128>,
+    _lock: fs::File,
 }
 
 pub fn utc_day(seconds: u64) -> String {
@@ -33,20 +34,27 @@ pub fn today() -> String {
 
 impl Ledger {
     pub fn load(path: &Path, day: &str) -> Result<Ledger, String> {
+        let lock = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(path.with_extension("lock"))
+            .map_err(|error| format!("cannot open the ledger lock: {error}"))?;
+        lock.lock()
+            .map_err(|error| format!("cannot lock the ledger: {error}"))?;
+        let empty = |lock| Ledger {
+            day: day.to_owned(),
+            spent: BTreeMap::new(),
+            _lock: lock,
+        };
         if !path.exists() {
-            return Ok(Ledger {
-                day: day.to_owned(),
-                spent: BTreeMap::new(),
-            });
+            return Ok(empty(lock));
         }
         let text =
             fs::read_to_string(path).map_err(|error| format!("cannot read the ledger: {error}"))?;
         let value: Value = serde_json::from_str(&text).map_err(|_| "the ledger is not JSON")?;
         if value.get("day").and_then(Value::as_str) != Some(day) {
-            return Ok(Ledger {
-                day: day.to_owned(),
-                spent: BTreeMap::new(),
-            });
+            return Ok(empty(lock));
         }
         let mut spent = BTreeMap::new();
         for (key, amount) in value
@@ -66,6 +74,7 @@ impl Ledger {
         Ok(Ledger {
             day: day.to_owned(),
             spent,
+            _lock: lock,
         })
     }
 

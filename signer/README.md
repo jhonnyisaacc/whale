@@ -63,7 +63,7 @@ A rule that needs an account loaded from an address lookup table refuses.
 
 A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.
 
-The daily totals live in `--ledger`, keyed by UTC day. The file is replaced atomically, and it moves only after a signature exists.
+The daily totals live in `--ledger`, keyed by UTC day. The file is replaced atomically, and it moves only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom.
 
 ## Supply chain
 
