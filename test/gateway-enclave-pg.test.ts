@@ -166,8 +166,20 @@ test("two concurrent enclave creates for one wallet reach Turnkey once", { skip:
     const walletId = await gateway.newWallet();
     const first = await gateway.create(walletId);
     const second = await gateway.create(walletId);
-    gateway.fake.faults.createDelayMs = 100;
-    const responses = await Promise.all([first(), second()]);
+    const holder = await gateway.pool.connect();
+    let responses;
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT 1 FROM wallets WHERE id = $1 FOR UPDATE", [walletId]);
+      const holderPid = (await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
+      const racing = Promise.all([first(), second()]);
+      const waiting = async () => (await gateway.pool.query<{ n: number }>("WITH direct AS (SELECT pid FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))) SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid IN (SELECT pid FROM direct) OR pg_blocking_pids(pid) && ARRAY(SELECT pid FROM direct)", [holderPid])).rows[0]?.n;
+      while ((await waiting()) !== 2) await new Promise((resolve) => setTimeout(resolve, 5));
+      await holder.query("COMMIT");
+      responses = await racing;
+    } finally {
+      holder.release();
+    }
     assert.deepEqual(responses.map((response) => response.statusCode).sort(), [201, 409]);
     assert.equal(gateway.fake.created.length, 1);
     assert.deepEqual(await gateway.trackedSubOrgs(), [...gateway.fake.orgs.keys()].sort());
