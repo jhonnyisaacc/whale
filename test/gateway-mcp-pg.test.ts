@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
+import type pg from "pg";
 import { createAgent } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
 import type { ExecutorClient } from "../src/gateway/executor-client.js";
@@ -13,6 +14,19 @@ const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
 const OWN = "0x9999999999999999999999999999999999999999";
 const COLD = "0x2222222222222222222222222222222222222222";
+
+function countQueries(pool: pg.Pool) {
+  const counts = { queries: 0, lookups: 0 };
+  const query = pool.query.bind(pool) as (...args: unknown[]) => unknown;
+  (pool as unknown as { query: (...args: unknown[]) => unknown }).query = (...args: unknown[]) => {
+    counts.queries += 1;
+    if (String(args[0]).includes("FROM agent_credentials")) counts.lookups += 1;
+    return query(...args);
+  };
+  return counts;
+}
+
+const randomKey = () => `whale_${randomBytes(6).toString("hex")}_${randomBytes(32).toString("base64url").slice(0, 43)}`;
 
 async function harness() {
   const { pool, drop } = await migratedSchema();
@@ -116,8 +130,7 @@ test("/mcp throttles one IP that rotates random keys and one agent that rotates 
     const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
     const rotatingKeys: number[] = [];
     for (let index = 0; index < 130; index += 1) {
-      const key = `whale_${randomBytes(6).toString("hex")}_${randomBytes(32).toString("base64url").slice(0, 43)}`;
-      const response = await app.inject({ method: "POST", url: "/mcp", remoteAddress: "203.0.113.7", headers: { authorization: `Bearer ${key}` }, payload: ping });
+      const response = await app.inject({ method: "POST", url: "/mcp", remoteAddress: "203.0.113.7", headers: { authorization: `Bearer ${randomKey()}` }, payload: ping });
       rotatingKeys.push(response.statusCode);
     }
     assert.deepEqual([...new Set(rotatingKeys.slice(0, 120))], [401]);
@@ -127,6 +140,79 @@ test("/mcp throttles one IP that rotates random keys and one agent that rotates 
     for (let index = 0; index < 121; index += 1) rotatingIps.push((await rpc(ping, {}, `198.51.100.${index}`)).statusCode);
     assert.deepEqual([...new Set(rotatingIps.slice(0, 120))], [200]);
     assert.equal(rotatingIps[120], 429);
+  } finally {
+    await drop();
+  }
+});
+
+test("/mcp gives every tenant behind one egress IP its own budget", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, rpc, drop } = await harness();
+  try {
+    const { accountId } = await signedInAccount(pool);
+    const created = await createWallet(pool, accountId, { label: "other", level: "enclave" });
+    const walletId = "walletId" in created ? created.walletId : "";
+    const other = await createAgent(pool, { accountId, walletId, name: "other", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 20, dailyUsd: 40 } });
+    if ("refused" in other) throw new Error(other.refused);
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    const first: number[] = [];
+    for (let index = 0; index < 120; index += 1) first.push((await rpc(ping, {}, "34.1.2.3")).statusCode);
+    assert.deepEqual([...new Set(first)], [200]);
+    assert.equal((await rpc(ping, { authorization: `Bearer ${other.apiKey}` }, "34.1.2.3")).statusCode, 200);
+  } finally {
+    await drop();
+  }
+});
+
+test("/mcp keeps serving a tenant already seen on an IP that a stranger floods with bad keys, but refuses a key never seen there", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, rpc, drop } = await harness();
+  try {
+    const { accountId } = await signedInAccount(pool);
+    const created = await createWallet(pool, accountId, { label: "fresh", level: "enclave" });
+    const walletId = "walletId" in created ? created.walletId : "";
+    const fresh = await createAgent(pool, { accountId, walletId, name: "fresh", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 20, dailyUsd: 40 } });
+    if ("refused" in fresh) throw new Error(fresh.refused);
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    assert.equal((await rpc(ping, {}, "34.1.2.3")).statusCode, 200);
+    for (let index = 0; index < 120; index += 1) {
+      const bad = await app.inject({ method: "POST", url: "/mcp", remoteAddress: "34.1.2.3", headers: { authorization: `Bearer ${randomKey()}` }, payload: ping });
+      assert.equal(bad.statusCode, 401);
+    }
+    assert.equal((await rpc(ping, { authorization: `Bearer ${randomKey()}` }, "34.1.2.3")).statusCode, 429);
+    assert.equal((await rpc(ping, {}, "34.1.2.3")).statusCode, 200);
+    assert.equal((await rpc(ping, { authorization: `Bearer ${fresh.apiKey}` }, "34.1.2.3")).statusCode, 429);
+  } finally {
+    await drop();
+  }
+});
+
+test("/mcp runs at most one IP budget of credential lookups for a concurrent burst of bad keys", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, drop } = await harness();
+  try {
+    const counts = countQueries(pool);
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    const sources: ((index: number) => string)[] = [() => "203.0.113.9", (index) => `2001:db8:1:2::${index.toString(16)}`];
+    for (const source of sources) {
+      const before = counts.lookups;
+      const burst = await Promise.all(Array.from({ length: 400 }, (_, index) => app.inject({ method: "POST", url: "/mcp", remoteAddress: source(index), headers: { authorization: `Bearer ${randomKey()}` }, payload: ping })));
+      const statuses: Record<number, number> = {};
+      for (const response of burst) statuses[response.statusCode] = (statuses[response.statusCode] ?? 0) + 1;
+      assert.deepEqual(statuses, { 401: 120, 429: 280 });
+      assert.equal(counts.lookups - before, 120);
+    }
+  } finally {
+    await drop();
+  }
+});
+
+test("/mcp refuses an agent past its limit without querying the database", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, rpc, drop } = await harness();
+  try {
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    for (let index = 0; index < 120; index += 1) assert.equal((await rpc(ping, {}, `198.51.100.${index}`)).statusCode, 200);
+    const counts = countQueries(pool);
+    const over = await rpc(ping, {}, "198.51.100.200");
+    assert.equal(over.statusCode, 429);
+    assert.equal(counts.queries, 0);
   } finally {
     await drop();
   }
