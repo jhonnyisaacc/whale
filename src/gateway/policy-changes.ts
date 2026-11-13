@@ -12,6 +12,10 @@ export type PolicyChangeResult =
   | { status: "scheduled"; changeId: string; effectiveAt: string }
   | { refused: "not_found" | "stale" | "conflict" | "step_up_required" | "step_up_failed"; detail?: string };
 
+function fixedTime(now: number | undefined): Date | null {
+  return now === undefined ? null : new Date(now);
+}
+
 function isOnePendingViolation(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "23505" && "constraint" in error && error.constraint === "policy_changes_one_pending";
 }
@@ -30,7 +34,7 @@ export async function changePolicy(
   pool: pg.Pool,
   config: GatewayConfig,
   input: { accountId: string; walletId: string; baseVersion: number; document: WalletPolicy; assertion: AssertionPayload | null },
-  now = Date.now(),
+  now?: number,
 ): Promise<PolicyChangeResult> {
   const current = await pool.query<{ version: number; document: unknown }>(
     "SELECT p.version, p.document FROM policies p JOIN wallets w ON w.id = p.wallet_id WHERE w.id = $1 AND w.account_id = $2 AND w.status <> 'archived'",
@@ -45,12 +49,12 @@ export async function changePolicy(
   if (direction === "narrow") {
     return inTransaction(pool, async (client) => {
       const updated = await client.query<{ version: number }>(
-        "UPDATE policies SET version = version + 1, document = $3, updated_at = $4 WHERE wallet_id = $1 AND version = $2 RETURNING version",
-        [input.walletId, input.baseVersion, JSON.stringify(input.document), new Date(now)],
+        "UPDATE policies SET version = version + 1, document = $3, updated_at = COALESCE($4::timestamptz, now()) WHERE wallet_id = $1 AND version = $2 RETURNING version",
+        [input.walletId, input.baseVersion, JSON.stringify(input.document), fixedTime(now)],
       );
       const version = updated.rows[0]?.version;
       if (version === undefined) return { refused: "stale" as const };
-      await client.query("UPDATE policy_changes SET status = 'superseded', decided_at = $2 WHERE wallet_id = $1 AND status = 'pending'", [input.walletId, new Date(now)]);
+      await client.query("UPDATE policy_changes SET status = 'superseded', decided_at = COALESCE($2::timestamptz, now()) WHERE wallet_id = $1 AND status = 'pending'", [input.walletId, fixedTime(now)]);
       await audit(client, { ...scope, action: "policy.narrowed", detail: { version } });
       return { status: "applied" as const, version };
     });
@@ -59,15 +63,16 @@ export async function changePolicy(
   const approved = await verifyStepUp(pool, config, input.accountId, widenAction(input.walletId, input.baseVersion, input.document), input.assertion, now);
   if (approved !== true) return { refused: "step_up_failed", detail: approved };
   return inTransaction(pool, async (client): Promise<PolicyChangeResult> => {
-    await client.query("UPDATE policy_changes SET status = 'superseded', decided_at = $2 WHERE wallet_id = $1 AND status = 'pending'", [input.walletId, new Date(now)]);
-    const effectiveAt = new Date(now + WIDEN_DELAY_MS);
-    const change = await client.query<{ id: string }>(
-      "INSERT INTO policy_changes (wallet_id, base_version, document, direction, effective_at, requested_at) VALUES ($1, $2, $3, 'widen', $4, $5) RETURNING id",
-      [input.walletId, input.baseVersion, JSON.stringify(input.document), effectiveAt, new Date(now)],
+    await client.query("UPDATE policy_changes SET status = 'superseded', decided_at = COALESCE($2::timestamptz, now()) WHERE wallet_id = $1 AND status = 'pending'", [input.walletId, fixedTime(now)]);
+    const change = await client.query<{ id: string; effective_at: Date }>(
+      `INSERT INTO policy_changes (wallet_id, base_version, document, direction, effective_at, requested_at)
+       VALUES ($1, $2, $3, 'widen', COALESCE($4::timestamptz, now()) + $5 * interval '1 millisecond', COALESCE($4::timestamptz, now())) RETURNING id, effective_at`,
+      [input.walletId, input.baseVersion, JSON.stringify(input.document), fixedTime(now), WIDEN_DELAY_MS],
     );
     const changeId = change.rows[0]?.id as string;
-    await audit(client, { ...scope, action: "policy.widen_requested", detail: { changeId, effectiveAt: effectiveAt.toISOString() } });
-    return { status: "scheduled" as const, changeId, effectiveAt: effectiveAt.toISOString() };
+    const effectiveAt = (change.rows[0]?.effective_at as Date).toISOString();
+    await audit(client, { ...scope, action: "policy.widen_requested", detail: { changeId, effectiveAt } });
+    return { status: "scheduled" as const, changeId, effectiveAt };
   }).catch((error: unknown) => {
     if (isOnePendingViolation(error)) return { refused: "conflict" as const };
     throw error;
@@ -90,8 +95,11 @@ export async function cancelPendingChange(pool: pg.Pool, accountId: string, wall
 
 // A widening applies only on top of the version it was approved against. Anything that moved the policy since makes
 // it superseded, so an old approval never lands on a newer policy.
-export async function applyDueChanges(pool: pg.Pool, now = Date.now()): Promise<number> {
-  const due = await pool.query<{ id: string }>("SELECT id FROM policy_changes WHERE status = 'pending' AND effective_at <= $1 ORDER BY effective_at LIMIT 100", [new Date(now)]);
+export async function applyDueChanges(pool: pg.Pool, now?: number): Promise<number> {
+  const due = await pool.query<{ id: string }>(
+    "SELECT id FROM policy_changes WHERE status = 'pending' AND effective_at <= COALESCE($1::timestamptz, now()) ORDER BY effective_at LIMIT 100",
+    [fixedTime(now)],
+  );
   let applied = 0;
   for (const { id } of due.rows) {
     const done = await inTransaction(pool, async (client) => {
@@ -104,11 +112,11 @@ export async function applyDueChanges(pool: pg.Pool, now = Date.now()): Promise<
       const row = change.rows[0];
       if (!row) return false;
       const updated = await client.query<{ version: number }>(
-        "UPDATE policies SET version = version + 1, document = $3, updated_at = $4 WHERE wallet_id = $1 AND version = $2 RETURNING version",
-        [row.wallet_id, row.base_version, JSON.stringify(row.document), new Date(now)],
+        "UPDATE policies SET version = version + 1, document = $3, updated_at = COALESCE($4::timestamptz, now()) WHERE wallet_id = $1 AND version = $2 RETURNING version",
+        [row.wallet_id, row.base_version, JSON.stringify(row.document), fixedTime(now)],
       );
       const version = updated.rows[0]?.version;
-      await client.query("UPDATE policy_changes SET status = $2, decided_at = $3 WHERE id = $1", [id, version === undefined ? "superseded" : "applied", new Date(now)]);
+      await client.query("UPDATE policy_changes SET status = $2, decided_at = COALESCE($3::timestamptz, now()) WHERE id = $1", [id, version === undefined ? "superseded" : "applied", fixedTime(now)]);
       if (version !== undefined) await audit(client, { accountId: row.account_id, walletId: row.wallet_id, actor: "system", action: "policy.widened", detail: { changeId: id, version } });
       return version !== undefined;
     });

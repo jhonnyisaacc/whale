@@ -12,10 +12,11 @@ import { softAuthenticator } from "./webauthn-fixtures.js";
 
 const RP = { rpId: "whale.example", origin: "https://whale.example" };
 
-async function harness() {
+async function harness(setup: { processClock?: boolean } = {}) {
   const { pool, drop } = await migratedSchema();
   let clock = Date.UTC(2026, 10, 3, 12);
-  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, now: () => clock, turnkey: null, delegation: null });
+  const now = setup.processClock ? undefined : () => clock;
+  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, now, turnkey: null, delegation: null });
   const user = await signedInAccount(pool);
   const authenticator = softAuthenticator(RP);
   const options = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers: user.headers, payload: {} })).json();
@@ -187,6 +188,29 @@ test("freezing cancels a pending widening, so it never applies after unfreezing"
     const cancelled = await pool.query("SELECT detail FROM audit_events WHERE action = 'policy.widen_cancelled'");
     assert.deepEqual(cancelled.rows.map((row) => row.detail), [{ changeId: scheduled.json().changeId, reason: "frozen" }]);
   } finally {
+    await drop();
+  }
+});
+
+test("the widening delay runs on the database clock, so a skewed replica cannot shorten it", { skip: !TEST_DATABASE_URL }, async (t) => {
+  const { pool, wallet, approve, put, drop } = await harness({ processClock: true });
+  const day = 24 * 60 * 60 * 1000;
+  try {
+    const wider = { ...DEFAULT_POLICY, maxTxUsd: 80 };
+    const assertion = await approve(widenAction(wallet.id, 1, wider));
+    t.mock.timers.enable({ apis: ["Date"], now: Date.now() - day });
+    const scheduled = await put({ baseVersion: 1, document: wider, assertion });
+    t.mock.timers.reset();
+    assert.equal(scheduled.statusCode, 202, scheduled.body);
+    const databaseNow = (await pool.query<{ now: Date }>("SELECT now()")).rows[0]?.now.getTime() as number;
+    assert.ok(Math.abs(Date.parse(scheduled.json().effectiveAt) - (databaseNow + WIDEN_DELAY_MS)) < 60_000, scheduled.body);
+    t.mock.timers.enable({ apis: ["Date"], now: Date.now() + day + 60_000 });
+    const applied = await applyDueChanges(pool);
+    t.mock.timers.reset();
+    assert.equal(applied, 0);
+    assert.equal((await pool.query("SELECT 1 FROM policy_changes WHERE status = 'pending'")).rows.length, 1);
+  } finally {
+    t.mock.timers.reset();
     await drop();
   }
 });

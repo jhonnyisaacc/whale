@@ -26,7 +26,7 @@ export function registerPolicyRoutes(app: FastifyInstance, deps: { config: Gatew
     if (!session) return reply;
     const walletId = walletIdOf(request);
     if (!walletId) return reply.code(404).send({ error: "not_found" });
-    await applyDueChanges(pool, now());
+    await applyDueChanges(pool, deps.now?.());
     return { pending: await pendingChange(pool, session.accountId, walletId) };
   });
 
@@ -37,7 +37,7 @@ export function registerPolicyRoutes(app: FastifyInstance, deps: { config: Gatew
     const walletId = walletIdOf(request);
     const body = changeBody.safeParse(request.body);
     if (!walletId || !body.success) return reply.code(400).send({ error: "invalid_request" });
-    const result = await changePolicy(pool, config, { accountId: session.accountId, walletId, baseVersion: body.data.baseVersion, document: body.data.document, assertion: body.data.assertion ?? null }, now());
+    const result = await changePolicy(pool, config, { accountId: session.accountId, walletId, baseVersion: body.data.baseVersion, document: body.data.document, assertion: body.data.assertion ?? null }, deps.now?.());
     if ("refused" in result) return reply.code(REFUSED_STATUS[result.refused] ?? 400).send({ error: result.refused, detail: result.detail });
     return reply.code(result.status === "scheduled" ? 202 : 200).send(result);
   });
