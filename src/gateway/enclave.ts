@@ -136,6 +136,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const params = walletParam.safeParse(request.params);
     const wallet = params.success ? await enclaveWallet(pool, session.accountId, params.data.id) : null;
     if (!wallet?.turnkey_sub_org_id || !wallet.turnkey_wallet_id || !wallet.turnkey_owner_user_id || !wallet.root_credential_id || !wallet.solana) return reply.code(404).send({ error: "not_found" });
+    if (wallet.status !== "pending") return { walletId: wallet.id, status: wallet.status };
     const { turnkey_wallet_id: turnkeyWalletId, solana } = wallet;
     const policy = walletPolicySchema.parse(wallet.document);
     const state = await deps.turnkey.readSubOrganization(wallet.turnkey_sub_org_id);
@@ -149,8 +150,8 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
       await audit(pool, { accountId: session.accountId, walletId: wallet.id, actor: "system", action: "wallet.delegation_refused", detail: { problems: verdict.problems } });
       return reply.code(409).send({ error: "delegation_not_safe", problems: verdict.problems });
     }
-    await pool.query("UPDATE wallets SET turnkey_delegate_user_id = $2, status = 'active' WHERE id = $1 AND status = 'pending'", [wallet.id, verdict.delegateUserId]);
-    await audit(pool, { accountId: session.accountId, walletId: wallet.id, actor: "user", action: "wallet.activated", detail: { delegateUserId: verdict.delegateUserId } });
+    const activated = await pool.query("UPDATE wallets SET turnkey_delegate_user_id = $2, status = 'active' WHERE id = $1 AND status = 'pending'", [wallet.id, verdict.delegateUserId]);
+    if (activated.rowCount === 1) await audit(pool, { accountId: session.accountId, walletId: wallet.id, actor: "user", action: "wallet.activated", detail: { delegateUserId: verdict.delegateUserId } });
     return { walletId: wallet.id, status: "active" };
   });
 }

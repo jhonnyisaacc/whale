@@ -118,6 +118,8 @@ test("an enclave wallet gets its passkey as Turnkey root, then activates only af
     state.rootUserIds.pop();
     const confirmed = await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/enclave/confirm`, headers: user.headers, payload: {} });
     assert.deepEqual(confirmed.json(), { walletId: wallet.id, status: "active" });
+    const again = await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/enclave/confirm`, headers: user.headers, payload: {} });
+    assert.deepEqual(again.json(), { walletId: wallet.id, status: "active" });
     const actions = await pool.query("SELECT action FROM audit_events ORDER BY id");
     assert.deepEqual(actions.rows.map((row) => row.action), ["wallet.created", "passkey.added", "wallet.enclave_created", "wallet.delegation_refused", "wallet.delegation_refused", "wallet.activated"]);
 
