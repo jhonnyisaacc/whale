@@ -9,6 +9,7 @@ pub struct Policy {
     settlers: BTreeMap<u64, HashSet<[u8; 20]>>,
     evm_destinations: HashSet<[u8; 20]>,
     max_value_wei: u128,
+    max_fee_wei: u128,
     allow_undecoded_router_calls: bool,
     solana_programs: HashSet<[u8; 32]>,
     solana_destinations: HashSet<[u8; 32]>,
@@ -128,6 +129,11 @@ impl Policy {
             } else {
                 0
             },
+            max_fee_wei: if evm.get("maxFeeWei").is_some() {
+                amount(evm.get("maxFeeWei"), "evm.maxFeeWei")?
+            } else {
+                0
+            },
             allow_undecoded_router_calls: evm
                 .get("allowUndecodedRouterCalls")
                 .and_then(Value::as_bool)
@@ -182,6 +188,19 @@ impl Policy {
         let routers = self.routers.get(&chain).cloned().unwrap_or_default();
         let key = |token: [u8; 20]| format!("{chain}:0x{}", hex::encode(token));
         let native = format!("{chain}:native");
+        if tx.max_priority_fee > tx.max_fee {
+            decision
+                .reasons
+                .push("maxPriorityFeePerGas is above maxFeePerGas".into());
+        }
+        match u128::from(tx.gas).checked_mul(tx.max_fee) {
+            Some(fee) if fee <= self.max_fee_wei => self.spend(&mut decision, native.clone(), fee),
+            fee => decision.reasons.push(format!(
+                "gas times maxFeePerGas, {}, is above the {} wei fee cap",
+                fee.map_or("more than 2^128".to_string(), |fee| fee.to_string()),
+                self.max_fee_wei
+            )),
+        }
         let contract_value = |decision: &mut Decision| {
             if tx.value > self.max_value_wei {
                 decision.reasons.push(format!(

@@ -44,6 +44,8 @@ Everything not listed is refused. See `vectors/policy.json` for a full example.
 | KyberSwap `swap` / `swapSimpleMode`, 0x `AllowanceHolder.exec` into `Settler.execute`, direct `Settler.execute` | The router is listed. The decoded recipient is this wallet. For 0x, the call reaches a Settler listed in `evm.settlers` for the chain, and `exec`'s `operator` equals its `target`. The sold token and amount count against the daily limit. Native value stays at or under `evm.maxValueWei` |
 | Anything else | Refused, unless `allowUndecodedRouterCalls` is true and the target is a listed router |
 
+Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`.
+
 On Solana, every program must be one of these:
 - System, Compute Budget, Token, Token-2022, or Associated Token Account;
 - a program in `solana.programs`.

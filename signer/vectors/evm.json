@@ -297,6 +297,63 @@
       "signedTransaction": "0x02f87382210507830f42408477359400830493e094222222222222222222222222222222222222222287038d7ea4c6800080c080a0b333ce99e47652941506f2e97b68891c277993faf2712fc189ce92d94010daa0a050cf913fb8eccd009e33867a3d55aa849ab4447ab30edf64f3e1b18a043f51ac"
     },
     {
+      "name": "a usdc transfer whose fee would burn the balance",
+      "job": {
+        "id": "a usdc transfer whose fee would burn the balance",
+        "kind": "evm",
+        "chainId": 8453,
+        "tx": {
+          "nonce": "7",
+          "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "value": "0",
+          "data": "0xa9059cbb00000000000000000000000022222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000001",
+          "gas": "300000",
+          "maxFeePerGas": "1000000000000000000",
+          "maxPriorityFeePerGas": "1000000000000000000"
+        }
+      },
+      "expect": "refused",
+      "reason": "above the 1000000000000000 wei fee cap"
+    },
+    {
+      "name": "a priority fee above the max fee",
+      "job": {
+        "id": "a priority fee above the max fee",
+        "kind": "evm",
+        "chainId": 8453,
+        "tx": {
+          "nonce": "7",
+          "to": "0x2222222222222222222222222222222222222222",
+          "value": "1",
+          "data": "0x",
+          "gas": "300000",
+          "maxFeePerGas": "1000000",
+          "maxPriorityFeePerGas": "2000000"
+        }
+      },
+      "expect": "refused",
+      "reason": "maxPriorityFeePerGas is above maxFeePerGas"
+    },
+    {
+      "name": "a native transfer whose fee crosses the native day",
+      "job": {
+        "id": "a native transfer whose fee crosses the native day",
+        "kind": "evm",
+        "chainId": 8453,
+        "tx": {
+          "nonce": "7",
+          "to": "0x2222222222222222222222222222222222222222",
+          "value": "4500000000000000",
+          "data": "0x",
+          "gas": "300000",
+          "maxFeePerGas": "2000000000",
+          "maxPriorityFeePerGas": "1000000"
+        }
+      },
+      "expect": "refused",
+      "reason": "above the 5000000000000000 limit"
+    },
+    {
       "name": "native transfer to anyone else",
       "job": {
         "id": "native transfer to anyone else",

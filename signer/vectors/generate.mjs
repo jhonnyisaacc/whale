@@ -29,7 +29,7 @@ const erc20 = parseAbi(["function transfer(address to, uint256 amount)", "functi
 
 const desc = (recipient, amount) => ({ srcToken: USDC, dstToken: WETH, srcReceivers: [ATTACKER], srcAmounts: [1n], feeReceivers: [], feeAmounts: [], dstReceiver: recipient, amount, minReturnAmount: 1n, flags: 0n, permit: "0x" });
 const settlerCall = (recipient) => encodeFunctionData({ abi: settlerAbi, functionName: "execute", args: [{ recipient, buyToken: WETH, minAmountOut: 1n }, ["0x1234"], `0x${"00".repeat(32)}`] });
-const tx = (to, data = "0x", value = 0n, chainId = 8453) => ({ chainId, nonce: 7, to, value, data, gas: 300000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n, type: "eip1559" });
+const tx = (to, data = "0x", value = 0n, chainId = 8453, fees = {}) => ({ chainId, nonce: 7, to, value, data, gas: 300000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n, type: "eip1559", ...fees });
 const job = (name, transaction) => ({ id: name, kind: "evm", chainId: transaction.chainId, tx: { nonce: String(transaction.nonce), to: transaction.to, value: String(transaction.value), data: transaction.data, gas: String(transaction.gas), maxFeePerGas: String(transaction.maxFeePerGas), maxPriorityFeePerGas: String(transaction.maxPriorityFeePerGas) } });
 
 const evmCases = [
@@ -48,6 +48,9 @@ const evmCases = [
   ["unlimited approval", tx(USDC, encodeFunctionData({ abi: erc20, functionName: "approve", args: [ALLOWANCE_HOLDER, maxUint256] })), "refused", "not one the signer can read"],
   ["approval to an unlisted spender", tx(USDC, encodeFunctionData({ abi: erc20, functionName: "approve", args: [ATTACKER, 5_000_000n] })), "refused", "listed router"],
   ["native transfer to a listed destination", tx(DESTINATION, "0x", 1_000_000_000_000_000n), "signed"],
+  ["a usdc transfer whose fee would burn the balance", tx(USDC, encodeFunctionData({ abi: erc20, functionName: "transfer", args: [DESTINATION, 1n] }), 0n, 8453, { maxFeePerGas: 10n ** 18n, maxPriorityFeePerGas: 10n ** 18n }), "refused", "above the 1000000000000000 wei fee cap"],
+  ["a priority fee above the max fee", tx(DESTINATION, "0x", 1n, 8453, { maxFeePerGas: 1_000_000n, maxPriorityFeePerGas: 2_000_000n }), "refused", "maxPriorityFeePerGas is above maxFeePerGas"],
+  ["a native transfer whose fee crosses the native day", tx(DESTINATION, "0x", 4_500_000_000_000_000n), "refused", "above the 5000000000000000 limit"],
   ["native transfer to anyone else", tx(ATTACKER, "0x", 1n), "refused", "listed destination"],
   ["an undecoded router call", tx(LIFI, "0x12345678"), "refused", "not one the signer can read"],
   ["a chain outside the policy", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [ATTACKER, desc(own, 1n), "0x", "0x"] }), 0n, 1), "refused", "chain 1 is not in the policy"],
@@ -110,6 +113,7 @@ const policy = {
     settlers: { 8453: [SETTLER] },
     destinations: [DESTINATION],
     maxValueWei: "2000000000000000",
+    maxFeeWei: "1000000000000000",
     dailyLimits: { [`8453:${USDC}`]: "10000000", "8453:native": "5000000000000000" },
   },
   solana: {
