@@ -1,5 +1,3 @@
--- Outbound notifications. A delivery points at the audit event it reports, so the payload is built from the
--- append-only record at send time and never drifts from it.
 CREATE TABLE webhooks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id uuid NOT NULL REFERENCES accounts (id),

@@ -33,7 +33,6 @@ export async function audit(
   client: pg.ClientBase | pg.Pool,
   event: { accountId: string; walletId?: string | null; agentId?: string | null; actor: "user" | "agent" | "system"; action: string; detail?: Record<string, unknown> },
 ): Promise<void> {
-  // One statement records the event and queues it for every webhook that asked for it, so neither exists without the other.
   await client.query(
     `WITH event AS (
        INSERT INTO audit_events (account_id, wallet_id, agent_id, actor, action, detail) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, account_id, action

@@ -2,7 +2,6 @@ import { lookup } from "node:dns/promises";
 import { request, type RequestOptions } from "node:https";
 import { BlockList, isIP } from "node:net";
 
-// Two lists: Node matches an IPv4 address against IPv6 rules too, so a mapped-range rule would block every IPv4 address.
 const blocked4 = new BlockList();
 const blocked6 = new BlockList();
 for (const [network, prefix] of [
@@ -15,7 +14,6 @@ export function publicAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 4) return !blocked4.check(address, "ipv4");
   if (family !== 6) return false;
-  // IPv4-mapped IPv6 reaches the IPv4 host behind it. Refuse the whole range rather than decode it.
   if (address.toLowerCase().startsWith("::ffff:")) return false;
   return !blocked6.check(address, "ipv6");
 }
@@ -29,9 +27,6 @@ export function publicHttpsUrl(raw: string): boolean {
   }
 }
 
-// Node asks for every address when it races IPv4 and IPv6, and for one address otherwise. Either way the socket
-// connects to an address this function checked, so a DNS answer that flips to a private address after the check
-// (rebinding) never reaches it.
 const guardedLookup: RequestOptions["lookup"] = (hostname, options, callback) => {
   lookup(hostname, { all: true })
     .then((addresses) => {
@@ -80,7 +75,6 @@ export function pinnedRequest(url: URL, init: SafeInit, send: typeof request = r
   });
 }
 
-// Outbound calls to user-supplied URLs: https on 443 only, public addresses only, no redirects, capped body, total deadline.
 export function safeRequest(raw: string, init: SafeInit): Promise<SafeResponse> {
   if (!publicHttpsUrl(raw)) return Promise.reject(new Error("only public https URLs are allowed"));
   return pinnedRequest(new URL(raw), init);

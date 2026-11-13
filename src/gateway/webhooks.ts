@@ -75,7 +75,6 @@ export async function removeWebhook(pool: pg.Pool, accountId: string, webhookId:
   return true;
 }
 
-// A test reaches only the webhook asked about, so it is queued here and not through audit(), which fans out.
 export async function testWebhook(pool: pg.Pool, accountId: string, webhookId: string): Promise<boolean> {
   const queued = await pool.query(
     `WITH hook AS (SELECT id, account_id FROM webhooks WHERE id = $2 AND account_id = $1 AND disabled_at IS NULL),
@@ -98,8 +97,6 @@ function payload(row: Due): string {
   return JSON.stringify({ id: `evt_${row.event_id}`, type: row.action, createdAt: row.created_at.toISOString(), accountId: row.account_id, walletId: row.wallet_id, agentId: row.agent_id, actor: row.actor, detail: row.detail });
 }
 
-// Rows are leased by pushing next_attempt_at forward under SKIP LOCKED, so two gateways never send the same delivery
-// at once. A 2xx ends it; anything else retries on the backoff list, then gives up.
 export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Send = safeRequest, now = Date.now()): Promise<number> {
   const claimed = await pool.query<Due>(
     `WITH due AS (
