@@ -7,6 +7,7 @@ import type { GatewayConfig } from "./config.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { knownCredentials } from "./known-credentials.js";
 import { callHostedTool, HOSTED_TOOLS } from "./mcp-tools.js";
+import type { Fetch402 } from "./x402.js";
 import { listWallets } from "./wallets.js";
 
 export const MCP_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"] as const;
@@ -25,7 +26,7 @@ function challenge(config: GatewayConfig, reply: FastifyReply, error?: string) {
   return reply.code(401).header("www-authenticate", value).send({ error: "unauthorized" });
 }
 
-export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; executor: ExecutorClient | null; authenticate?: BearerAuth }): void {
+export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; executor: ExecutorClient | null; authenticate?: BearerAuth; fetch402?: Fetch402 }): void {
   const { config, pool } = deps;
   const resource = new URL("/mcp", config.publicUrl).toString();
   const authenticate: BearerAuth = deps.authenticate ?? ((token) => authenticateBearer(pool, token, resource));
@@ -116,7 +117,7 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     if (!wallet) return challenge(config, reply, "invalid_token");
     const name = typeof params.name === "string" ? params.name : "";
     try {
-      const outcome = await callHostedTool({ pool, agent, wallet, executor: deps.executor }, name, params.arguments ?? {});
+      const outcome = await callHostedTool({ pool, agent, wallet, executor: deps.executor, ...(deps.fetch402 ? { fetch402: deps.fetch402 } : {}) }, name, params.arguments ?? {});
       const text = outcome.ok ? JSON.stringify(outcome.value) : outcome.error;
       return { jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text }], isError: !outcome.ok } };
     } catch (error) {

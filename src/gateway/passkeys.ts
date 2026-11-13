@@ -3,6 +3,7 @@ import type pg from "pg";
 import { z } from "zod";
 import { audit, inTransaction } from "./accounts.js";
 import type { GatewayConfig } from "./config.js";
+import { turnkeyTransports } from "./turnkey.js";
 import { verifyAssertion, verifyRegistration, type Registration, type RelyingParty } from "./webauthn.js";
 
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -151,6 +152,25 @@ export async function addPasskey(
   const added = await registerPasskey(pool, config, { accountId: input.accountId, payload: input.payload, label: input.label, binding: input.binding, firstOnly: (existing.rowCount ?? 0) === 0 }, after, now);
   if (added === NOT_FIRST) return { refused: "step_up_required" };
   return typeof added === "string" ? { refused: "passkey_rejected", detail: added } : added;
+}
+
+export function keepTurnkeyAuthenticator(accountId: string, payload: RegistrationPayload, label: string) {
+  return async (client: pg.PoolClient, registration: Registration & { challenge: string }) => {
+    const authenticator = {
+      authenticatorName: label,
+      challenge: registration.challenge,
+      attestation: { credentialId: registration.credentialId, clientDataJson: payload.response.clientDataJSON, attestationObject: payload.response.attestationObject, transports: turnkeyTransports(payload.response.transports) },
+    };
+    await client.query("UPDATE passkeys SET turnkey_authenticator = $3 WHERE credential_id = $1 AND account_id = $2", [registration.credentialId, accountId, authenticator]);
+  };
+}
+
+export async function backupAuthenticators(pool: pg.Pool, accountId: string, except: string[]): Promise<unknown[]> {
+  const rows = await pool.query<{ turnkey_authenticator: unknown }>(
+    "SELECT turnkey_authenticator FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL AND turnkey_authenticator IS NOT NULL AND NOT (credential_id = ANY ($2)) ORDER BY created_at",
+    [accountId, except],
+  );
+  return rows.rows.map((row) => row.turnkey_authenticator);
 }
 
 export async function stepUpOptions(pool: pg.Pool, config: GatewayConfig, accountId: string, action: unknown, now = Date.now()) {

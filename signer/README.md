@@ -12,12 +12,19 @@ export WHALE_SIGNER_PASSPHRASE='at least twelve characters'
 ./target/release/whale-signer sign --keystore keystore.json --policy policy.json --ledger ledger.json < job.json
 ```
 
+To work with a hosted gateway, ask the dashboard for a connection code (it takes your passkey), then:
+
+```bash
+./target/release/whale-signer connect --keystore keystore.json --gateway https://<gateway> --wallet <wallet id> --code wreg_...
+./target/release/whale-signer serve --keystore keystore.json --gateway https://<gateway> --policy policy.json --ledger ledger.json
+```
+
+`connect` signs the registration text (wallet id plus code) with both keys. The EVM key uses EIP-191. The gateway checks both signatures before it takes these addresses, and stores the returned token next to the keystore with owner-only permissions. `serve` long-polls `/signer/v1/jobs` over https, so no inbound port is opened. It checks each job with the same code as `sign` and posts the decision back. `--once` handles at most one job, for testing.
+
 `init` refuses if the file already exists. On Unix it creates the keystore readable only by its owner (mode 0600). Other platforms have no such mode, so the file inherits the permissions of its directory, and `init` prints a warning to stderr. `sign` prints one JSON decision and exits:
 - 0 when it signed;
 - 3 when it refused;
 - 2 on a usage or file error.
-
-The connection to the gateway, an outbound long-poll, is the next step. Until then `sign` is the whole interface.
 
 ## Keystore
 
@@ -90,7 +97,7 @@ A Jupiter swap usually comes with one or two associated token account creates, f
 
 **The Jupiter rules bound what a swap sells, not what it gets back.** A compromised Whale can set `quotedOutAmount` to 0 and route through a pool it controls, so each swap can lose its whole `inAmount`. That amount counts against the source token's daily limit, so a day of Jupiter swaps loses at most each `solana:<mint>` limit in that token and the `solana:native` limit in SOL and wrapped SOL, with fees, tips, and rent inside the same native limit. A token with no `solana:<mint>` limit cannot be sold through Jupiter at all. The signer does not read the accounts each route plan step passes to its AMM, so this bound assumes Jupiter takes `inAmount` from the source account the route names. Set each limit to what you accept losing in a day.
 
-The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom.
+The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom. The ledger also records each charged job id with a digest of what it signed. A job the gateway hands out again after a lost answer is signed again without a second charge. The same id with different work is refused.
 
 ## Supply chain
 

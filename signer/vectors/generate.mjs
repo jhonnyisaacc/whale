@@ -234,7 +234,9 @@ const policy = {
   },
 };
 writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);
-writeFileSync(`${out}evm.json`, `${JSON.stringify({ evmKey: EVM_KEY, own, cases: evm }, null, 2)}\n`);
+const registration = "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31\ncode:wreg_example";
+const personalSign = { message: registration, signature: await account.signMessage({ message: registration }) };
+writeFileSync(`${out}evm.json`, `${JSON.stringify({ evmKey: EVM_KEY, own, personalSign, cases: evm }, null, 2)}\n`);
 const atas = [
   [bs58.encode(solanaOwn), USDC_MINT_ID, TOKEN_ID],
   [bs58.encode(solanaOwn), USDC_MINT_ID, TOKEN_2022_ID],

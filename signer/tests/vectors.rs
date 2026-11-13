@@ -32,6 +32,12 @@ fn fresh_ledger(name: &str) -> PathBuf {
     path
 }
 
+fn numbered(job: &Value, n: usize) -> Value {
+    let mut job = job.clone();
+    job["id"] = format!("{}-{n}", job["id"].as_str().unwrap_or("job")).into();
+    job
+}
+
 fn run(file: &str) {
     let policy = Policy::parse(&load("policy.json")).expect("policy");
     let keys = keys();
@@ -99,7 +105,7 @@ fn the_daily_ledger_refuses_the_spend_that_crosses_the_limit() {
         .unwrap();
     let ledger = fresh_ledger("ledger-limit");
     let outcomes: Vec<Value> = (0..4)
-        .map(|_| run_job(&swap["job"], &policy, &keys, &ledger, DAY))
+        .map(|n| run_job(&numbered(&swap["job"], n), &policy, &keys, &ledger, DAY))
         .collect();
     let decisions: Vec<&str> = outcomes
         .iter()
@@ -153,10 +159,12 @@ fn concurrent_jobs_never_sign_past_the_daily_limit() {
         let start = std::sync::Barrier::new(8);
         let signed = std::thread::scope(|scope| {
             let handles: Vec<_> = (0..8)
-                .map(|_| {
-                    scope.spawn(|| {
+                .map(|n| {
+                    let job = numbered(&swap, n);
+                    let (start, policy, keys, ledger) = (&start, &policy, &keys, &ledger);
+                    scope.spawn(move || {
                         start.wait();
-                        run_job(&swap, &policy, &keys, &ledger, DAY)["decision"] == "signed"
+                        run_job(&job, policy, keys, ledger, DAY)["decision"] == "signed"
                     })
                 })
                 .collect();
@@ -251,7 +259,7 @@ fn solana_fees_count_against_the_native_day() {
         .clone();
     let ledger = fresh_ledger("ledger-solana-fees");
     let decisions: Vec<Value> = (0..3)
-        .map(|_| run_job(&transfer, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .map(|n| run_job(&numbered(&transfer, n), &policy, &keys, &ledger, DAY)["decision"].clone())
         .collect();
     assert_eq!(
         decisions,
@@ -279,7 +287,7 @@ fn a_token_account_created_for_a_destination_counts_its_rent_against_the_native_
         .clone();
     let ledger = fresh_ledger("ledger-token-account-rent");
     let decisions: Vec<Value> = (0..2)
-        .map(|_| run_job(&create, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .map(|n| run_job(&numbered(&create, n), &policy, &keys, &ledger, DAY)["decision"].clone())
         .collect();
     assert_eq!(
         decisions,
@@ -305,7 +313,7 @@ fn a_token_account_created_for_this_wallet_also_counts_its_rent_against_the_nati
         .clone();
     let ledger = fresh_ledger("ledger-own-token-account-rent");
     let decisions: Vec<Value> = (0..2)
-        .map(|_| run_job(&create, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .map(|n| run_job(&numbered(&create, n), &policy, &keys, &ledger, DAY)["decision"].clone())
         .collect();
     assert_eq!(
         decisions,
@@ -334,7 +342,7 @@ fn a_jupiter_swap_that_creates_two_token_accounts_sells_its_sol_once_and_fits_te
         .clone();
     let ledger = fresh_ledger("ledger-jupiter-swap");
     let decisions: Vec<Value> = (0..11)
-        .map(|_| run_job(&swap, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .map(|n| run_job(&numbered(&swap, n), &policy, &keys, &ledger, DAY)["decision"].clone())
         .collect();
     let mut expected = vec!["signed"; 10];
     expected.push("refused");
@@ -361,7 +369,7 @@ fn jupiter_sales_count_against_the_sold_token_day() {
         .clone();
     let ledger = fresh_ledger("ledger-jupiter-usdc");
     let decisions: Vec<Value> = (0..2)
-        .map(|_| run_job(&sell, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .map(|n| run_job(&numbered(&sell, n), &policy, &keys, &ledger, DAY)["decision"].clone())
         .collect();
     assert_eq!(
         decisions,
@@ -394,4 +402,49 @@ fn associated_token_addresses_match_web3() {
             case["address"].as_str().unwrap()
         );
     }
+}
+
+#[test]
+fn personal_sign_matches_viem() {
+    let evm = load("evm.json");
+    let message = evm["personalSign"]["message"].as_str().unwrap();
+    assert_eq!(
+        whale_signer::evm::personal_sign(message, &keys().evm),
+        evm["personalSign"]["signature"].as_str().unwrap()
+    );
+}
+
+#[test]
+fn a_job_signed_again_after_a_lost_answer_is_charged_once() {
+    let policy = Policy::parse(&load("policy.json")).expect("policy");
+    let keys = keys();
+    let evm = load("evm.json");
+    let swap = evm["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "0x exec into settler for this wallet")
+        .unwrap()["job"]
+        .clone();
+    let ledger = fresh_ledger("ledger-relet");
+    let spent = || -> Value {
+        serde_json::from_str::<Value>(&std::fs::read_to_string(&ledger).unwrap()).unwrap()["spent"]
+            .clone()
+    };
+    let first = run_job(&swap, &policy, &keys, &ledger, DAY);
+    assert_eq!(first["decision"], "signed", "{first}");
+    let charged = spent();
+    let again = run_job(&swap, &policy, &keys, &ledger, DAY);
+    assert_eq!(again, first, "the same job signs to the same bytes");
+    assert_eq!(spent(), charged, "a re-leased job is not charged twice");
+    let mut reused = swap.clone();
+    reused["tx"]["nonce"] = "8".into();
+    let refused = run_job(&reused, &policy, &keys, &ledger, DAY);
+    assert_eq!(refused["decision"], "refused", "{refused}");
+    assert!(
+        refused["reasons"].to_string().contains("different work"),
+        "{refused}"
+    );
+    assert_eq!(spent(), charged);
+    let _ = std::fs::remove_file(ledger);
 }

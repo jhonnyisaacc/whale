@@ -164,6 +164,40 @@ The owner sees pending approvals at `GET /api/approvals?status=pending`:
 
 `GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else.
 
+### Webhooks and backup passkeys
+
+`POST /api/webhooks` with `{ url, format, events }` registers up to five endpoints per account, and returns a signing secret `whsec_...` once. It is stored sealed under `GATEWAY_SECRET`, so rotating that secret breaks existing webhooks.
+
+The URL rules: https on port 443, a host name, and no credentials. Each delivery resolves the host itself, refuses private, loopback, link-local, and mapped addresses, connects to the address it checked, follows no redirects, reads at most 4 KB of the answer, and gives up after 5 s in total. A 2xx with a longer body still counts as delivered.
+
+What a delivery carries:
+- **`whale` format:** the audit event as JSON. `Whale-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">` and `Whale-Event-Id` are the headers.
+- **`slack` format:** `{ "text": ... }`.
+
+A delivery is queued in the same statement that writes its audit event. Each gateway sends due deliveries every 15 s. A non-2xx answer retries after 1 minute, 5 minutes, 30 minutes, 2 hours, and 6 hours, then gives up. A webhook disables itself after 50 consecutive failures, and its queued deliveries give up with it. `POST /api/webhooks/:id/test` pings one endpoint.
+
+Settings adds a backup passkey on Whale, approved by an existing passkey. Whale keeps the backup's attestation, so each enclave whose Turnkey owner lacks a backup can add it later through `CREATE_AUTHENTICATORS_V2`. Any passkey the owner holds approves that request. Settings has a button that adds the missing backups to every enclave, and enclave setup adds them to a new enclave before it confirms.
+
+### Self-hosted signers
+
+A `self_hosted` wallet starts `pending`. The dashboard asks for a passkey step-up, `{ kind: "signer.register", walletId }`, and then `POST /api/wallets/:id/signer/code` returns a ten-minute code. A passkey is required because whoever registers decides the wallet's deposit addresses. On the user's machine, `whale-signer connect` posts both addresses and both proofs to `POST /signer/v1/register`.
+
+The gateway accepts the registration only if all of these hold:
+- The code is unused, unexpired, and for this wallet. It is spent on the first try, right or wrong.
+- The EIP-191 signature recovers the EVM address.
+- The ed25519 signature verifies under the Solana address.
+
+It then stores the addresses, activates the wallet, and returns a signer token `wsig_...` once.
+
+`whale-signer serve` long-polls `GET /signer/v1/jobs?wait=25` with that token and answers on `POST /signer/v1/jobs/:id/result`:
+- A job is leased for 60 seconds. An unanswered lease goes back to the queue.
+- A frozen wallet's signer still authenticates but gets no work.
+- A revoked signer gets 401.
+- An answer is stored only while the wallet is active and the job has not expired. A signed answer must sign exactly the job's payload with the registered key, or it gets 422.
+- A long-poll ends when its client hangs up, so no job is leased to a closed connection.
+
+Nothing creates signing jobs while hosted live is closed. `enqueueJob` is what the live path will call.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.

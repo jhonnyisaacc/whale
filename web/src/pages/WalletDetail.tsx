@@ -4,6 +4,7 @@ import { stepUp } from "../stepup.js";
 import { Agents } from "./Agents.js";
 import { EnclaveSetup } from "./EnclaveSetup.js";
 import { PolicyEditor } from "./PolicyEditor.js";
+import { SignerSetup } from "./SignerSetup.js";
 
 export function WalletDetail({ walletId, chains }: { walletId: string; chains: string[] }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -51,6 +52,7 @@ export function WalletDetail({ walletId, chains }: { walletId: string; chains: s
       </div>
       {error ? <p className="error">{error}</p> : null}
       {settingUp ? <EnclaveSetup wallet={wallet} onDone={() => void load()} /> : null}
+      {wallet.level === "self_hosted" && wallet.status === "pending" ? <SignerSetup wallet={wallet} /> : null}
       {wallet.addresses.length > 0 ? (
         <div className="card stack">
           <h2>Deposit addresses</h2>
