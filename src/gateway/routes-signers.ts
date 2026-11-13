@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
 import { assertionPayload, verifyStepUp } from "./passkeys.js";
-import { authenticateSigner, completeJob, leaseJob, newRegistrationCode, registerSigner, registrationMessage, REGISTRATION_TTL_MS } from "./signers.js";
+import { authenticateSigner, completeJob, type CompleteRefusal, leaseJob, newRegistrationCode, registerSigner, registrationMessage, REGISTRATION_TTL_MS } from "./signers.js";
 
 const walletParam = z.object({ id: z.uuid() });
 const codeBody = z.object({ assertion: assertionPayload }).strict();
@@ -21,6 +21,7 @@ const registerBody = z
 const reasonsBody = z.array(z.string()).transform((reasons) => reasons.slice(0, 20).map((reason) => reason.slice(0, 300)));
 const resultBody = z.object({ decision: z.enum(["signed", "refused"]), result: z.unknown().optional(), reasons: reasonsBody.optional() }).strict();
 const MAX_WAIT_S = 25;
+const REFUSED_STATUS: Record<CompleteRefusal, number> = { not_leased: 409, wallet_frozen: 409, expired: 409, result_mismatch: 422 };
 
 function bearer(request: FastifyRequest): string {
   const header = request.headers.authorization;
@@ -84,7 +85,7 @@ export function registerSignerRoutes(app: FastifyInstance, deps: { config: Gatew
     const body = resultBody.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: "invalid_request" });
     const stored = await completeJob(pool, signer, params.data.id, { decision: body.data.decision, body: body.data.decision === "signed" ? body.data.result ?? null : { reasons: body.data.reasons ?? [] } }, now());
-    if (!stored) return reply.code(409).send({ error: "not_leased" });
+    if (stored !== true) return reply.code(REFUSED_STATUS[stored]).send({ error: stored });
     return reply.code(204).send();
   });
 }

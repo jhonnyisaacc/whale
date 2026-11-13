@@ -188,3 +188,84 @@ test("a long-poll whose client hung up does not lease the next job to it", { ski
     await signer.close();
   }
 });
+
+const evmJob = {
+  chainId: 8453,
+  tx: { nonce: "7", to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", value: "0", data: "0xa9059cbb", gas: "100000", maxFeePerGas: "1000000000", maxPriorityFeePerGas: "1000000" },
+};
+
+function signEvm(job: typeof evmJob, key = evm) {
+  return key.signTransaction({
+    type: "eip1559",
+    chainId: job.chainId,
+    nonce: Number(job.tx.nonce),
+    to: job.tx.to as `0x${string}`,
+    value: BigInt(job.tx.value),
+    data: job.tx.data as `0x${string}`,
+    gas: BigInt(job.tx.gas),
+    maxFeePerGas: BigInt(job.tx.maxFeePerGas),
+    maxPriorityFeePerGas: BigInt(job.tx.maxPriorityFeePerGas),
+  });
+}
+
+test("a signed result is stored only when it signs exactly the job's payload with the wallet's own key", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const queue = async (kind: "evm" | "solana", payload: unknown) => {
+      const jobId = await enqueueJob(signer.pool, { accountId: signer.user.accountId, walletId: signer.walletId, kind, payload, ttlMs: 10 * 60_000 }, signer.clock.now);
+      assert.equal((await signer.pull()).json().id, jobId);
+      return jobId;
+    };
+    const row = async (jobId: string) => (await signer.pool.query("SELECT status, result FROM signing_jobs WHERE id = $1", [jobId])).rows[0];
+
+    const evmId = await queue("evm", evmJob);
+    const otherRecipient = await signEvm({ ...evmJob, tx: { ...evmJob.tx, to: "0x0000000000000000000000000000000000000001" } });
+    const otherKey = await signEvm(evmJob, privateKeyToAccount(`0x${"43".repeat(32)}`));
+    for (const signedTransaction of [otherRecipient, otherKey, "0x02"]) {
+      const refused = await signer.answer(evmId, { decision: "signed", result: { signedTransaction } });
+      assert.equal(refused.statusCode, 422, refused.body);
+      assert.equal(refused.json().error, "result_mismatch");
+    }
+    assert.equal((await row(evmId)).status, "leased");
+    const signedTransaction = await signEvm(evmJob);
+    assert.equal((await signer.answer(evmId, { decision: "signed", result: { signedTransaction } })).statusCode, 204);
+    assert.deepEqual(await row(evmId), { status: "signed", result: { signedTransaction } });
+
+    const message = Buffer.from("a solana message").toString("base64");
+    const solanaId = await queue("solana", { message });
+    const forged = await signer.answer(solanaId, { decision: "signed", result: { signature: bs58.encode(sign(null, Buffer.from("another message"), solanaKey)) } });
+    assert.equal(forged.statusCode, 422, forged.body);
+    const signature = bs58.encode(sign(null, Buffer.from(message, "base64"), solanaKey));
+    assert.equal((await signer.answer(solanaId, { decision: "signed", result: { signature } })).statusCode, 204);
+    assert.deepEqual(await row(solanaId), { status: "signed", result: { signature } });
+  } finally {
+    await signer.close();
+  }
+});
+
+test("a result is not stored for a frozen wallet or a job past its expiry", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const { app, user, walletId } = signer;
+    const signedTransaction = await signEvm(evmJob);
+    const frozenId = await enqueueJob(signer.pool, { accountId: user.accountId, walletId, kind: "evm", payload: evmJob, ttlMs: 10 * 60_000 }, signer.clock.now);
+    assert.equal((await signer.pull()).json().id, frozenId);
+    await app.inject({ method: "POST", url: `/api/wallets/${walletId}/freeze`, headers: user.headers, payload: {} });
+    const frozen = await signer.answer(frozenId, { decision: "signed", result: { signedTransaction } });
+    assert.equal(frozen.statusCode, 409, frozen.body);
+    assert.equal(frozen.json().error, "wallet_frozen");
+    assert.deepEqual((await signer.pool.query("SELECT status, result FROM signing_jobs WHERE id = $1", [frozenId])).rows[0], { status: "leased", result: null });
+
+    await signer.pool.query("UPDATE signing_jobs SET status = 'expired' WHERE id = $1", [frozenId]);
+    await signer.pool.query("UPDATE wallets SET status = 'active' WHERE id = $1", [walletId]);
+    const lateId = await enqueueJob(signer.pool, { accountId: user.accountId, walletId, kind: "evm", payload: evmJob, ttlMs: 30_000 }, signer.clock.now);
+    assert.equal((await signer.pull()).json().id, lateId);
+    signer.clock.now += 30_001;
+    const late = await signer.answer(lateId, { decision: "signed", result: { signedTransaction } });
+    assert.equal(late.statusCode, 409, late.body);
+    assert.equal(late.json().error, "expired");
+    assert.deepEqual((await signer.pool.query("SELECT status, result FROM signing_jobs WHERE id = $1", [lateId])).rows[0], { status: "expired", result: null });
+  } finally {
+    await signer.close();
+  }
+});

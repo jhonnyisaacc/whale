@@ -1,6 +1,7 @@
 import { createPublicKey, randomBytes, timingSafeEqual, verify } from "node:crypto";
 import type pg from "pg";
-import { recoverMessageAddress, type Hex } from "viem";
+import { parseTransaction, recoverMessageAddress, recoverTransactionAddress, serializeTransaction, type Hex } from "viem";
+import { z } from "zod";
 import bs58 from "bs58";
 import { audit, inTransaction } from "./accounts.js";
 import { secretHash } from "./agents.js";
@@ -34,7 +35,7 @@ async function provesEvm(message: string, address: string, signature: string): P
   }
 }
 
-function provesSolana(message: string, address: string, signature: string): boolean {
+function provesSolana(message: string | Buffer, address: string, signature: string): boolean {
   try {
     const key = Buffer.from(bs58.decode(address));
     const sig = Buffer.from(bs58.decode(signature));
@@ -123,12 +124,65 @@ export async function leaseJob(pool: pg.Pool, signer: SignerContext, now = Date.
   return leased.rows[0] ?? null;
 }
 
-export async function completeJob(pool: pg.Pool, signer: SignerContext, jobId: string, result: { decision: "signed" | "refused"; body: unknown }, now = Date.now()): Promise<boolean> {
-  const done = await pool.query(
-    "UPDATE signing_jobs SET status = $3, result = $4, completed_at = $5 WHERE id = $1 AND wallet_id = $2 AND status = 'leased' RETURNING id",
-    [jobId, signer.walletId, result.decision, JSON.stringify(result.body), new Date(now)],
-  );
-  if ((done.rowCount ?? 0) === 0) return false;
-  await audit(pool, { accountId: signer.accountId, walletId: signer.walletId, actor: "system", action: `signer.${result.decision}`, detail: { jobId } });
-  return true;
+const quantity = z.string().regex(/^(0x[0-9a-fA-F]+|[0-9]+)$/).transform(BigInt);
+const hexBytes = z.string().regex(/^0x([0-9a-fA-F]{2})*$/);
+const evmPayload = z.object({
+  chainId: z.number().int().positive(),
+  tx: z.object({ nonce: quantity, to: z.string().regex(/^0x[0-9a-fA-F]{40}$/), value: quantity, data: hexBytes.optional(), gas: quantity, maxFeePerGas: quantity, maxPriorityFeePerGas: quantity }),
+});
+const evmResult = z.object({ signedTransaction: hexBytes });
+const solanaPayload = z.object({ message: z.base64() });
+const solanaResult = z.object({ signature: z.string().max(90) });
+
+async function signsEvmPayload(payload: unknown, result: unknown, address: string): Promise<boolean> {
+  const job = evmPayload.safeParse(payload);
+  const signed = evmResult.safeParse(result);
+  if (!job.success || !signed.success) return false;
+  const raw = signed.data.signedTransaction.toLowerCase() as Hex;
+  try {
+    const parsed = parseTransaction(raw);
+    if (parsed.type !== "eip1559" || parsed.r === undefined || parsed.s === undefined || parsed.yParity === undefined) return false;
+    const { tx, chainId } = job.data;
+    const expected = serializeTransaction(
+      { type: "eip1559", chainId, nonce: Number(tx.nonce), to: tx.to as Hex, value: tx.value, data: (tx.data ?? "0x") as Hex, gas: tx.gas, maxFeePerGas: tx.maxFeePerGas, maxPriorityFeePerGas: tx.maxPriorityFeePerGas, accessList: [] },
+      { r: parsed.r, s: parsed.s, yParity: parsed.yParity },
+    );
+    if (expected !== raw) return false;
+    return (await recoverTransactionAddress({ serializedTransaction: expected })).toLowerCase() === address.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+function signsSolanaPayload(payload: unknown, result: unknown, address: string): boolean {
+  const job = solanaPayload.safeParse(payload);
+  const signed = solanaResult.safeParse(result);
+  return job.success && signed.success && provesSolana(Buffer.from(job.data.message, "base64"), address, signed.data.signature);
+}
+
+export type CompleteRefusal = "not_leased" | "wallet_frozen" | "expired" | "result_mismatch";
+
+export async function completeJob(pool: pg.Pool, signer: SignerContext, jobId: string, result: { decision: "signed" | "refused"; body: unknown }, now = Date.now()): Promise<true | CompleteRefusal> {
+  return inTransaction(pool, async (client) => {
+    const found = await client.query<{ kind: string; payload: unknown; expires_at: Date; wallet_status: string; evm_address: string; solana_address: string }>(
+      `SELECT j.kind, j.payload, j.expires_at, w.status AS wallet_status, s.evm_address, s.solana_address FROM signing_jobs j
+       JOIN wallets w ON w.id = j.wallet_id JOIN signers s ON s.id = $3
+       WHERE j.id = $1 AND j.wallet_id = $2 AND j.status = 'leased' FOR UPDATE OF j FOR SHARE OF w`,
+      [jobId, signer.walletId, signer.signerId],
+    );
+    const job = found.rows[0];
+    if (!job) return "not_leased";
+    if (job.wallet_status !== "active") return "wallet_frozen";
+    if (job.expires_at.getTime() <= now) {
+      await client.query("UPDATE signing_jobs SET status = 'expired', lease_expires_at = NULL WHERE id = $1", [jobId]);
+      return "expired";
+    }
+    if (result.decision === "signed") {
+      const matches = job.kind === "evm" ? await signsEvmPayload(job.payload, result.body, job.evm_address) : signsSolanaPayload(job.payload, result.body, job.solana_address);
+      if (!matches) return "result_mismatch";
+    }
+    await client.query("UPDATE signing_jobs SET status = $2, result = $3, completed_at = $4 WHERE id = $1", [jobId, result.decision, JSON.stringify(result.body), new Date(now)]);
+    await audit(client, { accountId: signer.accountId, walletId: signer.walletId, actor: "system", action: `signer.${result.decision}`, detail: { jobId } });
+    return true;
+  });
 }
