@@ -34,6 +34,7 @@ The wallet policy maps onto session policies:
 | Allowed chains | One session per chain, enabled by the owner |
 | Per-token caps | The spending-limit policy, per token |
 | Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Step 4 under "Verify before code" picks one |
+| A 0x swap calls only a pinned Settler | Universal-action rules that pin the `exec` `operator` and `target` to the chain's Settler |
 | Swap recipient must be the account | Universal-action rules on **static** calldata offsets, listed below |
 | Transfers to listed destinations | A universal-action rule on the `transfer` recipient, which sits at a static offset |
 
@@ -43,11 +44,15 @@ The wallet policy maps onto session policies:
 
 | Calldata byte | Rule `offset` | Field | Required value |
 | --- | --- | --- | --- |
+| 4 | 0 | `operator` | The chain's pinned Settler |
+| 100 | 96 | `target` | The same Settler |
 | 132 | 128 | Offset of `data` | `0xa0` |
 | 196 | 192 | Inner selector and the first 28 bytes of the recipient word | The `Settler.execute` selector, then those 28 bytes for the account address |
 | 200 | 196 | `slippage.recipient` | The account address |
 
 The `exec` token and amount sit at fixed words too, at bytes 36 and 68. On 2026-11-13 these positions were checked again with viem 2.57.13. Canonical calldata passes every rule. Calldata whose offset word is `0x100`, with a decoy before the real inner call, passes the byte-200 rule but ABI-decodes to another recipient, and the byte-132 rule refuses it.
+
+`exec` lends the sold-token allowance to `operator` for one call into `target`. Without the `operator` and `target` rules, a compromised Whale names its own contract for both and pulls the lent allowance. The app policy already requires both to be a pinned Settler, in `assertSettler` in `src/signing-policy.ts` and in the 0x entry of `docs/threat-model.md`. A rule holds one reference value, so one session pins one Settler. 0x rotates Settler addresses. After a rotation, 0x swaps at this level are refused until the owner enables a session for the new Settler.
 
 In KyberSwap's `swap` and `swapSimpleMode`, the description is a dynamic tuple reached through an offset that the caller chooses. A rule at a fixed position can be dodged with a non-canonical offset.
 
@@ -64,12 +69,15 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
 5. Write a fork test with a session key that tries each of these. Each must revert on-chain:
    - pay a swap to another recipient;
    - send `exec` calldata whose `data` offset points past a decoy that keeps the account address at byte 200;
+   - name a non-Settler contract as `operator`, with `target` still the pinned Settler;
+   - name a non-Settler contract as `target`, with `operator` still the pinned Settler;
+   - name the same non-Settler contract as both `operator` and `target`;
    - exceed the token cap;
    - call a non-0x router.
 
 ## Consequences
 
-- A full Whale compromise at this level can spend only inside the active session's per-token caps, only through 0x to the account itself, and only until the session expires. That is the strongest guarantee of the three levels, and it costs route choice.
+- A full Whale compromise at this level can spend only inside the active session's per-token caps, only through the pinned 0x Settler to the account itself, and only until the session expires. That is the strongest guarantee of the three levels, and it costs route choice.
 - Every new chain needs the owner's passkey to enable a session.
 - Gas is higher than for an EOA, because of the 4337 entry point and on-chain P-256 verification. On the cheap L2s Whale defaults to, that is cents.
 
