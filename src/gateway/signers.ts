@@ -64,10 +64,14 @@ async function registerLocked(client: pg.PoolClient, input: Registration, now: n
   const message = registrationMessage(input.walletId, input.code);
   if (!(await provesEvm(message, input.evmAddress, input.evmSignature))) return "the EVM signature does not prove the EVM address";
   if (!provesSolana(message, input.solanaAddress, input.solanaSignature)) return "the Solana signature does not prove the Solana address";
-  const taken = await client.query("SELECT 1 FROM wallet_addresses WHERE (family = 'evm' AND lower(address) = lower($1)) OR (family = 'solana' AND address = $2)", [
-    input.evmAddress,
-    input.solanaAddress,
-  ]);
+  const own = await client.query<{ family: string; address: string }>("SELECT family, address FROM wallet_addresses WHERE wallet_id = $1", [row.wallet_id]);
+  const ownEvm = own.rows.find((entry) => entry.family === "evm")?.address;
+  const ownSolana = own.rows.find((entry) => entry.family === "solana")?.address;
+  if (own.rows.length > 0 && (ownEvm?.toLowerCase() !== input.evmAddress.toLowerCase() || ownSolana !== input.solanaAddress)) return "this wallet's addresses belong to other keys";
+  const taken = await client.query(
+    "SELECT 1 FROM wallet_addresses WHERE wallet_id <> $3 AND ((family = 'evm' AND lower(address) = lower($1)) OR (family = 'solana' AND address = $2))",
+    [input.evmAddress, input.solanaAddress, row.wallet_id],
+  );
   if ((taken.rowCount ?? 0) > 0) return "these keys already belong to another wallet";
   const signerId = randomBytes(8).toString("hex");
   const secret = randomBytes(32).toString("base64url");
@@ -79,7 +83,9 @@ async function registerLocked(client: pg.PoolClient, input: Registration, now: n
     input.evmAddress,
     input.solanaAddress,
   ]);
-  await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2), ($1, 'solana', $3)", [row.wallet_id, input.evmAddress, input.solanaAddress]);
+  if (own.rows.length === 0) {
+    await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2), ($1, 'solana', $3)", [row.wallet_id, input.evmAddress, input.solanaAddress]);
+  }
   await client.query("UPDATE wallets SET status = 'active' WHERE id = $1 AND status = 'pending'", [row.wallet_id]);
   await audit(client, { accountId: row.account_id, walletId: row.wallet_id, actor: "system", action: "signer.registered", detail: { signerId } });
   return { signerId, token: `wsig_${signerId}_${secret}` };

@@ -168,7 +168,7 @@ export async function unfreezeWallet(pool: pg.Pool, config: GatewayConfig, accou
   const updated = await pool.query(
     `UPDATE wallets SET status = CASE
        WHEN level = 'enclave' AND turnkey_delegate_user_id IS NOT NULL THEN 'active'
-       WHEN level = 'self_hosted' AND EXISTS (SELECT 1 FROM signers s WHERE s.wallet_id = wallets.id) THEN 'active'
+       WHEN level = 'self_hosted' AND EXISTS (SELECT 1 FROM signers s WHERE s.wallet_id = wallets.id AND s.revoked_at IS NULL) THEN 'active'
        ELSE 'pending' END
      WHERE id = $1 AND account_id = $2 AND status = 'frozen' RETURNING id`,
     [walletId, accountId],

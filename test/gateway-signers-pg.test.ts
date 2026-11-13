@@ -186,6 +186,29 @@ test("a code issued before a freeze registers nothing, and the wallet comes back
   }
 });
 
+test("a wallet whose signer was revoked comes back waiting, and only the same keys register for it again", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const { app, pool, user, walletId } = signer;
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${walletId}/freeze`, headers: user.headers, payload: {} })).statusCode, 200);
+    await pool.query("UPDATE signers SET revoked_at = now() WHERE wallet_id = $1", [walletId]);
+    const thawed = await app.inject({ method: "POST", url: `/api/wallets/${walletId}/unfreeze`, headers: user.headers, payload: { assertion: await signer.approve(unfreezeAction(walletId)) } });
+    assert.equal(thawed.statusCode, 200, thawed.body);
+    assert.equal(await signer.status(), "pending");
+    const swapped = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, await signer.issueCode(walletId), officeKeys) });
+    assert.equal(swapped.statusCode, 400, swapped.body);
+    assert.match(swapped.json().detail, /other keys/);
+    const again = await app.inject({ method: "POST", url: "/signer/v1/register", payload: await proofs(walletId, await signer.issueCode(walletId)) });
+    assert.equal(again.statusCode, 201, again.body);
+    assert.equal(await signer.status(), "active");
+    assert.equal((await signer.pull()).statusCode, 401);
+    const renewed = await app.inject({ method: "GET", url: "/signer/v1/jobs?wait=0", headers: { authorization: `Bearer ${again.json().token as string}` } });
+    assert.equal(renewed.statusCode, 204, renewed.body);
+  } finally {
+    await signer.close();
+  }
+});
+
 test("a refusal with many long reasons is stored, trimmed, and not handed out again", { skip: !TEST_DATABASE_URL }, async () => {
   const signer = await registeredSigner();
   try {

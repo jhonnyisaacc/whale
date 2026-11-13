@@ -12,7 +12,7 @@ CREATE TABLE signer_registrations (
 CREATE TABLE signers (
   id text PRIMARY KEY,
   account_id uuid NOT NULL REFERENCES accounts (id),
-  wallet_id uuid NOT NULL UNIQUE,
+  wallet_id uuid NOT NULL,
   token_hash bytea NOT NULL CHECK (length(token_hash) = 32),
   evm_address text NOT NULL,
   solana_address text NOT NULL,
@@ -21,6 +21,7 @@ CREATE TABLE signers (
   revoked_at timestamptz,
   FOREIGN KEY (wallet_id, account_id) REFERENCES wallets (id, account_id)
 );
+CREATE UNIQUE INDEX signers_live_wallet_idx ON signers (wallet_id) WHERE revoked_at IS NULL;
 
 CREATE TABLE signing_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
