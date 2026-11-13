@@ -203,3 +203,17 @@ test("parallel stepped-up registrations never take an account past the passkey c
     await drop();
   }
 });
+
+test("a step-up action holding a number JSON cannot represent is refused with 400", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, user, drop } = await harness();
+  try {
+    const authenticator = softAuthenticator(RP);
+    const options = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers: user.headers, payload: {} })).json();
+    assert.equal((await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: authenticator.register(options.challenge), label: "MacBook" } })).statusCode, 201);
+    const huge = await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: { ...user.headers, "content-type": "application/json" }, payload: '{"action":{"kind":"x","n":1e400}}' });
+    assert.equal(huge.statusCode, 400);
+    assert.equal(huge.json().error, "invalid_request");
+  } finally {
+    await drop();
+  }
+});
