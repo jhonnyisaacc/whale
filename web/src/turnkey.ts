@@ -46,6 +46,7 @@ export type Delegation = {
   delegateUserId: string | null;
   policies: unknown[] | null;
   policiesInPlace: boolean;
+  stalePolicyIds: string[];
 };
 
 export function addDelegate(delegation: Delegation): Promise<unknown> {
@@ -54,6 +55,10 @@ export function addDelegate(delegation: Delegation): Promise<unknown> {
 
 export function addPolicies(delegation: Delegation): Promise<unknown> {
   return submit("/public/v1/submit/create_policies", "ACTIVITY_TYPE_CREATE_POLICIES", delegation.subOrganizationId, { policies: delegation.policies ?? [] }, delegation.ownerCredentialIds);
+}
+
+export function deletePolicies(delegation: Delegation): Promise<unknown> {
+  return submit("/public/v1/submit/delete_policies", "ACTIVITY_TYPE_DELETE_POLICIES", delegation.subOrganizationId, { policyIds: delegation.stalePolicyIds }, delegation.ownerCredentialIds);
 }
 
 export function addOwnerPasskeys(delegation: Delegation): Promise<unknown> {
