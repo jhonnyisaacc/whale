@@ -6,9 +6,9 @@ Proposed on 2026-11-03. No code ships with this record. The `smart_account` leve
 
 ## Context
 
-ADR 0003 defines three signing levels. At the third, the chain itself enforces the rules: the user's key owns an on-chain account, and Whale holds a session key whose permissions an on-chain module checks. A full Whale compromise can then do only what the module allows.
+ADR 0003 defines three signing levels. At the third, the chain itself enforces the rules. The user's key owns an on-chain account, and Whale holds a session key whose permissions an on-chain module checks. A full Whale compromise can then do only what the module allows.
 
-Whale must not write an account or a module contract. Its exposure would be the funds of every user, and it has no audit budget for that. This record picks the existing pieces and the limits they impose. The sources were read on 2026-11-03 and are listed at the end, with links and versions. Several of them are vendor documentation, and the steps under "Verify before code" exist for that reason.
+Whale must not write an account or a module contract. Its exposure would be the funds of every user, and it has no audit budget for that. This record picks the existing pieces and the limits they impose. The sources are listed at the end, with links and the versions current on 2026-11-13. Several of them are vendor documentation, and the steps under "Verify before code" exist for that reason.
 
 ## Options considered
 
@@ -78,7 +78,7 @@ In KyberSwap's `swap` and `swapSimpleMode`, the description is a dynamic tuple r
 
 So the `smart_account` level routes swaps through 0x only, plus plain transfers. Kyber, LI.FI, and other routers are refused at this level. The app policy and the self-hosted signer, which decode offsets properly, keep them.
 
-**Solana:** the level is not offered on Solana at first. Squads v4 spending limits cannot bound a swap. The Smart Account Program's session keys need a review of the program, its audits, and its upgrade authority before Whale relies on them.
+**Solana.** The level is not offered on Solana at first. Squads v4 spending limits cannot bound a swap. The Smart Account Program's session keys need a review of the program, its audits, and its upgrade authority before Whale relies on them.
 
 ## Verify before code
 
@@ -99,7 +99,7 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
    - call `approve(attacker, remainingCap)` on the sell token;
    - call `transferFrom` on the sell token;
    - call a non-0x router.
-6. Decide how userOp fees are bounded: a userOp policy with an audit, a paymaster that the owner controls, or a native balance that the owner keeps to a gas float.
+6. Decide how userOp fees are bounded. The options are a userOp policy with an audit, a paymaster that the owner controls, or a native balance that the owner keeps to a gas float.
 
 ## Consequences
 
@@ -113,10 +113,10 @@ The versions below are the ones current on 2026-11-13. Repositories without a re
 
 - [Smart Sessions](https://github.com/erc7579/smartsessions/tree/v1.0.0) by Rhinestone and Biconomy, release `v1.0.0` (commit `dc20f0b`). Its policies under `contracts/external/policies` are `ERC20SpendingLimitPolicy`, `SudoPolicy`, and `UniActionPolicy`. `TimeFramePolicy` and `UsageLimitPolicy` exist only as mocks under `test/mock`. Their deployed addresses come from `@rhinestone/module-sdk` `0.4.0`, not from this release. The audit reports are in `audits/`. The text of the two Cantina reports names `ERC20SpendingLimitPolicy`, `SudoPolicy`, and `UniActionPolicy`, and neither names a time-frame or usage-limit policy. The other two reports have no extractable text, so step 1 under "Verify before code" reads them. `UniActionPolicy` reads each rule's word at `4 + offset` and requires every rule to pass.
 - [Rhinestone Module SDK](https://www.npmjs.com/package/@rhinestone/module-sdk), `@rhinestone/module-sdk` `0.4.0`, which builds the session and policy configuration for Smart Sessions.
-- [Rhinestone module registry](https://github.com/rhinestonewtf/registry/tree/v1.0.2), release `v1.0.2`: the on-chain registry where attesters, such as auditors, attest to 7579 modules. Its README at that tag says the contract is in active development and not for production, which step 2 under "Verify before code" has to settle.
-- [Safe7579](https://github.com/rhinestonewtf/safe7579/tree/v2.0.0), release `v2.0.0`: the adapter that makes a Safe a 7579 account.
+- [Rhinestone module registry](https://github.com/rhinestonewtf/registry/tree/v1.0.2), release `v1.0.2`. It is the on-chain registry where attesters, such as auditors, attest to 7579 modules. Its README at that tag says the contract is in active development and not for production, which step 2 under "Verify before code" has to settle.
+- [Safe7579](https://github.com/rhinestonewtf/safe7579/tree/v2.0.0), release `v2.0.0`. It is the adapter that makes a Safe a 7579 account.
 - [ERC-7579](https://eips.ethereum.org/EIPS/eip-7579), [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702), and [RIP-7212](https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md).
-- [Fluent's EIP-7702 guide](https://docs.fluent.xyz/developer-guides/account-abstraction/eip-7702): 7702 adds delegation only. Session keys and limits live in the delegate.
+- [Fluent's EIP-7702 guide](https://docs.fluent.xyz/developer-guides/account-abstraction/eip-7702). It says that 7702 adds delegation only. Session keys and limits live in the delegate.
 - [0x Settler](https://github.com/0xProject/0x-settler/tree/ad7c844c6a2a263ae6ba6c72700534aae9bb4a48), commit `ad7c844` on `master`. `src/allowanceholder/IAllowanceHolder.sol` defines `exec`, and `src/interfaces/ISettlerTakerSubmitted.sol` defines `execute`.
-- [Coinbase spend permissions](https://github.com/coinbase/spend-permissions/tree/v1.0.0), release `v1.0.0`, and the [Base spend permissions guide](https://docs.base.org/base-account/improve-ux/spend-permissions): a spender pulls an allowance.
-- Squads: the [spending limits blog post](https://squads.xyz/blog/spending-limits), the [spending limits reference](https://docs.squads.so/main/development/reference/spending-limits), and the [v4 program](https://github.com/Squads-Protocol/v4/tree/release-0.1.0) at tag `release-0.1.0`. The [Smart Account Program](https://github.com/Squads-Protocol/smart-account-program) has no release tag.
+- [Coinbase spend permissions](https://github.com/coinbase/spend-permissions/tree/v1.0.0), release `v1.0.0`, and the [Base spend permissions guide](https://docs.base.org/base-account/improve-ux/spend-permissions). In this model, a spender pulls an allowance.
+- For Squads, the [spending limits blog post](https://squads.xyz/blog/spending-limits), the [spending limits reference](https://docs.squads.so/main/development/reference/spending-limits), and the [v4 program](https://github.com/Squads-Protocol/v4/tree/release-0.1.0) at tag `release-0.1.0`. The [Smart Account Program](https://github.com/Squads-Protocol/smart-account-program) has no release tag.
