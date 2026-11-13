@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createHandler, type McpDeps } from "../src/mcp-server.js";
 
@@ -43,4 +45,19 @@ test("wallet_status reads the executor and a quote with no provider skips", asyn
   })) as { result: { content: { text: string }[] } };
   const value = JSON.parse(quote.result.content[0].text) as { status: string };
   assert.equal(value.status, "skipped");
+});
+
+const SERVER = fileURLToPath(new URL("../src/mcp-server.js", import.meta.url));
+
+function runServer(input: string, extra: Record<string, string> = {}) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "WHALE_GATEWAY_URL" && key !== "WHALE_API_KEY"));
+  return spawnSync(process.execPath, [SERVER], { input, env: { ...env, ...extra }, encoding: "utf8", timeout: 10_000 });
+}
+
+test("the stdio server refuses a gateway URL without an API key, and a key without a URL", () => {
+  for (const extra of <Record<string, string>[]>[{ WHALE_GATEWAY_URL: "https://whale.example", WHALE_API_KEY: "" }, { WHALE_API_KEY: "whale_key" }]) {
+    const result = runServer("", extra);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /set both WHALE_GATEWAY_URL and WHALE_API_KEY/);
+  }
 });

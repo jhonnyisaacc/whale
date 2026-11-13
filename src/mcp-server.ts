@@ -88,8 +88,12 @@ if (entry.endsWith("mcp-server.js")) {
     executorUrl: process.env.EXECUTOR_URL ?? "http://127.0.0.1:8788",
     executorAuthToken: process.env.EXECUTOR_AUTH_TOKEN ?? process.env.AUTH_TOKEN ?? null,
   };
-  const gatewayUrl = process.env.WHALE_GATEWAY_URL;
-  const apiKey = process.env.WHALE_API_KEY;
+  const gatewayUrl = process.env.WHALE_GATEWAY_URL || undefined;
+  const apiKey = process.env.WHALE_API_KEY || undefined;
+  if (Boolean(gatewayUrl) !== Boolean(apiKey)) {
+    process.stderr.write("whale: set both WHALE_GATEWAY_URL and WHALE_API_KEY to use a hosted gateway, or neither to use local tools\n");
+    process.exit(1);
+  }
   const { createBridge } = await import("./hosted-client.js");
   const handle = gatewayUrl && apiKey ? createBridge({ gatewayUrl, apiKey }) : createHandler(deps);
   const lines = createInterface({ input: process.stdin });
