@@ -1,4 +1,4 @@
-const DEPENDENCY_TABLES = new Set(["dependencies", "dev-dependencies", "build-dependencies"]);
+const DEPENDENCY_TABLES = new Set(["dependencies", "dev-dependencies", "build-dependencies", "dev_dependencies", "build_dependencies"]);
 const SOURCE_KEYS = new Set(["git", "path", "registry", "registry-index"]);
 const CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index";
 
