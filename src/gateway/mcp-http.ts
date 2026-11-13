@@ -37,6 +37,11 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     known.set(digest, agentId);
     if (known.size > KNOWN_CREDENTIALS) known.delete(known.keys().next().value as string);
   };
+  const spendAgent = async (request: FastifyRequest, agentId: string) => {
+    agentIds.set(request, agentId);
+    const limit = await perAgent(request);
+    return !limit.isAllowed && limit.isExceeded ? limit.ttlInSeconds : null;
+  };
   const inFlight = new Map<string, number>();
   const release = (slot: string) => {
     const left = (inFlight.get(slot) ?? 1) - 1;
@@ -61,7 +66,10 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     const digest = token ? createHash("sha256").update(token).digest("base64url") : "";
     const remembered = known.get(digest);
     let slot: string | undefined;
-    if (!remembered) {
+    if (remembered) {
+      const wait = await spendAgent(request, remembered);
+      if (wait !== null) return reply.code(429).header("retry-after", wait).send({ error: "rate_limit" });
+    } else {
       const spent = await failures(request, { increment: false });
       const pending = inFlight.get(spent.key) ?? 0;
       if (!spent.isAllowed && spent.remaining - pending <= 0) return reply.code(429).header("retry-after", spent.ttlInSeconds).send({ error: "rate_limit" });
@@ -80,9 +88,8 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     }
     if (!agent) return challenge(config, reply, token ? "invalid_token" : undefined);
     remember(digest, agent.agentId);
-    agentIds.set(request, agent.agentId);
-    const limit = await perAgent(request);
-    if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate_limit" });
+    const wait = remembered ? null : await spendAgent(request, agent.agentId);
+    if (wait !== null) return reply.code(429).header("retry-after", wait).send({ error: "rate_limit" });
 
     const body = request.body as Rpc | Rpc[] | null;
     if (Array.isArray(body) || typeof body !== "object" || body === null || body.jsonrpc !== "2.0" || typeof body.method !== "string") {

@@ -203,3 +203,17 @@ test("/mcp runs at most one IP budget of credential lookups for a concurrent bur
     await drop();
   }
 });
+
+test("/mcp refuses an agent past its limit without querying the database", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, rpc, drop } = await harness();
+  try {
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    for (let index = 0; index < 120; index += 1) assert.equal((await rpc(ping, {}, `198.51.100.${index}`)).statusCode, 200);
+    const counts = countQueries(pool);
+    const over = await rpc(ping, {}, "198.51.100.200");
+    assert.equal(over.statusCode, 429);
+    assert.equal(counts.queries, 0);
+  } finally {
+    await drop();
+  }
+});
