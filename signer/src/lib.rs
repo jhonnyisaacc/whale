@@ -10,7 +10,10 @@ pub mod solana;
 
 use base64::Engine;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::path::Path;
+
+type Sign<'a> = Box<dyn Fn() -> Result<Value, String> + 'a>;
 
 pub fn run_job(
     job: &Value,
@@ -26,7 +29,7 @@ pub fn run_job(
         Ok(ledger) => ledger,
         Err(error) => return refused(vec![error]),
     };
-    let (decision, sign): (policy::Decision, Box<dyn Fn() -> Result<Value, String>>) = match job
+    let (decision, work, sign): (policy::Decision, Vec<u8>, Sign<'_>) = match job
         .get("kind")
         .and_then(Value::as_str)
     {
@@ -34,8 +37,10 @@ pub fn run_job(
             match evm::parse(job) {
                 Ok(tx) => {
                     let decision = policy.check_evm(&tx, keystore::evm_address_bytes(&keys.evm));
+                    let work = evm::signing_hash(&tx).to_vec();
                     (
                         decision,
+                        work,
                         Box::new(move || {
                             evm::sign(&tx, &keys.evm).map(|raw| json!({ "signedTransaction": format!("0x{}", hex::encode(raw)) }))
                         }),
@@ -59,6 +64,7 @@ pub fn run_job(
                         policy.check_solana(&message, keys.solana.verifying_key().to_bytes());
                     (
                         decision,
+                        bytes.clone(),
                         Box::new(move || {
                             Ok(
                                 json!({ "signature": bs58::encode(solana::sign(&bytes, &keys.solana)).into_string() }),
@@ -74,12 +80,33 @@ pub fn run_job(
     if !decision.allowed() {
         return refused(decision.reasons);
     }
+    let work = hex::encode(Sha256::digest(&work));
+    let job_id = id.as_str();
+    match job_id.and_then(|job| ledger.charged_work(job)) {
+        Some(charged) if charged == work => {
+            return match sign() {
+                Ok(signed) => json!({ "id": id, "decision": "signed", "result": signed }),
+                Err(error) => refused(vec![error]),
+            };
+        }
+        Some(_) => {
+            return refused(vec![format!(
+                "job {} was already signed today for different work",
+                job_id.unwrap_or_default()
+            )]);
+        }
+        None => {}
+    }
     let over = ledger.over_limit(&decision.spend, &policy.daily_limits);
     if !over.is_empty() {
         return refused(over);
     }
     match sign() {
-        Ok(signed) => match ledger.commit(ledger_path, &decision.spend) {
+        Ok(signed) => match ledger.commit(
+            ledger_path,
+            &decision.spend,
+            job_id.map(|job| (job, work.as_str())),
+        ) {
             Ok(()) => json!({ "id": id, "decision": "signed", "result": signed }),
             Err(error) => refused(vec![error]),
         },
