@@ -170,10 +170,14 @@ impl Policy {
         if value == 0 {
             return;
         }
-        if !self.daily_limits.contains_key(&key) {
-            decision
+        match self.daily_limits.get(&key) {
+            None => decision
                 .reasons
-                .push(format!("no daily limit is set for {key}"));
+                .push(format!("no daily limit is set for {key}")),
+            Some(limit) if value > *limit => decision.reasons.push(format!(
+                "{value} of {key} is above its whole {limit} daily limit"
+            )),
+            Some(_) => {}
         }
         decision.spend.push((key, value));
     }

@@ -299,7 +299,7 @@
         }
       },
       "expect": "refused",
-      "reason": "above the 10000000 limit",
+      "reason": "above its whole 10000000 daily limit",
       "recipient": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A"
     },
     {
@@ -320,6 +320,25 @@
       },
       "expect": "signed",
       "signedTransaction": "0x02f8b182210507830f42408477359400830493e094833589fcd6edb6e08f4c7c32d4f71b54bda0291380b844a9059cbb000000000000000000000000222222222222222222222222222222222222222200000000000000000000000000000000000000000000000000000000000f4240c080a06700c6b491ea3a159a9f5efcd393013bc1a99718bebcc75b21b50f06179f0370a04a6a926c96a07cb89d6e4c52f2e9768b4047dd54aa77a07709b74cb254c3969b"
+    },
+    {
+      "name": "a usdc transfer that would wrap the daily total",
+      "job": {
+        "id": "a usdc transfer that would wrap the daily total",
+        "kind": "evm",
+        "chainId": 8453,
+        "tx": {
+          "nonce": "7",
+          "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "value": "0",
+          "data": "0xa9059cbb000000000000000000000000222222222222222222222222222222222222222200000000000000000000000000000000ffffffffffffffffffffffffffd23940",
+          "gas": "300000",
+          "maxFeePerGas": "2000000000",
+          "maxPriorityFeePerGas": "1000000"
+        }
+      },
+      "expect": "refused",
+      "reason": "above its whole 10000000 daily limit"
     },
     {
       "name": "usdc transfer to anyone else",
@@ -472,6 +491,25 @@
       },
       "expect": "refused",
       "reason": "above the 5000000000000000 limit"
+    },
+    {
+      "name": "a native transfer that would wrap the daily total",
+      "job": {
+        "id": "a native transfer that would wrap the daily total",
+        "kind": "evm",
+        "chainId": 8453,
+        "tx": {
+          "nonce": "7",
+          "to": "0x2222222222222222222222222222222222222222",
+          "value": "340282366920938463463374607431768211455",
+          "data": "0x",
+          "gas": "300000",
+          "maxFeePerGas": "2000000000",
+          "maxPriorityFeePerGas": "1000000"
+        }
+      },
+      "expect": "refused",
+      "reason": "above its whole 5000000000000000 daily limit"
     },
     {
       "name": "native transfer to anyone else",

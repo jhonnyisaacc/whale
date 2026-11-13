@@ -32,6 +32,20 @@ pub fn today() -> String {
     )
 }
 
+fn add(
+    spent: &BTreeMap<String, u128>,
+    spend: &[(String, u128)],
+) -> Result<BTreeMap<String, u128>, String> {
+    let mut totals = spent.clone();
+    for (key, value) in spend {
+        let total = totals.entry(key.clone()).or_insert(0);
+        *total = total
+            .checked_add(*value)
+            .ok_or_else(|| format!("today's total for {key} would pass 2^128"))?;
+    }
+    Ok(totals)
+}
+
 impl Ledger {
     pub fn load(path: &Path, day: &str) -> Result<Ledger, String> {
         let lock = fs::OpenOptions::new()
@@ -83,10 +97,10 @@ impl Ledger {
         spend: &[(String, u128)],
         limits: &BTreeMap<String, u128>,
     ) -> Vec<String> {
-        let mut totals = self.spent.clone();
-        for (key, value) in spend {
-            *totals.entry(key.clone()).or_insert(0) += value;
-        }
+        let totals = match add(&self.spent, spend) {
+            Ok(totals) => totals,
+            Err(reason) => return vec![reason],
+        };
         spend
             .iter()
             .filter_map(|(key, _)| {
@@ -100,9 +114,7 @@ impl Ledger {
     }
 
     pub fn commit(&mut self, path: &Path, spend: &[(String, u128)]) -> Result<(), String> {
-        for (key, value) in spend {
-            *self.spent.entry(key.clone()).or_insert(0) += value;
-        }
+        self.spent = add(&self.spent, spend)?;
         let spent: Map<String, Value> = self
             .spent
             .iter()
@@ -120,7 +132,36 @@ impl Ledger {
 
 #[cfg(test)]
 mod tests {
-    use super::utc_day;
+    use super::{Ledger, utc_day};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn a_spend_that_would_wrap_the_day_is_refused_and_never_written() {
+        let path = std::env::temp_dir().join(format!(
+            "whale-signer-{}-ledger-wrap.json",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let key = "8453:0xtoken".to_string();
+        let limits = BTreeMap::from([(key.clone(), 10_000_000u128)]);
+        let mut ledger = Ledger::load(&path, "2026-11-03").expect("ledger");
+        ledger
+            .commit(&path, &[(key.clone(), 3_000_000)])
+            .expect("commit");
+        let wrap = [(key.clone(), u128::MAX - 2_999_999)];
+        assert_eq!(
+            ledger.over_limit(&wrap, &limits),
+            ["today's total for 8453:0xtoken would pass 2^128"]
+        );
+        assert!(ledger.commit(&path, &wrap).is_err());
+        drop(ledger);
+        let ledger = Ledger::load(&path, "2026-11-03").expect("ledger");
+        assert_eq!(
+            ledger.over_limit(&[(key.clone(), 7_000_001)], &limits),
+            ["today's total for 8453:0xtoken would be 10000001, above the 10000000 limit"]
+        );
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[test]
     fn utc_days_match_known_dates() {
