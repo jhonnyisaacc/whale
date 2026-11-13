@@ -44,7 +44,7 @@ test("webhooks get only their account's chosen events, signed, retried on failur
       sent.push({ url, headers: init.headers, body: init.body });
       return { status, body: "" };
     };
-    let clock = Date.now();
+    let clock = Date.now() + 1_000;
     assert.equal(await deliverDue(pool, SECRET, send, clock), 3);
     const signed = sent.find((entry) => entry.url === "https://hooks.example/whale" && entry.body.includes("wallet.frozen"));
     assert.ok(signed);
