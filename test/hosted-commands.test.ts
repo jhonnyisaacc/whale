@@ -30,6 +30,9 @@ test("the hosted service token must be long and must differ from the executor to
   assert.throws(() => hostedServiceToken({ HOSTED_SERVICE_TOKEN: "short" }, []), /at least 32/);
   assert.throws(() => hostedServiceToken({ HOSTED_SERVICE_TOKEN: HOSTED_TOKEN }, [HOSTED_TOKEN]), /must differ/);
   assert.equal(hostedServiceToken({ HOSTED_SERVICE_TOKEN: HOSTED_TOKEN }, ["executor-token-123456"]), HOSTED_TOKEN);
+  assert.equal(hostedServiceToken({ HOSTED_SERVICE_TOKEN: `${HOSTED_TOKEN}\n` }, ["executor-token-123456"]), HOSTED_TOKEN);
+  assert.throws(() => hostedServiceToken({ HOSTED_SERVICE_TOKEN: ` ${HOSTED_TOKEN} ` }, [HOSTED_TOKEN]), /must differ/);
+  assert.throws(() => hostedServiceToken({ HOSTED_SERVICE_TOKEN: " ".repeat(40) }, []), /at least 32/);
 });
 
 test("the executor's hosted route accepts only its own token and never reaches a sender", async () => {

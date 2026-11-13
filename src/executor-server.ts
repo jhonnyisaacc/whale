@@ -199,7 +199,7 @@ async function main(): Promise<void> {
   }
   const holdingsParsed = holdingsSchema.safeParse(JSON.parse(process.env.WALLET_HOLDINGS_JSON ?? "[]"));
   if (!holdingsParsed.success) throw new Error("WALLET_HOLDINGS_JSON is invalid");
-  const secrets = [...signerSecrets, ...configSecrets(config), process.env.HOSTED_SERVICE_TOKEN ?? ""].filter((item) => item.length >= 8);
+  const secrets = [...signerSecrets, ...configSecrets(config), process.env.HOSTED_SERVICE_TOKEN?.trim() ?? ""].filter((item) => item.length >= 8);
   const logger = createLogger(secrets);
   const releaseLock = config.databaseUrl ? await acquireExecutorLock(config.databaseUrl, () => process.exit(1)) : null;
   const state = createExecutorState();

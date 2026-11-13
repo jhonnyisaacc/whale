@@ -13,7 +13,7 @@ export type HostedReply =
 // The gateway's token can only reach this route. It is a different secret from the executor bearer, so a gateway
 // compromise cannot call /execute or /rebalance.
 export function hostedServiceToken(env: NodeJS.ProcessEnv, executorTokens: readonly string[]): string | null {
-  const token = env[HOSTED_TOKEN_ENV];
+  const token = env[HOSTED_TOKEN_ENV]?.trim();
   if (token === undefined) return null;
   if (token.length < 32) throw new Error(`${HOSTED_TOKEN_ENV} must be at least 32 characters`);
   if (executorTokens.includes(token)) throw new Error(`${HOSTED_TOKEN_ENV} must differ from EXECUTOR_AUTH_TOKEN`);
