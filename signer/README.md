@@ -48,7 +48,7 @@ Everything not listed is refused. See `vectors/policy.json` for a full example.
 - The signer never reads 0x `Settler.execute` `actions`. `exec(Settler, USDC, amount, Settler, execute({recipient: this wallet, buyToken: 0, minAmountOut: 0}, [TRANSFER_FROM(attacker, ...)]))` passes every rule, and Settler sends the lent `amount` to the attacker.
 - KyberSwap's `targetData` is chosen by Whale and runs in the listed executor, so it decides where the sold tokens go.
 
-So each swap can lose its whole sold amount. What a compromised Whale can move in a day is bounded by the daily limits, the fee caps, and `evm.maxValueWei`, not by who the calldata names. [ADR 0004](../docs/adr/0004-smart-account-level.md) reaches the same conclusion for the smart account level. Set each limit to what you accept losing in a day.
+So each swap can lose its whole sold amount. What a compromised Whale can move in a day is bounded by the daily limits, the fee caps, and `evm.maxValueWei`, not by who the calldata names. [ADR 0004](../docs/adr/0004-smart-account-level.md) reaches the same conclusion for the smart account level. Set each limit to what you accept losing in a day. `allowUndecodedRouterCalls` lifts this bound for tokens: an undecoded call to a listed router can spend an allowance approved on an earlier day without charging today, so keep it false unless you accept that.
 
 Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`.
 
@@ -62,7 +62,7 @@ The instruction rules:
 | --- | --- |
 | System | Only SOL transfers from this wallet: to itself, to its wrapped SOL account, to a Jito tip account, or to a listed destination within the `solana:native` daily limit |
 | Token and Token-2022 | `SyncNative`, `CloseAccount` back to this wallet, and `InitializeAccount3` owned by it. `TransferChecked` only to a listed token account, counted against `solana:<mint>` |
-| Associated Token Account | A create funded by this wallet, for itself or a listed destination. A create for a destination counts 4,454,400 lamports, the rent for a 512-byte account, against `solana:native`, since that rent leaves the wallet |
+| Associated Token Account | A create funded by this wallet, for itself or a listed destination. Every create counts 4,454,400 lamports, the rent for a 512-byte account, against `solana:native`. A create for this wallet counts too, because a mint can make the account impossible to close |
 | Compute Budget | Unit price times unit limit, plus tips, at or under `solana.maxPriorityLamports` |
 
 Every Solana transaction also pays its fee from the wallet. The 5000 lamport signature fee, plus the priority fee at the requested unit limit (1,400,000 units when none is set), plus every Jito tip, counts against the `solana:native` daily limit.
