@@ -27,6 +27,7 @@ async function refusal(response: Response): Promise<{ code: number; message: str
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const KEY_IN_HOST = /whale_[0-9a-f]{12}_/i;
 
 export function mcpEndpoint(gatewayUrl: string): string {
   const url = URL.parse(gatewayUrl);
@@ -34,6 +35,7 @@ export function mcpEndpoint(gatewayUrl: string): string {
   const local = url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname);
   if (url.protocol !== "https:" && !local) throw new Error("the gateway URL must be https (http only for localhost)");
   if (url.username || url.password || url.search || url.hash) throw new Error("the gateway URL must not carry credentials, a query, or a fragment");
+  if (KEY_IN_HOST.test(url.hostname)) throw new Error("the gateway URL's host looks like a Whale API key");
   return new URL("/mcp", url.origin).toString();
 }
 
