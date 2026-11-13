@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api, describe, type Wallet } from "../api.js";
+import { api, ApiError, describe, type Wallet } from "../api.js";
+import { stepUp } from "../stepup.js";
 import { addDelegate, addPolicies, type Delegation } from "../turnkey.js";
 import { createPasskey, type CreationOptions } from "../webauthn.js";
 
@@ -31,7 +32,15 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
       const options = await api<CreationOptions>(`/api/wallets/${wallet.id}/enclave/options`, { method: "POST", body: {} });
       const credential = await createPasskey(options);
       setStatus("Creating your enclave…");
-      await api(`/api/wallets/${wallet.id}/enclave`, { method: "POST", body: { credential, label } });
+      const url = `/api/wallets/${wallet.id}/enclave`;
+      const body = { credential, label };
+      await api(url, { method: "POST", body }).catch(async (caught: unknown) => {
+        if (!(caught instanceof ApiError) || caught.status !== 428) throw caught;
+        setStatus("Approve the new passkey with one you already have…");
+        const assertion = await stepUp({ kind: "passkey.add", credentialId: credential.id });
+        setStatus("Creating your enclave…");
+        return api(url, { method: "POST", body: { ...body, assertion } });
+      });
       setStep("delegate");
       onDone();
     });
@@ -58,7 +67,7 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
       <h2>Finish setup</h2>
       {step === "passkey" ? (
         <>
-          <p>Create a passkey on this device. It becomes the only owner of your wallet's enclave. Whale cannot recover it, so add a second passkey later.</p>
+          <p>Create a passkey on this device. It becomes the only owner of your wallet's enclave. Whale cannot recover it, so add a second passkey later. If your account already has a passkey, Whale asks for it to approve the new one before it creates the enclave.</p>
           <div className="row">
             <input value={label} maxLength={64} onChange={(event) => setLabel(event.target.value)} aria-label="Passkey name" />
             <button className="primary" disabled={busy} onClick={() => void createEnclave()}>
