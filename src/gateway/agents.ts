@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import { audit, inTransaction } from "./accounts.js";
-import { agentLimitsSchema, walletPolicySchema, type AgentLimits, type WalletPolicy } from "./policy.js";
+import { storedLimitsSchema, storedPolicySchema, type AgentLimits, type WalletPolicy } from "./policy.js";
 
 const API_KEY = /^whale_([0-9a-f]{12})_([A-Za-z0-9_-]{43})$/;
 const TOUCH_AFTER_MS = 60_000;
@@ -120,6 +120,9 @@ export async function authenticateApiKey(pool: pg.Pool, presented: string, now =
   );
   const row = found.rows[0];
   if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret))) return null;
+  const limits = storedLimitsSchema.safeParse(row.limits);
+  const policy = storedPolicySchema.safeParse(row.document);
+  if (!limits.success || !policy.success) return null;
   if (!row.last_used_at || now - row.last_used_at.getTime() >= TOUCH_AFTER_MS) {
     await pool.query("UPDATE agent_credentials SET last_used_at = $2 WHERE id = $1", [id, new Date(now)]);
     await pool.query("UPDATE agents SET last_used_at = $2 WHERE id = $1", [row.agent_id, new Date(now)]);
@@ -130,7 +133,7 @@ export async function authenticateApiKey(pool: pg.Pool, presented: string, now =
     walletId: row.wallet_id,
     walletStatus: row.wallet_status,
     live: row.live,
-    limits: agentLimitsSchema.parse(row.limits),
-    policy: walletPolicySchema.parse(row.document),
+    limits: limits.data,
+    policy: policy.data,
   };
 }

@@ -100,3 +100,36 @@ test("an account holds at most ten wallets", { skip: !TEST_DATABASE_URL }, async
     await drop();
   }
 });
+
+test("a chain a later build drops is dropped from stored policies and limits, never widened, and a broken document refuses the key", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, drop } = await harness();
+  try {
+    const { headers } = await signedInAccount(pool);
+    const wallet = (await app.inject({ method: "POST", url: "/api/wallets", headers, payload: { label: "main", level: "enclave" } })).json();
+    const { apiKey } = (await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/agents`, headers, payload: { name: "bot", limits: LIMITS } })).json();
+    const kept = { chain: "base", address: "0x1111111111111111111111111111111111111111" };
+    const gone = { chain: "dogechain", address: "0x2222222222222222222222222222222222222222" };
+    await pool.query("UPDATE policies SET document = document || jsonb_build_object('chains', $1::jsonb, 'tokenAllowlist', $2::jsonb)", [
+      JSON.stringify(["base", "dogechain"]),
+      JSON.stringify([kept, gone]),
+    ]);
+    await pool.query("UPDATE agents SET limits = limits || jsonb_build_object('chains', $1::jsonb)", [JSON.stringify(["base", "dogechain"])]);
+
+    const listed = await app.inject({ method: "GET", url: "/api/wallets", headers });
+    assert.equal(listed.statusCode, 200);
+    assert.deepEqual(listed.json().wallets[0].policy.chains, ["base"]);
+    assert.deepEqual(listed.json().wallets[0].policy.tokenAllowlist, [kept]);
+    const context = await authenticateApiKey(pool, apiKey);
+    assert.deepEqual(context?.limits.chains, ["base"]);
+    assert.deepEqual(context?.policy.chains, ["base"]);
+
+    await pool.query("UPDATE policies SET document = document || jsonb_build_object('chains', $1::jsonb, 'tokenAllowlist', $2::jsonb)", [JSON.stringify(["dogechain"]), JSON.stringify([gone])]);
+    const emptied = (await app.inject({ method: "GET", url: "/api/wallets", headers })).json().wallets[0].policy;
+    assert.deepEqual([emptied.chains, emptied.tokenAllowlist], [[], []]);
+
+    await pool.query("UPDATE agents SET limits = '{\"chains\": \"base\"}'");
+    assert.equal(await authenticateApiKey(pool, apiKey), null);
+  } finally {
+    await drop();
+  }
+});
