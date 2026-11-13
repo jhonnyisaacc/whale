@@ -3,6 +3,8 @@ import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { configSecrets, loadConfig } from "../src/config.js";
+import { redactText } from "../src/redact.js";
 
 const pathKey = "fakePathKey0123456789abcdef";
 const queryKey = "fakeQueryKey9876543210";
@@ -72,4 +74,19 @@ test("the CLI balance command does not print a keyed RPC URL when the RPC fails"
     server.closeAllConnections();
     server.close();
   }
+});
+
+test("a key the provider echoes bare is redacted", () => {
+  const secrets = configSecrets(loadConfig({ RPC_URL_8453: `https://rpcuser:rpcpassword1@rpc.example/v2/${pathKey}?apikey=${queryKey}` }));
+  for (const echoed of [`denied for path /?apikey=${queryKey}`, `unknown key ${pathKey}`, "bad login rpcuser:rpcpassword1"]) {
+    const redacted = redactText(echoed, secrets);
+    assertNoKey(redacted);
+    assert.equal(redacted.includes("rpcpassword1"), false);
+  }
+});
+
+test("plain path segments and query words in an RPC URL stay readable", () => {
+  const secrets = configSecrets(loadConfig({ RPC_URL_8453: "https://rpc.example/v1/solana-mainnet-beta/ethereum?network=optimism&chain=mainnet&tag=latest" }));
+  const text = "v1 solana-mainnet-beta ethereum optimism mainnet latest";
+  assert.equal(redactText(`call failed on ${text}`, secrets), `call failed on ${text}`);
 });
