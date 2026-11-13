@@ -148,3 +148,21 @@ test("a second registration for a wallet, or the same keys on another wallet, is
     await signer.close();
   }
 });
+
+test("a refusal with many long reasons is stored, trimmed, and not handed out again", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const jobId = await enqueueJob(signer.pool, { accountId: signer.user.accountId, walletId: signer.walletId, kind: "evm", payload: {}, ttlMs: 10 * 60_000 }, signer.clock.now);
+    assert.equal((await signer.pull()).json().id, jobId);
+    const reasons = Array.from({ length: 25 }, (_, index) => `${index}:${"x".repeat(400)}`);
+    const answered = await signer.answer(jobId, { decision: "refused", reasons });
+    assert.equal(answered.statusCode, 204, answered.body);
+    const stored = (await signer.pool.query("SELECT status, result FROM signing_jobs WHERE id = $1", [jobId])).rows[0];
+    assert.equal(stored.status, "refused");
+    assert.deepEqual(stored.result.reasons, reasons.slice(0, 20).map((reason) => reason.slice(0, 300)));
+    signer.clock.now += LEASE_MS + 1;
+    assert.equal((await signer.pull()).statusCode, 204);
+  } finally {
+    await signer.close();
+  }
+});

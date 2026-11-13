@@ -18,7 +18,8 @@ const registerBody = z
     solanaSignature: z.string().max(90),
   })
   .strict();
-const resultBody = z.object({ decision: z.enum(["signed", "refused"]), result: z.unknown().optional(), reasons: z.array(z.string().max(300)).max(20).optional() }).strict();
+const reasonsBody = z.array(z.string()).transform((reasons) => reasons.slice(0, 20).map((reason) => reason.slice(0, 300)));
+const resultBody = z.object({ decision: z.enum(["signed", "refused"]), result: z.unknown().optional(), reasons: reasonsBody.optional() }).strict();
 const MAX_WAIT_S = 25;
 
 function bearer(request: FastifyRequest): string {
