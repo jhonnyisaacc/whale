@@ -4,7 +4,8 @@ import type pg from "pg";
 import type { AgentLimits } from "../src/gateway/policy.js";
 import { buildGateway } from "../src/gateway/app.js";
 import { pkceChallenge, randomToken } from "../src/gateway/google.js";
-import { approveRequest, createRequest, denyRequest, exchangeCode, refreshTokens } from "../src/gateway/oauth-store.js";
+import { authenticateBearer } from "../src/gateway/agents.js";
+import { approveRequest, createRequest, denyRequest, exchangeCode, refreshTokens, revokeToken } from "../src/gateway/oauth-store.js";
 import { createWallet } from "../src/gateway/wallets.js";
 import { gatewayConfig, ORIGIN, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
@@ -118,6 +119,31 @@ test("a replayed code during a legitimate refresh leaves no credential of the fa
     assert.deepEqual(replayed, { error: "invalid_grant" });
     assert.ok("refresh_token" in second);
     assert.equal(await liveCredentials(), 0);
+  } finally {
+    await drop();
+  }
+});
+
+test("revoking a refresh token during its own refresh leaves no credential of the family live", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, clientId, request, approve, liveCredentials, drop } = await setup();
+  try {
+    const { id, verifier } = await request();
+    const code = new URL((await approve(pool, id)) as string).searchParams.get("code") as string;
+    const first = await exchangeCode(pool, { code, clientId, redirectUri: REDIRECT, verifier, resource: RESOURCE });
+    assert.ok("refresh_token" in first);
+
+    const legit = held(pool, "INSERT INTO agent_credentials");
+    const refreshing = refreshTokens(legit.pool, { refreshToken: first.refresh_token, clientId });
+    await legit.reached;
+    const revoking = revokeToken(pool, first.refresh_token);
+    await legit.blocking();
+    legit.open();
+    const [second] = await Promise.all([refreshing, revoking]);
+
+    assert.ok("refresh_token" in second);
+    assert.equal(await liveCredentials(), 0);
+    assert.equal(await authenticateBearer(pool, second.access_token, RESOURCE), null);
+    assert.deepEqual(await refreshTokens(pool, { refreshToken: second.refresh_token, clientId }), { error: "invalid_grant" });
   } finally {
     await drop();
   }

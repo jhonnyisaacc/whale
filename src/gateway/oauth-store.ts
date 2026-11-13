@@ -170,9 +170,12 @@ export async function revokeToken(pool: pg.Pool, token: string): Promise<void> {
   const match = REFRESH_TOKEN.exec(token) ?? ACCESS_TOKEN.exec(token);
   if (!match) return;
   const [, id, secret] = match as unknown as [string, string, string];
-  const found = await pool.query<{ secret_hash: Buffer; kind: string; agent_id: string }>("SELECT secret_hash, kind, agent_id FROM agent_credentials WHERE id = $1 AND kind <> 'api_key'", [id]);
-  const row = found.rows[0];
-  if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret))) return;
-  if (row.kind === "oauth_refresh") await revokeOAuthCredentials(pool, row.agent_id);
-  else await pool.query("UPDATE agent_credentials SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [id]);
+  await inTransaction(pool, async (client) => {
+    await client.query("SELECT 1 FROM agents WHERE id = (SELECT agent_id FROM agent_credentials WHERE id = $1) FOR NO KEY UPDATE", [id]);
+    const found = await client.query<{ secret_hash: Buffer; kind: string; agent_id: string }>("SELECT secret_hash, kind, agent_id FROM agent_credentials WHERE id = $1 AND kind <> 'api_key'", [id]);
+    const row = found.rows[0];
+    if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret))) return;
+    if (row.kind === "oauth_refresh") await revokeOAuthCredentials(client, row.agent_id);
+    else await client.query("UPDATE agent_credentials SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [id]);
+  });
 }
