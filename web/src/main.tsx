@@ -5,6 +5,7 @@ import { Activity } from "./pages/Activity.js";
 import { Approvals } from "./pages/Approvals.js";
 import { Connect } from "./pages/Connect.js";
 import { Login } from "./pages/Login.js";
+import { Settings } from "./pages/Settings.js";
 import { WalletDetail } from "./pages/WalletDetail.js";
 import { Wallets } from "./pages/Wallets.js";
 import { Link, navigate, useLocation } from "./router.js";
@@ -34,6 +35,7 @@ function App() {
   else if (me === null || path === "/login") page = <Login error={query.get("error")} returnTo={path === "/login" ? "/" : `${path}${window.location.search}`} />;
   else if (path === "/approvals") page = <Approvals />;
   else if (path === "/activity") page = <Activity />;
+  else if (path === "/settings") page = <Settings />;
   else if (path.startsWith("/wallets/")) page = <WalletDetail walletId={path.slice("/wallets/".length)} chains={meta.hostedChains} />;
   else page = <Wallets />;
 
@@ -46,6 +48,7 @@ function App() {
             <Link to="/">Wallets</Link>
             <Link to="/approvals">Approvals</Link>
             <Link to="/activity">Activity</Link>
+            <Link to="/settings">Settings</Link>
             <span className="muted">{me.email}</span>
             <button onClick={() => void logout()}>Sign out</button>
           </span>

@@ -3,11 +3,13 @@ import type pg from "pg";
 import { gatewaySecrets, type GatewayConfig } from "./config.js";
 import { googleKeys, type KeySource } from "./google.js";
 import { executorClient, type ExecutorClient } from "./executor-client.js";
+import type { Fetch402 } from "./x402.js";
 import { gatewayApp } from "./http.js";
 import { registerMcpRoutes } from "./mcp-http.js";
 import { registerAuthRoutes } from "./routes-auth.js";
 import { registerEnclaveRoutes } from "./enclave.js";
 import { registerApprovalRoutes } from "./routes-approvals.js";
+import { registerWebhookRoutes } from "./routes-webhooks.js";
 import { registerSignerRoutes } from "./routes-signers.js";
 import { registerOAuthRoutes } from "./routes-oauth.js";
 import { delegationFromEnv, turnkeyParentFromEnv, type DelegationConfig, type TurnkeyParent } from "./turnkey.js";
@@ -25,6 +27,7 @@ export type GatewayDeps = {
   now?: () => number;
   logger?: boolean;
   executor?: ExecutorClient | null;
+  fetch402?: Fetch402;
   fetchDocument?: MetadataFetch;
   turnkey?: TurnkeyParent | null;
   delegation?: DelegationConfig | null;
@@ -42,6 +45,7 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   registerPasskeyRoutes(app, { config: deps.config, pool: deps.pool, now });
   registerPolicyRoutes(app, { config: deps.config, pool: deps.pool, now: deps.now });
   registerApprovalRoutes(app, { config: deps.config, pool: deps.pool, now });
+  registerWebhookRoutes(app, { config: deps.config, pool: deps.pool });
   registerSignerRoutes(app, { config: deps.config, pool: deps.pool, now, ...(deps.signerPollMs ? { pollMs: deps.signerPollMs } : {}) });
   registerEnclaveRoutes(app, {
     config: deps.config,
@@ -50,7 +54,7 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
     delegation: deps.delegation !== undefined ? deps.delegation : delegationFromEnv(process.env),
   });
   registerOAuthRoutes(app, { config: deps.config, pool: deps.pool, now, ...(deps.fetchDocument ? { fetchDocument: deps.fetchDocument } : {}) });
-  registerMcpRoutes(app, { config: deps.config, pool: deps.pool, executor: deps.executor ?? (deps.config.executor ? executorClient(deps.config.executor, fetchImpl) : null) });
+  registerMcpRoutes(app, { config: deps.config, pool: deps.pool, ...(deps.fetch402 ? { fetch402: deps.fetch402 } : {}), executor: deps.executor ?? (deps.config.executor ? executorClient(deps.config.executor, fetchImpl) : null) });
   if (deps.webDir !== undefined) registerStatic(app, deps.webDir);
   return app;
 }

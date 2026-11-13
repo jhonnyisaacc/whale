@@ -50,3 +50,18 @@ test("a metadata host that drips bytes is cut off at the total deadline", async 
     server.close();
   }
 });
+
+test("a metadata document over the size cap is refused", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(`{"client_id":"x"}${" ".repeat(128 * 1024)}`);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    await assert.rejects(fetchMetadataDocument(`http://127.0.0.1:${port}/meta.json`, { send: request }), /client metadata response is too large/);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});

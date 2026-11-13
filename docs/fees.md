@@ -58,3 +58,28 @@ Keep small USDC and native balances on the chains you actually trade. The target
 Solana: `JITO_ENABLED=true` posts `sendTransaction` to `https://mainnet.block-engine.jito.wtf/api/v1/transactions` unless `JITO_BLOCK_ENGINE_URL` is set. The body is base64. `bundleOnly` is not set. Without Jito, the Jupiter `/swap` body asks for a `veryHigh` priority fee capped at `SOLANA_MAX_PRIORITY_LAMPORTS`. With Jito, it asks for `jitoTipLamports` (`JITO_TIP_LAMPORTS`, default 10000) instead, because Jupiter accepts one or the other. Jupiter picks the tip account. The signing policy allows a native transfer only to the hot wallet, its wrapped SOL account, or one of the eight Jito tip accounts it lists, so a tip to any other account is not signed. It also refuses tips above `JITO_TIP_LAMPORTS`, and a compute-unit price times limit that, with tips, exceeds `SOLANA_MAX_PRIORITY_LAMPORTS`.
 
 EVM: set `MEV_RPC_URL_1=https://rpc.flashbots.net` for Ethereum. Other chains use `MEV_RPC_URL_<chainId>`. Simulation stays on the normal RPC. The protect URL is the retail `eth_sendRawTransaction` path. Do not use a deprecated `?url=` parameter.
+
+## Live network costs
+
+`src/network-costs.ts` estimates what a swap and a transfer cost now on each chain.
+
+| Family | Swap | Transfer | Source |
+| --- | --- | --- | --- |
+| EVM | 180,000 gas | 65,000 gas | `eth_gasPrice` from `RPC_URL_<chainId>` and the `RPC_URLS_<chainId>` list, priced in the native coin |
+| Solana | 5,000 lamports plus the median recent priority fee over 200,000 compute units | Same, over 30,000 units | The Solana RPC |
+
+The native coin price comes from CoinGecko. A chain whose RPC or price does not answer within 2.5 s falls back to the gas ceiling above and is marked `static`. Results cache for 30 s. These numbers compare chains. They are not a fee promise: multi-hop routes cost more, and OP-stack chains add an L1 data fee that is left out.
+
+A run on 2026-11-03 against public RPCs gave about 0.0005 USD a swap on Solana, 0.0024 on Base, and 0.008 on Arbitrum.
+
+The hosted MCP tool `network_costs` returns these numbers for the agent's chains, cheapest first. The executor answers it on `/hosted/commands` without reaching `run()`. Hyperliquid charges trading fees, not gas, so it has no estimate and comes back under `skipped` with that reason.
+
+## x402
+
+The hosted tool `x402_quote` fetches a URL through the same guarded client as webhooks. On a 402 it reads the `accepts` list. An option is refused unless the scheme is `exact`, the network is a supported mainnet, and the asset is a known stablecoin. Every other option goes through the hosted `transfer` tool's checks for the same payment, plus the USD caps that `transfer` does not apply:
+- The chain must be inside the agent's chains, and the agent must be allowed to transfer.
+- The token must be on the wallet's token list, and `payTo` must be on the wallet's destination list.
+- The amount must be within the agent's per-transaction cap, and today's total must stay within the agent's and the wallet's daily caps.
+
+An option that passes is `fits`, or `needs_approval` when the owner set an approval threshold, because a transfer out then waits for a passkey approval. `best` is the cheapest option that fits, or else the cheapest that needs approval. It pays nothing. A live x402 payment would be a send with no simulation step, and the send rules do not allow that path.
+
