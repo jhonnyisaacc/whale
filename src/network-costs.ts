@@ -77,7 +77,7 @@ export async function networkCosts(chainKeys: readonly string[], readers: CostRe
     specs.map(async (spec): Promise<NetworkCost> => {
       if (!spec) throw new Error("unreachable");
       const usd = prices.get(spec.nativeSymbol.toUpperCase());
-      if (usd === undefined) return staticCost(spec.key);
+      if (usd === undefined || !(usd > 0)) return staticCost(spec.key);
       if (spec.chain.kind === "solana") {
         const priority = await readers.solanaPriorityMicroLamports();
         if (priority === null) return staticCost(spec.key);
@@ -85,7 +85,7 @@ export async function networkCosts(chainKeys: readonly string[], readers: CostRe
         return { chainKey: spec.key, swapUsd: (lamports(SOLANA_UNITS.swap) / 1e9) * usd, transferUsd: (lamports(SOLANA_UNITS.transfer) / 1e9) * usd, source: "live" };
       }
       const price = await readers.evmGasPriceWei(spec.key);
-      if (price === null) return staticCost(spec.key);
+      if (price === null || price <= 0n) return staticCost(spec.key);
       const cost = (gas: bigint) => (Number(gas * price) / 1e18) * usd;
       return { chainKey: spec.key, swapUsd: cost(EVM_GAS.swap), transferUsd: cost(EVM_GAS.transfer), source: "live" };
     }),

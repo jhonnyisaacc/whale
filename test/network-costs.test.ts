@@ -30,6 +30,14 @@ test("live costs rank Solana and the L2s under Ethereum, and fall back to the st
   assert.ok(blind.every((cost) => cost.source === "static"));
 });
 
+test("a gas price or native price of zero is unreadable, so that chain falls back instead of ranking free", async () => {
+  const costs = await networkCosts(["base", "arbitrum", "solana"], readers({ evmGasPriceWei: async (key) => (key === "base" ? 0n : GWEI / 50n), nativeUsd: async () => new Map([["ETH", 3_000], ["SOL", 0]]) }));
+  assert.equal(costs.find((cost) => cost.chainKey === "base")?.source, "static");
+  assert.equal(costs.find((cost) => cost.chainKey === "solana")?.source, "static");
+  assert.equal(costs.find((cost) => cost.chainKey === "arbitrum")?.source, "live");
+  assert.ok(costs.every((cost) => cost.swapUsd > 0));
+});
+
 test("costs are cached for thirty seconds per chain set", async () => {
   let reads = 0;
   const counting = readers({ nativeUsd: async () => (reads++, new Map([["ETH", 3_000]])) });
