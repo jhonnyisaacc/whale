@@ -98,8 +98,6 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
   });
 
   app.post("/api/oauth/requests/:id/deny", { config: perMinute(10) }, async (request, reply) => {
-    const session = await requireSession(pool, request, reply);
-    if (!session) return reply;
     const params = requestId.safeParse(request.params);
     const redirect = params.success ? await denyRequest(pool, params.data.id, issuer, now()) : null;
     if (!redirect) return reply.code(404).send({ error: "not_found" });

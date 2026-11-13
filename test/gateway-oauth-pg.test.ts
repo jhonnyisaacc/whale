@@ -262,8 +262,8 @@ test("expired OAuth requests, codes, and tokens are deleted a day after they exp
   }
 });
 
-test("denying a request needs a same-origin session, and the old public deny path is gone", { skip: !TEST_DATABASE_URL }, async () => {
-  const { app, form, authorize, user, drop } = await harness();
+test("a signed-out user can deny a request from the same origin, and the old public deny path is gone", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, form, authorize, drop } = await harness();
   try {
     const clientId = await register(form, app);
     const requestId = new URL(String((await authorize(clientId)).reply.headers.location), ORIGIN).searchParams.get("request");
@@ -272,11 +272,11 @@ test("denying a request needs a same-origin session, and the old public deny pat
 
     assert.equal((await deny(`/oauth/requests/${requestId}/deny`, {})).statusCode, 404);
     assert.equal(await pending(), 200);
-    assert.equal((await deny(`/api/oauth/requests/${requestId}/deny`, { ...user.headers, origin: "https://evil.example" })).statusCode, 403);
-    assert.equal((await deny(`/api/oauth/requests/${requestId}/deny`, { origin: ORIGIN })).statusCode, 401);
+    assert.equal((await deny(`/api/oauth/requests/${requestId}/deny`, { origin: "https://evil.example" })).statusCode, 403);
     assert.equal(await pending(), 200);
 
-    const denied = await deny(`/api/oauth/requests/${requestId}/deny`, user.headers);
+    const denied = await deny(`/api/oauth/requests/${requestId}/deny`, { origin: ORIGIN });
+    assert.equal(denied.statusCode, 200);
     assert.equal(new URL(denied.json().redirect).searchParams.get("error"), "access_denied");
     assert.equal(await pending(), 404);
   } finally {
