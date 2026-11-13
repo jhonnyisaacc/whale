@@ -25,6 +25,9 @@ export const WEBHOOK_EVENTS = [
 export const MAX_WEBHOOKS = 5;
 export const RETRY_AFTER_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 3_600_000, 6 * 3_600_000];
 const DISABLE_AFTER_FAILURES = 50;
+const BATCH = 20;
+const SEND_DEADLINE_MS = 5_000;
+const LEASE_MS = 3 * BATCH * SEND_DEADLINE_MS;
 const FOREVER_MS = 100 * 365 * 24 * 3_600_000;
 
 export type Send = (url: string, init: { method: "POST"; headers: Record<string, string>; body: string; maxBytes: number; timeoutMs: number }) => Promise<SafeResponse>;
@@ -100,9 +103,9 @@ function payload(row: Due): string {
 export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Send = safeRequest, now = Date.now()): Promise<number> {
   const claimed = await pool.query<Due>(
     `WITH due AS (
-       SELECT id FROM webhook_deliveries WHERE delivered_at IS NULL AND gave_up_at IS NULL AND next_attempt_at <= $1 ORDER BY next_attempt_at LIMIT 20 FOR UPDATE SKIP LOCKED
+       SELECT id FROM webhook_deliveries WHERE delivered_at IS NULL AND gave_up_at IS NULL AND next_attempt_at <= $1 ORDER BY next_attempt_at LIMIT ${BATCH} FOR UPDATE SKIP LOCKED
      ), leased AS (
-       UPDATE webhook_deliveries d SET next_attempt_at = $1::timestamptz + interval '5 minutes' FROM due WHERE d.id = due.id RETURNING d.id, d.attempts, d.webhook_id, d.account_id, d.event_id
+       UPDATE webhook_deliveries d SET next_attempt_at = $1::timestamptz + make_interval(secs => ${LEASE_MS / 1000}) FROM due WHERE d.id = due.id RETURNING d.id, d.attempts, d.webhook_id, d.account_id, d.event_id
      )
      SELECT leased.id::text, leased.attempts, w.id AS webhook_id, w.url, w.format, w.secret_sealed, e.id::text AS event_id, e.account_id, e.wallet_id, e.agent_id, e.actor, e.action, e.detail, e.created_at
      FROM leased JOIN webhooks w ON w.id = leased.webhook_id AND w.account_id = leased.account_id AND w.disabled_at IS NULL
@@ -124,7 +127,7 @@ export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Sen
         headers: { "content-type": "application/json", "user-agent": "Whale-Webhooks/0.1", "whale-event-id": `evt_${row.event_id}`, "whale-signature": signature(secret, timestamp, body) },
         body,
         maxBytes: 4_096,
-        timeoutMs: 5_000,
+        timeoutMs: SEND_DEADLINE_MS,
       });
       status = response.status;
     } catch (caught) {

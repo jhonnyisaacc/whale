@@ -138,3 +138,28 @@ test("a 200 with a body over the cap counts as delivered, once", { skip: !TEST_D
     await drop();
   }
 });
+
+test("a receiver that drips its answer is cut off at the send deadline, well inside the lease", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, user, hook, drop } = await harness();
+  let hits = 0;
+  const endpoint = await receiver((_request, response) => {
+    hits += 1;
+    response.writeHead(200, { "content-type": "text/plain" });
+    const drip = setInterval(() => response.write(" "), 50);
+    response.on("close", () => clearInterval(drip));
+  });
+  try {
+    await hook();
+    await audit(pool, { accountId: user.accountId, actor: "user", action: "wallet.frozen" });
+    const started = Date.now();
+    const outcome = await Promise.race([deliverDue(pool, SECRET, endpoint.send, Date.now() + 1_000), new Promise((resolve) => setTimeout(() => resolve("still sending after 8 s"), 8_000))]);
+    assert.equal(outcome, 0);
+    assert.ok(Date.now() - started < 7_000, `took ${Date.now() - started} ms`);
+    const row = (await pool.query("SELECT attempts, delivered_at IS NULL AS pending, last_error FROM webhook_deliveries")).rows[0];
+    assert.deepEqual(row, { attempts: 1, pending: true, last_error: "timed out" });
+    assert.equal(hits, 1);
+  } finally {
+    endpoint.close();
+    await drop();
+  }
+});
