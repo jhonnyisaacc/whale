@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
+import { bearerOf } from "../bearer.js";
 import { authenticateBearer, type AgentContext } from "./agents.js";
 import type { GatewayConfig } from "./config.js";
 import type { ExecutorClient } from "./executor-client.js";
@@ -17,11 +17,6 @@ function rpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
 }
 
-function bearer(request: FastifyRequest): string {
-  const header = request.headers.authorization;
-  return typeof header === "string" && header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-}
-
 function challenge(config: GatewayConfig, reply: FastifyReply, error?: string) {
   const metadata = new URL("/.well-known/oauth-protected-resource/mcp", config.publicUrl).toString();
   const value = `Bearer resource_metadata="${metadata}"${error ? `, error="${error}"` : ""}`;
@@ -32,23 +27,30 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
   const { config, pool } = deps;
   const resource = new URL("/mcp", config.publicUrl).toString();
   const authenticate: BearerAuth = deps.authenticate ?? ((token) => authenticateBearer(pool, token, resource));
-  const limited = {
-    rateLimit: { max: 120, timeWindow: "1 minute", keyGenerator: (request: FastifyRequest) => createHash("sha256").update(bearer(request) || request.ip).digest("hex") },
-  };
+  const limited = { rateLimit: { max: 120, timeWindow: "1 minute" } };
+  const agentIds = new WeakMap<FastifyRequest, string>();
+  const perAgent = app.createRateLimit({ max: 120, timeWindow: "1 minute", keyGenerator: (request) => agentIds.get(request) ?? request.ip });
 
   app.get("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
   app.delete("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
 
-  app.post("/mcp", { config: limited }, async (request, reply) => {
+  const parseErrors = new Set(["FST_ERR_CTP_INVALID_JSON_BODY", "FST_ERR_CTP_EMPTY_JSON_BODY"]);
+  const errorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) =>
+    parseErrors.has(error.code) ? reply.code(400).send(rpcError(null, -32700, "parse error")) : app.errorHandler(error, request, reply);
+
+  app.post("/mcp", { config: limited, errorHandler }, async (request, reply) => {
     // Streamable HTTP servers must refuse foreign browser origins, which is how DNS rebinding reaches them.
     const origin = request.headers.origin;
     if (origin !== undefined && origin !== config.publicUrl.origin) return reply.code(403).send({ error: "origin_not_allowed" });
     const version = request.headers["mcp-protocol-version"];
     if (typeof version === "string" && !(MCP_VERSIONS as readonly string[]).includes(version)) return reply.code(400).send(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`));
-    const token = bearer(request);
+    const token = bearerOf(request);
     if (!token) return challenge(config, reply);
     const agent = await authenticate(token);
     if (!agent) return challenge(config, reply, "invalid_token");
+    agentIds.set(request, agent.agentId);
+    const limit = await perAgent(request);
+    if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate_limit" });
 
     const body = request.body as Rpc | Rpc[] | null;
     if (Array.isArray(body) || typeof body !== "object" || body === null || body.jsonrpc !== "2.0" || typeof body.method !== "string") {

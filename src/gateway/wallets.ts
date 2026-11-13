@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { audit, inTransaction } from "./accounts.js";
-import { DEFAULT_POLICY, walletPolicySchema, type WalletPolicy } from "./policy.js";
+import { DEFAULT_POLICY, storedPolicySchema, type WalletPolicy } from "./policy.js";
 
 export const LEVELS = ["enclave", "self_hosted", "smart_account"] as const;
 export type Level = (typeof LEVELS)[number];
@@ -60,7 +60,7 @@ export async function listWallets(pool: pg.Pool, accountId: string, walletId?: s
     status: row.status,
     live: row.live,
     addresses: row.addresses,
-    policy: walletPolicySchema.parse(row.document),
+    policy: storedPolicySchema.parse(row.document),
     policyVersion: row.version,
     createdAt: row.created_at.toISOString(),
   }));

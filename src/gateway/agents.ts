@@ -1,10 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import { audit, inTransaction } from "./accounts.js";
-import { agentLimitsSchema, walletPolicySchema, type AgentLimits, type WalletPolicy } from "./policy.js";
+import { storedLimitsSchema, storedPolicySchema, type AgentLimits, type WalletPolicy } from "./policy.js";
 
 const API_KEY = /^whale_([0-9a-f]{12})_([A-Za-z0-9_-]{43})$/;
 const TOUCH_AFTER_MS = 60_000;
+const KEY_ID_ATTEMPTS = 3;
 
 export type AgentContext = {
   agentId: string;
@@ -27,16 +28,21 @@ export function newApiKey(): { id: string; secret: string; key: string } {
 }
 
 export async function issueApiKey(client: pg.ClientBase, agentId: string): Promise<string> {
-  const { id, secret, key } = newApiKey();
-  await client.query("INSERT INTO agent_credentials (id, agent_id, kind, secret_hash) VALUES ($1, $2, 'api_key', $3)", [id, agentId, secretHash(secret)]);
-  return key;
+  for (let attempt = 0; attempt < KEY_ID_ATTEMPTS; attempt += 1) {
+    const { id, secret, key } = newApiKey();
+    const inserted = await client.query("INSERT INTO agent_credentials (id, agent_id, kind, secret_hash) VALUES ($1, $2, 'api_key', $3) ON CONFLICT (id) DO NOTHING", [id, agentId, secretHash(secret)]);
+    if (inserted.rowCount === 1) return key;
+  }
+  throw new Error("no free API key id");
 }
 
 export async function createAgent(
   pool: pg.Pool,
   input: { accountId: string; walletId: string; name: string; limits: AgentLimits },
-): Promise<{ agentId: string; apiKey: string }> {
+): Promise<{ agentId: string; apiKey: string } | { refused: "wallet_frozen" }> {
   return inTransaction(pool, async (client) => {
+    const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = $1 AND account_id = $2 FOR UPDATE", [input.walletId, input.accountId]);
+    if (wallet.rows[0]?.status === "frozen") return { refused: "wallet_frozen" };
     const agent = await client.query<{ id: string }>("INSERT INTO agents (account_id, wallet_id, name, limits) VALUES ($1, $2, $3, $4) RETURNING id", [
       input.accountId,
       input.walletId,
@@ -122,6 +128,9 @@ async function contextFor(pool: pg.Pool, id: string, secret: string, kind: "api_
   );
   const row = found.rows[0];
   if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret))) return null;
+  const limits = storedLimitsSchema.safeParse(row.limits);
+  const policy = storedPolicySchema.safeParse(row.document);
+  if (!limits.success || !policy.success) return null;
   if (!row.last_used_at || now - row.last_used_at.getTime() >= TOUCH_AFTER_MS) {
     await pool.query("UPDATE agent_credentials SET last_used_at = $2 WHERE id = $1", [id, new Date(now)]);
     await pool.query("UPDATE agents SET last_used_at = $2 WHERE id = $1", [row.agent_id, new Date(now)]);
@@ -132,8 +141,8 @@ async function contextFor(pool: pg.Pool, id: string, secret: string, kind: "api_
     walletId: row.wallet_id,
     walletStatus: row.wallet_status,
     live: row.live,
-    limits: agentLimitsSchema.parse(row.limits),
-    policy: walletPolicySchema.parse(row.document),
+    limits: limits.data,
+    policy: policy.data,
   };
 }
 

@@ -4,7 +4,7 @@ import { readVendorText } from "../vendor-fetch.js";
 export type ExecutorClient = { run(request: HostedRequest): Promise<unknown> };
 
 export function executorClient(target: { url: URL; token: string }, fetchImpl: typeof fetch = fetch): ExecutorClient {
-  const endpoint = new URL("/hosted/commands", target.url).toString();
+  const endpoint = new URL("hosted/commands", target.url.href.endsWith("/") ? target.url : `${target.url.href}/`).toString();
   return {
     async run(request) {
       const response = await fetchImpl(endpoint, {

@@ -57,8 +57,9 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 // Cookie-authenticated routes. Bearer routes (OAuth token, MCP) carry no ambient credential, so they skip
 // the Origin check and keep their own.
-function cookieRoute(url: string): boolean {
-  return url.startsWith("/api/") || url.startsWith("/auth/");
+function cookieRoute(request: FastifyRequest): boolean {
+  const path = request.routeOptions.url ?? request.url;
+  return path.startsWith("/api/") || path.startsWith("/auth/");
 }
 
 export async function gatewayApp(config: GatewayConfig, options: { logger: boolean; secrets: readonly string[] }): Promise<FastifyInstance> {
@@ -70,13 +71,13 @@ export async function gatewayApp(config: GatewayConfig, options: { logger: boole
   });
   app.addHook("onRequest", async (request, reply) => {
     if (request.method === "GET" || request.method === "HEAD") return;
-    if (cookieRoute(request.url) && request.headers.origin !== config.publicUrl.origin) return reply.code(403).send({ error: "cross_origin" });
+    if (cookieRoute(request) && request.headers.origin !== config.publicUrl.origin) return reply.code(403).send({ error: "cross_origin" });
   });
   app.addHook("onSend", async (request, reply, payload) => {
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) reply.header(name, value);
     if (config.publicUrl.protocol === "https:") reply.header("strict-transport-security", "max-age=63072000; includeSubDomains");
     if (!reply.hasHeader("content-security-policy")) reply.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
-    if (cookieRoute(request.url)) reply.header("cache-control", "no-store");
+    if (cookieRoute(request)) reply.header("cache-control", "no-store");
     return payload;
   });
   await app.register(rateLimit, { global: true, max: 120, timeWindow: "1 minute" });
