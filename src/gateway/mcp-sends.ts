@@ -106,12 +106,13 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   const value = await executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });
   try {
     await inTransaction(pool, async (client) => {
-      if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) throw new Refused(await lapsedApproval(pool, agent, command));
+      if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) throw new Lapsed();
       const overDaily = priced ? await recordSpend(client, agent, command, priced) : null;
       if (overDaily) throw new Refused(overDaily);
       await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
     });
   } catch (error) {
+    if (error instanceof Lapsed) return deny(await lapsedApproval(pool, agent, command));
     if (error instanceof Refused) return deny(error.message);
     throw error;
   }
@@ -119,6 +120,8 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
 }
 
 class Refused extends Error {}
+
+class Lapsed extends Error {}
 
 async function lapsedApproval(pool: pg.Pool, agent: AgentContext, command: Send): Promise<string> {
   const now = await approvalFor(pool, agent, command.idempotencyKey, command);

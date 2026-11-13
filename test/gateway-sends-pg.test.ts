@@ -247,3 +247,26 @@ test("an approval that expires while the executor runs is refused as expired and
     await drop();
   }
 });
+
+test("a burst of retries of one approval answers every caller and leaves the pool free", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, during, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    const asked = await swap("burst", 15);
+    assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
+    const callers = 6;
+    let arrived = 0;
+    let release: () => void = () => undefined;
+    const barrier = new Promise<void>((resolve) => (release = resolve));
+    for (let index = 0; index < callers; index += 1) during.push(async () => ((arrived += 1), arrived === callers && release(), await barrier));
+    const replies = await Promise.race([
+      Promise.all(Array.from({ length: callers }, () => swap("burst", 15))),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+    ]);
+    assert.ok(replies, "every caller got an answer");
+    assert.equal(replies.filter((reply) => !reply.isError).length, 1);
+    for (const reply of replies.filter((entry) => entry.isError)) assert.match(reply.text, /already used/);
+    assert.equal(pool.waitingCount, 0);
+  } finally {
+    await drop();
+  }
+});
