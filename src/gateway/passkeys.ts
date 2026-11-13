@@ -49,6 +49,7 @@ function challengeHash(challenge: string): Buffer {
 
 export async function newChallenge(pool: pg.Pool, accountId: string, purpose: "register" | "step_up", binding: string, now = Date.now()): Promise<string> {
   const challenge = randomBytes(32).toString("base64url");
+  await pool.query("DELETE FROM webauthn_challenges WHERE expires_at <= $1", [new Date(now)]);
   await pool.query("INSERT INTO webauthn_challenges (challenge_hash, account_id, purpose, binding, expires_at) VALUES ($1, $2, $3, $4, $5)", [
     challengeHash(challenge),
     accountId,
@@ -70,8 +71,8 @@ function challengeIn(clientDataJSON: string): string | null {
 
 async function consume(client: pg.ClientBase, accountId: string, purpose: string, binding: string, challenge: string, now: number): Promise<boolean> {
   const used = await client.query(
-    "UPDATE webauthn_challenges SET used_at = $6 WHERE challenge_hash = $1 AND account_id = $2 AND purpose = $3 AND binding = $4 AND used_at IS NULL AND expires_at > $5 RETURNING 1",
-    [challengeHash(challenge), accountId, purpose, binding, new Date(now), new Date(now)],
+    "DELETE FROM webauthn_challenges WHERE challenge_hash = $1 AND account_id = $2 AND purpose = $3 AND binding = $4 AND expires_at > $5 RETURNING 1",
+    [challengeHash(challenge), accountId, purpose, binding, new Date(now)],
   );
   return (used.rowCount ?? 0) === 1;
 }

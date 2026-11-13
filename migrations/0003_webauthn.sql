@@ -4,7 +4,7 @@ CREATE TABLE webauthn_challenges (
   account_id uuid NOT NULL REFERENCES accounts (id),
   purpose text NOT NULL CHECK (purpose IN ('register', 'step_up')),
   binding text NOT NULL CHECK (length(binding) <= 128),
-  expires_at timestamptz NOT NULL,
-  used_at timestamptz
+  expires_at timestamptz NOT NULL
 );
 CREATE INDEX webauthn_challenges_account_idx ON webauthn_challenges (account_id);
+CREATE INDEX webauthn_challenges_expires_idx ON webauthn_challenges (expires_at);

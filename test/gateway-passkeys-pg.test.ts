@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildGateway } from "../src/gateway/app.js";
-import { verifyStepUp } from "../src/gateway/passkeys.js";
+import { newChallenge, verifyStepUp } from "../src/gateway/passkeys.js";
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
 import { softAuthenticator } from "./webauthn-fixtures.js";
@@ -122,6 +122,27 @@ test("a credential id that another account already holds is refused with 400", {
     assert.equal(taken.json().error, "passkey_rejected");
     const owners = await pool.query("SELECT account_id FROM passkeys");
     assert.deepEqual(owners.rows.map((row) => row.account_id), [user.accountId]);
+  } finally {
+    await drop();
+  }
+});
+
+test("used and expired challenges leave the table", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, drop } = await harness();
+  const rows = async () => Number((await pool.query("SELECT count(*) AS n FROM webauthn_challenges")).rows[0].n);
+  try {
+    const authenticator = softAuthenticator(RP);
+    const options = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers: user.headers, payload: {} })).json();
+    assert.equal((await app.inject({ method: "POST", url: "/api/passkeys", headers: user.headers, payload: { credential: authenticator.register(options.challenge), label: "MacBook" } })).statusCode, 201);
+    assert.equal(await rows(), 0);
+
+    await newChallenge(pool, user.accountId, "step_up", "stale", Date.now() - 10 * 60 * 1000);
+    assert.equal(await rows(), 1);
+    const action = { kind: "wallet.unfreeze", walletId: "w1" };
+    const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action } })).json();
+    assert.equal(await rows(), 1);
+    assert.equal(await verifyStepUp(pool, gatewayConfig(), user.accountId, action, authenticator.assert(stepUp.challenge)), true);
+    assert.equal(await rows(), 0);
   } finally {
     await drop();
   }
