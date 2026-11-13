@@ -108,6 +108,7 @@ const solanaCases = [
   ["sol transfer to a stranger", message({ keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "listed destination"],
   ["a second required signer", message({ signers: 2, keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "only signer"],
   ["a program the policy does not list", message({ keys: [solanaOwn, STRANGER], instructions: [ix(1, [0], Buffer.from([1]))] }), "refused", "does not list"],
+  ["priority a fraction of a lamport above the cap", message({ keys, instructions: [limit(3, 200_000), price(3, 500_001)] }), "refused", "100001 lamports"],
   ["priority above the cap", message({ keys, instructions: [limit(3, 1_400_000), price(3, 10_000_000)] }), "refused", "priority fees"],
   ["a jupiter v0 swap with a lookup table", message({ version: 0, keys: [solanaOwn, JUPITER, COMPUTE], instructions: [limit(2, 300_000), price(2, 100), ix(1, [0, 3, 4], Buffer.from("e517cb977ae3ad2a", "hex"))], lookups: [{ key: Buffer.alloc(32, 7), writable: [1, 2] }] }), "refused", "no instruction rule"],
   ["a v0 sol transfer with a lookup table", message({ version: 0, keys, instructions: [limit(3, 200_000), price(3, 100), transfer(2, 1, 1_000)], lookups: [{ key: Buffer.alloc(32, 7), writable: [1] }] }), "signed"],

@@ -465,7 +465,10 @@ impl Policy {
                 );
             }
         }
-        let priority = unit_price.saturating_mul(unit_limit) / 1_000_000 + tipped;
+        let priority = unit_price
+            .saturating_mul(unit_limit)
+            .div_ceil(1_000_000)
+            .saturating_add(tipped);
         if priority > self.max_priority_lamports {
             decision.reasons.push(format!(
                 "priority fees and tips of {priority} lamports are above the {} cap",

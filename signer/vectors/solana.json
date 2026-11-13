@@ -53,6 +53,16 @@
       "reason": "does not list"
     },
     {
+      "name": "priority a fraction of a lamport above the cap",
+      "job": {
+        "id": "priority a fraction of a lamport above the cap",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkCAwAFAkANAwADAAkDIaEHAAAAAAA="
+      },
+      "expect": "refused",
+      "reason": "100001 lamports"
+    },
+    {
       "name": "priority above the cap",
       "job": {
         "id": "priority above the cap",
