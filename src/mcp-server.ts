@@ -100,7 +100,18 @@ if (entry.endsWith("mcp-server.js")) {
   lines.on("line", (line) => {
     void (async () => {
       if (!line.trim()) return;
-      const reply = await handle(JSON.parse(line) as JsonRpcRequest);
+      let message: unknown;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        message = undefined;
+      }
+      if (typeof message !== "object" || message === null) {
+        const error = message === undefined ? { code: -32700, message: "parse error" } : { code: -32600, message: "invalid request" };
+        process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: null, error })}\n`);
+        return;
+      }
+      const reply = await handle(message as JsonRpcRequest);
       if (reply !== null) process.stdout.write(`${JSON.stringify(reply)}\n`);
     })();
   });

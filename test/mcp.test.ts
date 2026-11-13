@@ -61,3 +61,13 @@ test("the stdio server refuses a gateway URL without an API key, and a key witho
     assert.match(result.stderr, /set both WHALE_GATEWAY_URL and WHALE_API_KEY/);
   }
 });
+
+test("a malformed stdin line gets a JSON-RPC error and the server keeps serving", () => {
+  const result = runServer(`not json\nnull\n${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "ping" })}\n`);
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.stdout.trim().split("\n").map((line) => JSON.parse(line) as unknown), [
+    { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } },
+    { jsonrpc: "2.0", id: null, error: { code: -32600, message: "invalid request" } },
+    { jsonrpc: "2.0", id: 2, result: {} },
+  ]);
+});
