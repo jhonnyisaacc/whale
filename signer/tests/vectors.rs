@@ -288,3 +288,29 @@ fn a_token_account_created_for_a_destination_counts_its_rent_against_the_native_
     );
     let _ = std::fs::remove_file(ledger);
 }
+
+#[test]
+fn a_token_account_created_for_this_wallet_also_counts_its_rent_against_the_native_day() {
+    let mut file = load("policy.json");
+    file["solana"]["dailyLimits"]["solana:native"] = "5000000".into();
+    let policy = Policy::parse(&file).expect("policy");
+    let keys = keys();
+    let solana = load("solana.json");
+    let create = solana["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "an associated token account for this wallet")
+        .unwrap()["job"]
+        .clone();
+    let ledger = fresh_ledger("ledger-own-token-account-rent");
+    let decisions: Vec<Value> = (0..2)
+        .map(|_| run_job(&create, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .collect();
+    assert_eq!(
+        decisions,
+        ["signed", "refused"],
+        "a mint can make the account impossible to close, so its rent counts like any other"
+    );
+    let _ = std::fs::remove_file(ledger);
+}

@@ -107,10 +107,13 @@ const keys = [solanaOwn, SOL_DEST, SYSTEM, COMPUTE];
 const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzZBapC6G4wPGxDyEbo1BnD").toBuffer();
 const DEST_USDC = PublicKey.findProgramAddressSync([SOL_DEST, TOKEN_PROGRAM.toBuffer(), USDC_MINT], ATA_PROGRAM)[0].toBuffer();
 const createAta = message({ keys: [solanaOwn, DEST_USDC, SOL_DEST, USDC_MINT, SYSTEM, TOKEN_PROGRAM.toBuffer(), ATA_PROGRAM.toBuffer()], instructions: [ix(6, [0, 1, 2, 3, 4, 5], Buffer.from([1]))] });
+const OWN_USDC = PublicKey.findProgramAddressSync([solanaOwn, TOKEN_PROGRAM.toBuffer(), USDC_MINT], ATA_PROGRAM)[0].toBuffer();
+const createOwnAta = message({ keys: [solanaOwn, OWN_USDC, USDC_MINT, SYSTEM, TOKEN_PROGRAM.toBuffer(), ATA_PROGRAM.toBuffer()], instructions: [ix(5, [0, 1, 0, 2, 3, 4], Buffer.from([1]))] });
 const solanaCases = [
   ["sol transfer to a listed destination", message({ keys, instructions: [limit(3, 200_000), price(3, 1_000), transfer(2, 1, 1_000_000)] }), "signed"],
   ["sol transfer into this wallet's wrapped SOL account", message({ keys: [solanaOwn, WRAPPED_SOL, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 5_000_000_000)] }), "signed"],
   ["an associated token account for a listed destination", createAta, "signed"],
+  ["an associated token account for this wallet", createOwnAta, "signed"],
   ["sol transfer to a stranger", message({ keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "listed destination"],
   ["a second required signer", message({ signers: 2, keys: [solanaOwn, STRANGER, SYSTEM, COMPUTE], instructions: [transfer(2, 1, 1)] }), "refused", "only signer"],
   ["a program the policy does not list", message({ keys: [solanaOwn, STRANGER], instructions: [ix(1, [0], Buffer.from([1]))] }), "refused", "does not list"],

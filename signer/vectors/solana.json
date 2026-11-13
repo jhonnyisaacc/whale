@@ -33,6 +33,16 @@
       "signature": "FYqugSHbzwkE9s5a5oPVjcZZEwdDqjSYgXTSY3rhdfg6z5W16f3ZZym8EQBRTVixp82KPsx28UdaMohTVZM5jKe"
     },
     {
+      "name": "an associated token account for this wallet",
+      "job": {
+        "id": "an associated token account for this wallet",
+        "kind": "solana",
+        "message": "AQAFBqCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwV+csSJu2/vU6Oj63TcT6Uv/n6ABTOPRQN3CZet+a4aPG+nrzvtutOj1l82qryXQxrlNAqeExeiNi2EzrlEVRBgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKmMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAQUGAAEAAgMEAQE="
+      },
+      "expect": "signed",
+      "signature": "5e7pqXFXXz4rUJy5YRawtFybmWij51MzVDGjwnvckUhLriFKUgnd1t8PNAmKvMamfjSpaQed4gaMWbH3xCVcYmAB"
+    },
+    {
       "name": "sol transfer to a stranger",
       "job": {
         "id": "sol transfer to a stranger",

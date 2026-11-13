@@ -462,7 +462,7 @@ impl Policy {
                         &mut decision,
                         "an associated token account must be funded by this wallet for itself or a listed destination",
                     );
-                } else if account(2) != Some(own) {
+                } else {
                     self.spend(
                         &mut decision,
                         "solana:native".into(),
