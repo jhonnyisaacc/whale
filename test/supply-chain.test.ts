@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { cargoManifestSourceProblems } from "./cargo-sources.js";
+import { cargoLockSourceProblems, cargoManifestSourceProblems } from "./cargo-sources.js";
 
 function path(relative: string): URL {
   return new URL(`../../${relative}`, import.meta.url);
@@ -102,11 +102,12 @@ test("the Rust signer pins every crate exactly and commits its lockfile", () => 
   assert.match(read("signer/rust-toolchain.toml"), /channel = "\d+\.\d+\.\d+"/);
 });
 
-test("the Rust signer manifest takes every crate from crates.io", () => {
+test("the Rust signer takes every crate from crates.io", () => {
   assert.deepEqual(cargoManifestSourceProblems(read("signer/Cargo.toml")), []);
+  assert.deepEqual(cargoLockSourceProblems(read("signer/Cargo.lock"), "whale-signer"), []);
 });
 
-test("the Cargo manifest check refuses git, path, registry, patch, and replace in every table form", () => {
+test("the Cargo source check refuses git, path, registry, patch, and replace in every table form", () => {
   const pinned = '[package]\nname = "x"\n\n[dependencies]\nhex = "=0.4.3"\nk256 = { version = "=0.14.0", features = ["ecdsa", "std"] }\n';
   assert.deepEqual(cargoManifestSourceProblems(pinned), []);
   const bad = [
@@ -123,6 +124,11 @@ test("the Cargo manifest check refuses git, path, registry, patch, and replace i
     '[replace]\n"sha2:0.11.1" = { version = "=0.11.1" }\n',
   ];
   for (const manifest of bad) assert.notDeepEqual(cargoManifestSourceProblems(pinned + manifest), [], manifest);
+  const lock = (source: string) => `version = 4\n\n[[package]]\nname = "foo"\nversion = "1.0.0"\n${source}\n[[package]]\nname = "whale-signer"\nversion = "0.1.0"\n`;
+  assert.deepEqual(cargoLockSourceProblems(lock('source = "registry+https://github.com/rust-lang/crates.io-index"\n'), "whale-signer"), []);
+  for (const source of ['source = "git+https://example.com/foo#abc"\n', 'source = "registry+https://example.com/index"\n', 'source = "sparse+https://example.com/index/"\n', ""]) {
+    assert.notDeepEqual(cargoLockSourceProblems(lock(source), "whale-signer"), [], source || "no source");
+  }
 });
 
 test("workflows pin every action and service image, and install only from the lockfile", () => {

@@ -1,5 +1,6 @@
 const DEPENDENCY_TABLES = new Set(["dependencies", "dev-dependencies", "build-dependencies"]);
 const SOURCE_KEYS = new Set(["git", "path", "registry", "registry-index"]);
+const CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index";
 
 function tomlKeyPaths(text: string): string[][] {
   const paths: string[][] = [];
@@ -96,3 +97,11 @@ export function cargoManifestSourceProblems(manifest: string): string[] {
   return [...problems];
 }
 
+export function cargoLockSourceProblems(lock: string, rootPackage: string): string[] {
+  return lock.split(/^\[\[package\]\]$/m).slice(1).flatMap((block) => {
+    const name = /^name = "([^"]+)"$/m.exec(block)?.[1] ?? "?";
+    const source = /^source = "([^"]*)"$/m.exec(block)?.[1];
+    if (source === undefined) return name === rootPackage ? [] : [`${name} has no source, so it is a path or workspace crate`];
+    return source === CRATES_IO ? [] : [`${name} comes from ${source}`];
+  });
+}
