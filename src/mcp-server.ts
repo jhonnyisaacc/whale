@@ -94,7 +94,16 @@ if (entry.endsWith("mcp-server.js")) {
     process.stderr.write("whale: set both WHALE_GATEWAY_URL and WHALE_API_KEY to use a hosted gateway, or neither to use local tools\n");
     process.exit(1);
   }
-  const { createBridge } = await import("./hosted-client.js");
+  const { createBridge, mcpEndpoint } = await import("./hosted-client.js");
+  if (gatewayUrl) {
+    try {
+      mcpEndpoint(gatewayUrl);
+    } catch (error) {
+      const reason = error instanceof TypeError ? "is not a URL" : "must be an https URL (http only for localhost) with no credentials, query, or fragment";
+      process.stderr.write(`whale: WHALE_GATEWAY_URL ${reason}\n`);
+      process.exit(1);
+    }
+  }
   const handle = gatewayUrl && apiKey ? createBridge({ gatewayUrl, apiKey }) : createHandler(deps);
   const lines = createInterface({ input: process.stdin });
   lines.on("line", (line) => {

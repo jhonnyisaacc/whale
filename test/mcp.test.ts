@@ -62,6 +62,17 @@ test("the stdio server refuses a gateway URL without an API key, and a key witho
   }
 });
 
+test("swapped gateway settings exit with a fixed message that never prints the key", () => {
+  const secret = "whale_000000000000_SECRETSECRETSECRETSECRETSECRETSECRETSECRETSEC";
+  for (const extra of <Record<string, string>[]>[{ WHALE_GATEWAY_URL: secret, WHALE_API_KEY: "https://whale.example" }, { WHALE_GATEWAY_URL: "http://whale.example", WHALE_API_KEY: secret }]) {
+    const result = runServer("", extra);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^whale: WHALE_GATEWAY_URL /);
+    assert.equal(result.stderr.includes("SECRET"), false, result.stderr);
+    assert.equal(result.stderr.split("\n").filter(Boolean).length, 1, result.stderr);
+  }
+});
+
 test("a malformed stdin line gets a JSON-RPC error and the server keeps serving", () => {
   const result = runServer(`not json\nnull\n${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "ping" })}\n`);
   assert.equal(result.status, 0);
