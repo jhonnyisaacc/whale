@@ -38,7 +38,9 @@ async function deleteExpired(pool: pg.Pool, now: number): Promise<void> {
      AND NOT EXISTS (SELECT 1 FROM oauth_codes o WHERE o.client_id = c.id)
      AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.oauth_client_id = c.id)`,
     [new Date(now - UNUSED_CLIENT_TTL_MS)],
-  );
+  ).catch((error: unknown) => {
+    if ((error as { code?: string }).code !== "23503") throw error;
+  });
 }
 
 export async function createRequest(pool: pg.Pool, input: Omit<PendingRequest, "id" | "clientName">, now = Date.now()): Promise<string> {

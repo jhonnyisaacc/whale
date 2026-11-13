@@ -330,3 +330,30 @@ test("a metadata-document client must name itself by its own URL, and a denial g
     await drop();
   }
 });
+
+test("an old client that starts a flow while another caller cleans up does not fail that caller", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { app, pool, form, authorize, drop } = await harness(undefined, () => clock);
+  try {
+    const old = await register(form, app);
+    clock += 24 * 60 * 60 * 1000 + 60_000;
+    const fresh = await register(form, app);
+    const racing = await pool.connect();
+    try {
+      await racing.query("BEGIN");
+      await racing.query(
+        "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($5, $1, $2, $5, NULL, $3, $4)",
+        [old, REDIRECT, `${ORIGIN}/mcp`, new Date(clock + 60_000), "r".repeat(43)],
+      );
+      const cleaning = authorize(fresh);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await racing.query("COMMIT");
+      assert.equal((await cleaning).reply.statusCode, 302);
+    } finally {
+      racing.release();
+    }
+    assert.equal((await pool.query("SELECT 1 FROM oauth_clients WHERE id = $1", [old])).rowCount, 1);
+  } finally {
+    await drop();
+  }
+});
