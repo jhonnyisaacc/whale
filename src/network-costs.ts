@@ -4,8 +4,6 @@ import { rpcLists } from "./config/load.js";
 import { evmReadClient, firstOk, solanaConnection } from "./rpc.js";
 import { readVendorText, vendorResponse } from "./vendor-fetch.js";
 
-// Typical work per operation. These are planning numbers for comparing chains, not a fee promise: a route with many
-// hops costs more, and OP-stack chains add an L1 data fee these numbers leave out.
 export const EVM_GAS = { swap: 180_000n, transfer: 65_000n };
 export const SOLANA_UNITS = { swap: 200_000, transfer: 30_000 };
 const SOLANA_BASE_LAMPORTS = 5_000;
@@ -78,8 +76,6 @@ function staticCost(chainKey: string): NetworkCost {
   return { chainKey, swapUsd: ceiling, transferUsd: ceiling / 2, source: "static" };
 }
 
-// Live where the RPC and the native price both answer, the static ceiling otherwise. Cheapest first; ties keep the
-// fee rank order, so the cheap L2s and Solana lead.
 export async function networkCosts(chainKeys: readonly string[], readers: CostReaders): Promise<NetworkCost[]> {
   const specs = chainKeys.map((key) => chainByKey(key)).filter((spec) => spec !== undefined && spec.chain.kind !== "hypercore");
   const prices = await readers.nativeUsd(specs.map((spec) => spec?.nativeSymbol ?? ""));

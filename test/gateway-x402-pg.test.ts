@@ -39,7 +39,7 @@ async function harness(options: { approvalAboveUsd: number | null; actions: ("sw
 
 const pay = (dollars: number, payTo: string) => ({ scheme: "exact", network: "base", maxAmountRequired: usdc(dollars), asset: USDC, payTo });
 
-test("an x402 option fits only when the hosted transfer path would allow the same payment", { skip: !TEST_DATABASE_URL }, async () => {
+test("an x402 option fits only when the hosted transfer checks and the USD caps allow the same payment", { skip: !TEST_DATABASE_URL }, async () => {
   const { quote, spent, drop } = await harness({ approvalAboveUsd: null, actions: ["swap", "transfer"] });
   try {
     const plan = await quote([pay(1, STRANGER), pay(30, LISTED), pay(5, LISTED)]);

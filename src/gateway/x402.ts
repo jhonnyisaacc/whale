@@ -2,7 +2,6 @@ import { z } from "zod";
 import { QUOTE_ASSETS } from "../chains.js";
 import { safeRequest, type SafeResponse } from "./safe-https.js";
 
-// x402 names networks either by short name or by CAIP-2 id. Test networks map to nothing, so they never fit.
 const NETWORKS: Record<string, string> = {
   base: "base",
   "eip155:8453": "base",
@@ -64,8 +63,6 @@ function cheapest(options: X402Option[], verdict: X402Verdict["verdict"]): X402O
   return options.filter((entry) => entry.verdict === verdict).sort((left, right) => (left.usd ?? Infinity) - (right.usd ?? Infinity))[0] ?? null;
 }
 
-// Reads a paid resource's 402 challenge and says which payment option this agent could make. It pays nothing: a live
-// x402 payment is a send with no simulation step, and AGENTS.md does not allow a send path that skips one.
 export async function x402Quote(url: string, judge: JudgePayment, fetchImpl: Fetch402 = fetch402): Promise<X402Quote> {
   let response: SafeResponse;
   try {
