@@ -62,6 +62,24 @@ The tools are `wallet_status`, `deposit_address`, `balance`, `quote`, `swap`, an
 
 To enable quotes, set `HOSTED_EXECUTOR_URL` (the executor's private address) and `HOSTED_SERVICE_TOKEN` on the gateway, and the same `HOSTED_SERVICE_TOKEN` on the executor. The token must be at least 32 characters and must differ from `EXECUTOR_AUTH_TOKEN`. The executor accepts it on `POST /hosted/commands` only.
 
+### OAuth for MCP clients
+
+A client that only knows the URL `https://<gateway>/mcp` gets the 401 challenge, reads `/.well-known/oauth-protected-resource/mcp`, then `/.well-known/oauth-authorization-server`. The issuer is the bare origin.
+
+A client registers in one of two ways:
+- By its metadata document URL as `client_id`. The gateway fetches it over https only, from a host that resolves only to public addresses, with no redirects, 64 KiB at most, and a five-second total deadline, and caches it for an hour. A document that fails to load or validate is not fetched again for a minute. The document's `client_id` must equal its URL.
+- Through `POST /oauth/register`, which the MCP spec now marks deprecated.
+
+Redirect URIs must be https, a loopback `http` address, or an app scheme such as `cursor://`. A redirect must match a registered URI exactly, except that a loopback redirect may use any port (OAuth 2.1 8.4.2).
+
+`GET /oauth/authorize` checks the client and the redirect URI before anything can go back to the client. It requires PKCE `S256` and the `resource` `https://<gateway>/mcp`. Every client registers itself, so an error at this step renders on the gateway and never redirects. It then sends the browser to `/connect?request=<id>`. That page reads `GET /oauth/requests/:id`, shows the client name and the redirect host, warns on localhost, and signs the user in with Google if needed. The user picks a wallet and the agent limits and calls `POST /api/oauth/requests/:id/approve`, which creates the agent and a five-minute single-use code. The redirect carries `code`, `state`, and `iss`. To refuse, the page calls `POST /api/oauth/requests/:id/deny`, and the redirect carries `error=access_denied`, `state`, and `iss`. Deny needs no session, because refusing grants nothing and the request id is 256 random bits. Approve needs a session. Both calls need a same-origin `Origin` header.
+
+`POST /oauth/token` with form fields covers two grants:
+- The authorization code grant returns a one-hour access token `wat_...`, bound to the MCP resource, and a 30-day refresh token `wrt_...`.
+- A refresh rotates both tokens.
+
+A replayed code, or a refresh token presented after rotation, revokes every OAuth token of that agent. This holds even a moment after rotation, so a client that refreshes twice at once with the same token loses its grant and must authorize again. `POST /oauth/revoke` on an access token revokes that token. On a refresh token it revokes every OAuth token of that agent, because the agent is the grant (RFC 7009 2.1). The tokens are stored as SHA-256 only. Each new authorization request deletes OAuth requests, codes, and tokens that expired more than a day ago. The day keeps replay detection working for a late replay.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.

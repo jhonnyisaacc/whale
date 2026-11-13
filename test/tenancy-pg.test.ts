@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import pg from "pg";
-import { MIGRATIONS_DIR, migrate } from "../src/db/migrate.js";
+import { loadMigrations, migrationLabel, MIGRATIONS_DIR, migrate } from "../src/db/migrate.js";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -32,10 +32,12 @@ test("migrations apply once, even when two runners race", { skip: !url }, async 
   const { config, client, drop } = await freshSchema();
   try {
     const [left, right] = await Promise.all([migrate(config, MIGRATIONS_DIR), migrate(config, MIGRATIONS_DIR)]);
-    assert.deepEqual([...left, ...right], ["0001_tenancy"]);
+    const shipped = loadMigrations(MIGRATIONS_DIR);
+    assert.deepEqual([...left, ...right].sort(), shipped.map(migrationLabel));
+    assert.ok(left.length === 0 || right.length === 0, "one runner applies everything, the other waits and applies nothing");
     assert.deepEqual(await migrate(config, MIGRATIONS_DIR), []);
-    const ledger = await client.query("SELECT version, name FROM schema_migrations");
-    assert.deepEqual(ledger.rows, [{ version: 1, name: "tenancy" }]);
+    const ledger = await client.query("SELECT version, name FROM schema_migrations ORDER BY version");
+    assert.deepEqual(ledger.rows, shipped.map((migration) => ({ version: migration.version, name: migration.name })));
   } finally {
     await drop();
   }
