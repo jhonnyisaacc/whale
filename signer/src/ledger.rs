@@ -1,6 +1,7 @@
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -44,6 +45,22 @@ fn add(
             .ok_or_else(|| format!("today's total for {key} would pass 2^128"))?;
     }
     Ok(totals)
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), String> {
+    let directory = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    fs::File::open(directory)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("cannot flush the ledger directory: {error}"))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 impl Ledger {
@@ -121,12 +138,18 @@ impl Ledger {
             .map(|(key, value)| (key.clone(), Value::String(value.to_string())))
             .collect();
         let temporary = path.with_extension("tmp");
-        fs::write(
-            &temporary,
-            json!({ "day": self.day, "spent": spent }).to_string(),
+        let mut file = fs::File::create(&temporary)
+            .map_err(|error| format!("cannot write the ledger: {error}"))?;
+        file.write_all(
+            json!({ "day": self.day, "spent": spent })
+                .to_string()
+                .as_bytes(),
         )
+        .and_then(|()| file.sync_all())
         .map_err(|error| format!("cannot write the ledger: {error}"))?;
-        fs::rename(&temporary, path).map_err(|error| format!("cannot replace the ledger: {error}"))
+        fs::rename(&temporary, path)
+            .map_err(|error| format!("cannot replace the ledger: {error}"))?;
+        sync_directory(path)
     }
 }
 
