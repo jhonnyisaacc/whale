@@ -28,25 +28,26 @@ test("the gateway URL must be https outside localhost", () => {
 
 test("the hosted client and the stdio bridge reach the same tools under the same limits", { skip: !TEST_DATABASE_URL }, async () => {
   const { pool, drop } = await migratedSchema();
-  const executor: ExecutorClient = { run: async (request) => (request.command.kind === "costs" ? { kind: "costs", networks: [{ chainKey: "base", swapUsd: 0.002, transferUsd: 0.001 }] } : { kind: "quote", status: "quoted" }) };
+  const executor: ExecutorClient = { run: async () => ({ kind: "quote", status: "quoted" }) };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor, turnkey: null, delegation: null });
   try {
     const { accountId } = await signedInAccount(pool);
     const created = await createWallet(pool, accountId, { label: "bot", level: "enclave" });
     const walletId = "walletId" in created ? created.walletId : "";
-    const { apiKey } = await createAgent(pool, { accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 10, dailyUsd: 20 } });
+    const agent = await createAgent(pool, { accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 10, dailyUsd: 20 } });
+    if ("refused" in agent) throw new Error(agent.refused);
+    const { apiKey } = agent;
     const client = createHostedClient({ gatewayUrl: "https://whale.example", apiKey, fetchImpl: viaInject(app) });
 
-    assert.ok((await client.tools()).some((tool) => tool.name === "network_costs"));
+    assert.ok((await client.tools()).some((tool) => tool.name === "quote"));
     assert.equal((await client.walletStatus()).mode, "dry_run");
-    assert.equal((await client.networkCosts()).cheapest, "base");
     assert.deepEqual(await client.quote({ chain: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000" }), { kind: "quote", status: "quoted" });
     await assert.rejects(client.quote({ chain: "arbitrum", sellToken: USDC, buyToken: WETH, sellAmount: "1" }), (error: unknown) => error instanceof WhaleToolError && /outside this agent's chains/.test(error.message));
     await assert.rejects(createHostedClient({ gatewayUrl: "https://whale.example", apiKey: "whale_000000000000_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", fetchImpl: viaInject(app) }).walletStatus(), /refused this API key/);
 
     const bridge = createBridge({ gatewayUrl: "https://whale.example", apiKey, fetchImpl: viaInject(app) });
     const listed = (await bridge({ jsonrpc: "2.0", id: 1, method: "tools/list" } as { id: number })) as { result: { tools: unknown[] } };
-    assert.ok(listed.result.tools.length >= 8);
+    assert.deepEqual(listed.result.tools, await client.tools());
     assert.equal(await bridge({ jsonrpc: "2.0", method: "notifications/initialized" } as { id?: undefined }), null);
     const down = createBridge({ gatewayUrl: "https://whale.example", apiKey, fetchImpl: (async () => Promise.reject(new Error("connect ECONNREFUSED"))) as typeof fetch });
     assert.deepEqual(await down({ jsonrpc: "2.0", id: 7, method: "ping" } as { id: number }), { jsonrpc: "2.0", id: 7, error: { code: -32000, message: "connect ECONNREFUSED" } });

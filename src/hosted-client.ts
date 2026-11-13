@@ -59,11 +59,9 @@ export function createHostedClient(options: HostedClientOptions) {
     walletStatus: () => call<Record<string, unknown>>("wallet_status"),
     depositAddress: (chain: string) => call<{ chain: string; address: string }>("deposit_address", { chain }),
     balance: (chain: string) => call<Record<string, unknown>>("balance", { chain }),
-    networkCosts: () => call<{ networks: { chainKey: string; swapUsd: number; transferUsd: number }[]; cheapest: string | null }>("network_costs"),
     quote: (args: { chain: string; sellToken: string; buyToken: string; sellAmount: string; slippageBps?: number }) => call<Record<string, unknown>>("quote", args),
     swap: (args: { chain: string; sellToken: string; buyToken: string; sellAmount: string; idempotencyKey: string; slippageBps?: number }) => call<Record<string, unknown>>("swap", args),
     transfer: (args: { chain: string; token: string; to: string; amount: string; idempotencyKey: string }) => call<Record<string, unknown>>("transfer", args),
-    x402Quote: (url: string) => call<Record<string, unknown>>("x402_quote", { url }),
   };
 }
 

@@ -42,6 +42,6 @@ A hosted Whale exposes one MCP endpoint, `https://<gateway>/mcp`. A client that 
 | VS Code | `.vscode/mcp.json`: `{ "servers": { "whale": { "type": "http", "url": "https://<gateway>/mcp" } } }` |
 | OpenAI Agents SDK | `MCPServerStreamableHttp(params={"url": "https://<gateway>/mcp", "headers": {"Authorization": "Bearer whale_..."}})` |
 | Stdio-only clients | Run `node dist/src/mcp-server.js` with `WHALE_GATEWAY_URL` and `WHALE_API_KEY` set. The local server then forwards every message to the gateway instead of using local tools |
-| A bot written in TypeScript | `createHostedClient({ gatewayUrl, apiKey })` from this package: `walletStatus`, `networkCosts`, `quote`, `swap`, `transfer`, `x402Quote`, or `call(tool, args)`. It has no dependencies |
+| A bot written in TypeScript | `createHostedClient({ gatewayUrl, apiKey })` from this package: `walletStatus`, `depositAddress`, `balance`, `quote`, `swap`, `transfer`, or `call(tool, args)`. It has no dependencies |
 
 Every path reaches the same tools under the same agent limits, wallet policy, approvals, and audit trail. Hosted sends are dry-run until hosted live opens.
