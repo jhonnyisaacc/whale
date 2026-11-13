@@ -80,6 +80,12 @@ Redirect URIs must be https, a loopback `http` address, or an app scheme such as
 
 A replayed code, or a refresh token presented after rotation, revokes every OAuth token of that agent. This holds even a moment after rotation, so a client that refreshes twice at once with the same token loses its grant and must authorize again. `POST /oauth/revoke` on an access token revokes that token. On a refresh token it revokes every OAuth token of that agent, because the agent is the grant (RFC 7009 2.1). The tokens are stored as SHA-256 only. Each new authorization request deletes OAuth requests, codes, and tokens that expired more than a day ago. The day keeps replay detection working for a late replay.
 
+### Passkeys
+
+`POST /api/passkeys/options` returns creation options for an ES256 passkey, with this origin's host as the relying party and user verification required. `POST /api/passkeys` with `{ credential, label }` verifies the response in `node:crypto`, with no WebAuthn library. The check covers the challenge (single use, five minutes), the origin, the relying-party hash, user presence and verification, and the credential id. Whale stores the public key and the counter. Only the first passkey registers on the session alone. Once the account has one, the request also carries `assertion`, a step-up from an existing passkey bound to `{ kind: "passkey.add", credentialId }` with the new credential id. Without it the answer is 428 `step_up_required` and the registration challenge stays unused, so the client can step up and resend the same registration. A wrong or used assertion answers 403 `step_up_failed`.
+
+A sensitive action asks for a step-up. `POST /api/passkeys/step-up` with `{ action }` returns a challenge bound to the SHA-256 of that action. The route that performs the action recomputes the hash and calls `verifyStepUp`, so an assertion approves that one action once. A counter that does not move forward is refused, unless the authenticator never counts, which is the case for synced passkeys.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.

@@ -7,6 +7,7 @@ import { gatewayApp } from "./http.js";
 import { registerMcpRoutes } from "./mcp-http.js";
 import { registerAuthRoutes } from "./routes-auth.js";
 import { registerOAuthRoutes } from "./routes-oauth.js";
+import { registerPasskeyRoutes } from "./routes-passkeys.js";
 import { registerWalletRoutes } from "./routes-wallets.js";
 import type { MetadataFetch } from "./oauth-clients.js";
 
@@ -28,6 +29,7 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   app.get("/health", async () => ({ ok: true }));
   registerAuthRoutes(app, { config: deps.config, pool: deps.pool, fetchImpl, keys: deps.keys ?? googleKeys(fetchImpl, now), now });
   registerWalletRoutes(app, deps.pool);
+  registerPasskeyRoutes(app, { config: deps.config, pool: deps.pool });
   registerOAuthRoutes(app, { config: deps.config, pool: deps.pool, now, ...(deps.fetchDocument ? { fetchDocument: deps.fetchDocument } : {}) });
   registerMcpRoutes(app, { config: deps.config, pool: deps.pool, executor: deps.executor ?? (deps.config.executor ? executorClient(deps.config.executor, fetchImpl) : null) });
   return app;
