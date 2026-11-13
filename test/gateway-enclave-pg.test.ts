@@ -18,7 +18,7 @@ const DELEGATION: DelegationConfig = { delegatePublicKey: DELEGATE_KEY, routers:
 function fakeTurnkey() {
   const orgs = new Map<string, SubOrgState>();
   const created: { challenge: string; credentialId: string; name: string; org: CreatedSubOrg }[] = [];
-  const faults: { nextCreate: "unavailable" | "refused" | "lost" | null; createDelayMs: number } = { nextCreate: null, createDelayMs: 0 };
+  const faults: { nextCreate: "unavailable" | "refused" | "lost" | null; createDelayMs: number; findDelayMs: number } = { nextCreate: null, createDelayMs: 0, findDelayMs: 0 };
   const turnkey: TurnkeyParent = {
     async createSubOrganization(input) {
       await new Promise((resolve) => setTimeout(resolve, faults.createDelayMs));
@@ -27,13 +27,15 @@ function fakeTurnkey() {
       if (fault === "unavailable") throw new Error("turnkey is unavailable");
       if (fault === "refused") throw new TurnkeyRefused("turnkey refused the attestation");
       const ownerUserId = randomUUID();
-      const org = { subOrganizationId: randomUUID(), walletId: randomUUID(), ownerUserId, evm: `0x${"9".repeat(40)}`, solana: SOLANA };
+      const n = created.length;
+      const org = { subOrganizationId: randomUUID(), walletId: randomUUID(), ownerUserId, evm: `0x${String(n).padStart(40, "9")}`, solana: n === 0 ? SOLANA : `${SOLANA.slice(0, -4)}${String(n).padStart(4, "z")}` };
       created.push({ challenge: input.authenticator.challenge, credentialId: input.authenticator.credentialId, name: input.name, org });
       orgs.set(org.subOrganizationId, { threshold: 1, rootUserIds: [ownerUserId], users: [{ userId: ownerUserId, userName: "owner", credentialIds: [input.authenticator.credentialId], apiPublicKeys: [] }], policies: [] });
       if (fault === "lost") throw new Error("socket hang up");
       return org;
     },
     async findSubOrganization(name) {
+      await new Promise((resolve) => setTimeout(resolve, faults.findDelayMs));
       return created.find((entry) => entry.name === name)?.org ?? null;
     },
     async readSubOrganization(id) {
@@ -185,11 +187,43 @@ test("a failure after Turnkey creates the sub-organization still leaves it recor
     assert.equal((await (await gateway.create(first))()).statusCode, 201);
 
     const second = await gateway.newWallet();
+    await gateway.pool.query("CREATE FUNCTION refuse_address() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'disk full'; END $$ LANGUAGE plpgsql");
+    await gateway.pool.query("CREATE TRIGGER refuse_address BEFORE INSERT ON wallet_addresses FOR EACH ROW EXECUTE FUNCTION refuse_address()");
     assert.equal((await (await gateway.create(second))()).statusCode, 500);
+    await gateway.pool.query("DROP TRIGGER refuse_address ON wallet_addresses");
     assert.equal(gateway.fake.created.length, 2);
-    assert.deepEqual(await gateway.trackedSubOrgs(), [...gateway.fake.orgs.keys()].sort());
+    await gateway.pool.query("UPDATE wallets SET root_claimed_at = now() - interval '3 minutes' WHERE id = $1", [second]);
     const retry = await gateway.app.inject({ method: "POST", url: `/api/wallets/${second}/enclave/options`, headers: gateway.user.headers, payload: {} });
     assert.equal(retry.json().error, "enclave_exists");
+    assert.deepEqual(await gateway.trackedSubOrgs(), [...gateway.fake.orgs.keys()].sort());
+    const delegation = await gateway.app.inject({ method: "GET", url: `/api/wallets/${second}/enclave/delegation`, headers: gateway.user.headers });
+    assert.equal(delegation.statusCode, 200, delegation.body);
+    assert.equal(delegation.json().subOrganizationId, gateway.fake.created[1]?.org.subOrganizationId);
+  } finally {
+    await gateway.close();
+  }
+});
+
+async function lostCreate(gateway: Awaited<ReturnType<typeof enclaveGateway>>) {
+  const walletId = await gateway.newWallet();
+  gateway.fake.faults.nextCreate = "lost";
+  assert.equal((await (await gateway.create(walletId))()).statusCode, 500);
+  await gateway.pool.query("UPDATE wallets SET root_claimed_at = now() - interval '3 minutes' WHERE id = $1", [walletId]);
+  const options = () => gateway.app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/options`, headers: gateway.user.headers, payload: {} });
+  const delegation = () => gateway.app.inject({ method: "GET", url: `/api/wallets/${walletId}/enclave/delegation`, headers: gateway.user.headers });
+  return { walletId, options, delegation };
+}
+
+test("two requests adopting the same sub-organization at once both answer enclave_exists", { skip: !TEST_DATABASE_URL }, async () => {
+  const gateway = await enclaveGateway();
+  try {
+    const { options } = await lostCreate(gateway);
+    gateway.fake.faults.findDelayMs = 50;
+    const answers = await Promise.all([options(), options()]);
+    assert.deepEqual(answers.map((answer) => [answer.statusCode, answer.json().error]), [[409, "enclave_exists"], [409, "enclave_exists"]]);
+    assert.deepEqual(await gateway.trackedSubOrgs(), [gateway.fake.created[0]?.org.subOrganizationId]);
+    const addresses = await gateway.pool.query("SELECT family FROM wallet_addresses ORDER BY family");
+    assert.deepEqual(addresses.rows.map((row) => row.family), ["evm", "solana"]);
   } finally {
     await gateway.close();
   }

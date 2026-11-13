@@ -41,14 +41,18 @@ async function enclaveWallet(pool: pg.Pool | pg.PoolClient, accountId: string, w
 const subOrgName = (walletId: string) => `whale-${walletId}`;
 
 async function recordSubOrg(pool: pg.Pool, accountId: string, walletId: string, credentialId: string, created: CreatedSubOrg): Promise<void> {
-  const recorded = await pool.query(
-    "UPDATE wallets SET turnkey_sub_org_id = $3, turnkey_wallet_id = $4, turnkey_owner_user_id = $5 WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL",
-    [walletId, credentialId, created.subOrganizationId, created.walletId, created.ownerUserId],
-  );
-  if (recorded.rowCount !== 1) throw new Error(`sub-organization ${created.subOrganizationId} lost its claim on wallet ${walletId}`);
   await inTransaction(pool, async (client) => {
-    await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2), ($1, 'solana', $3)", [walletId, created.evm, created.solana]);
-    await audit(client, { accountId, walletId, actor: "user", action: "wallet.enclave_created", detail: { subOrganizationId: created.subOrganizationId } });
+    const recorded = await client.query(
+      "UPDATE wallets SET turnkey_sub_org_id = $3, turnkey_wallet_id = $4, turnkey_owner_user_id = $5 WHERE id = $1 AND root_credential_id = $2 AND turnkey_sub_org_id IS NULL",
+      [walletId, credentialId, created.subOrganizationId, created.walletId, created.ownerUserId],
+    );
+    if (recorded.rowCount === 1) {
+      await client.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2), ($1, 'solana', $3)", [walletId, created.evm, created.solana]);
+      await audit(client, { accountId, walletId, actor: "user", action: "wallet.enclave_created", detail: { subOrganizationId: created.subOrganizationId } });
+      return;
+    }
+    const current = await client.query<{ turnkey_sub_org_id: string | null }>("SELECT turnkey_sub_org_id FROM wallets WHERE id = $1", [walletId]);
+    if (current.rows[0]?.turnkey_sub_org_id !== created.subOrganizationId) throw new Error(`sub-organization ${created.subOrganizationId} lost its claim on wallet ${walletId}`);
   });
 }
 
