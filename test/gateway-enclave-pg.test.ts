@@ -18,9 +18,10 @@ const DELEGATION: DelegationConfig = { delegatePublicKey: DELEGATE_KEY, routers:
 function fakeTurnkey() {
   const orgs = new Map<string, SubOrgState>();
   const created: { challenge: string; credentialId: string; name: string }[] = [];
-  const faults = { failNextCreate: false };
+  const faults = { failNextCreate: false, createDelayMs: 0 };
   const turnkey: TurnkeyParent = {
     async createSubOrganization(input) {
+      await new Promise((resolve) => setTimeout(resolve, faults.createDelayMs));
       if (faults.failNextCreate) {
         faults.failNextCreate = false;
         throw new Error("turnkey is unavailable");
@@ -159,6 +160,7 @@ test("two concurrent enclave creates for one wallet reach Turnkey once", { skip:
     const walletId = await gateway.newWallet();
     const first = await gateway.create(walletId);
     const second = await gateway.create(walletId);
+    gateway.fake.faults.createDelayMs = 100;
     const responses = await Promise.all([first(), second()]);
     assert.deepEqual(responses.map((response) => response.statusCode).sort(), [201, 409]);
     assert.equal(gateway.fake.created.length, 1);
