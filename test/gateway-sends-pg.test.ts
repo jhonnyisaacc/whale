@@ -173,3 +173,56 @@ test("approving an approval past its hour answers 409 and leaves nothing to spen
     await drop();
   }
 });
+
+const spends = async (pool: { query: (sql: string) => Promise<{ rows: unknown[] }> }) =>
+  (await pool.query("SELECT idempotency_key, usd, to_char(day, 'YYYY-MM-DD') AS day FROM agent_spends ORDER BY created_at")).rows;
+
+test("an idempotencyKey already spent on one swap cannot carry a different swap past the per-agent or the wallet cap", { skip: !TEST_DATABASE_URL }, async () => {
+  for (const walletDailyUsd of [undefined, 30]) {
+    const { pool, sent, swap, drop } = await harness({ approvalAboveUsd: null, walletDailyUsd });
+    try {
+      assert.equal((await swap("reuse-key", 1)).body?.status, "would_swap");
+      for (const dollars of [19.99, 19.98, 19.97, 19.96, 19.95]) {
+        const reused = await swap("reuse-key", dollars);
+        assert.equal(reused.isError, true, `selling ${dollars} USDC under a used key is refused`);
+        assert.match(reused.text, /already used for a different command/);
+      }
+      assert.equal(sent.length, 1);
+      assert.deepEqual(await spends(pool), [{ idempotency_key: "reuse-key", usd: 1, day: new Date().toISOString().slice(0, 10) }]);
+    } finally {
+      await drop();
+    }
+  }
+});
+
+test("a key spent on an earlier UTC day refuses a different swap, and a retry of the same swap stays counted on its first day", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, swap, drop } = await harness({ approvalAboveUsd: null });
+  try {
+    assert.equal((await swap("yesterday-key", 19)).body?.status, "would_swap");
+    await pool.query("UPDATE agent_spends SET day = day - 1");
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const reused = await swap("yesterday-key", 19.99);
+    assert.equal(reused.isError, true);
+    assert.match(reused.text, /already used for a different command/);
+    assert.equal((await swap("yesterday-key", 19)).body?.status, "would_swap");
+    assert.equal(sent.length, 2);
+    assert.deepEqual(await spends(pool), [{ idempotency_key: "yesterday-key", usd: 19, day: yesterday }]);
+  } finally {
+    await drop();
+  }
+});
+
+test("a key spent on a small swap cannot be approved for a larger one and recorded at the small price", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, swap, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    assert.equal((await swap("approved-reuse", 1)).body?.status, "would_swap");
+    const larger = await swap("approved-reuse", 15);
+    assert.equal(larger.isError, true);
+    assert.match(larger.text, /already used for a different command/);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM approvals")).rows[0].n, 0);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(await spends(pool), [{ idempotency_key: "approved-reuse", usd: 1, day: new Date().toISOString().slice(0, 10) }]);
+  } finally {
+    await drop();
+  }
+});

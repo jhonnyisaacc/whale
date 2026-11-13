@@ -22,6 +22,7 @@ CREATE INDEX approvals_pending_idx ON approvals (account_id, status, created_at 
 CREATE TABLE agent_spends (
   agent_id uuid NOT NULL,
   idempotency_key text NOT NULL,
+  binding text NOT NULL,
   account_id uuid NOT NULL,
   wallet_id uuid NOT NULL,
   usd double precision NOT NULL CHECK (usd >= 0),

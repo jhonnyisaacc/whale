@@ -5,6 +5,7 @@ import { audit, inTransaction } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
 import { approvalFor, requestApproval, spendApproval } from "./approvals.js";
 import type { ExecutorClient } from "./executor-client.js";
+import { bindingOf } from "./passkeys.js";
 import { effectiveLimits } from "./policy.js";
 
 export type SendOutcome = { ok: true; value: unknown } | { ok: false; error: string };
@@ -24,11 +25,20 @@ function sellUsd(command: Extract<HostedCommand, { kind: "swap" }>): number | nu
 
 type Priced = { usd: number; day: string };
 
-async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, idempotencyKey: string, priced: Priced): Promise<string | null> {
+const KEY_REUSED = "this idempotencyKey was already used for a different command";
+
+async function recordedSpend(client: pg.Pool | pg.ClientBase, agent: AgentContext, command: Send): Promise<"none" | "same" | "conflict"> {
+  const found = await client.query<{ binding: string }>("SELECT binding FROM agent_spends WHERE agent_id = $1 AND idempotency_key = $2", [agent.agentId, command.idempotencyKey]);
+  const row = found.rows[0];
+  if (!row) return "none";
+  return row.binding === bindingOf(command) ? "same" : "conflict";
+}
+
+async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, priced: Priced): Promise<string | null> {
   const totals = await client.query<{ agent: number; wallet: number }>(
     `SELECT COALESCE(SUM(usd) FILTER (WHERE agent_id = $2), 0)::float8 AS agent, COALESCE(SUM(usd), 0)::float8 AS wallet
-     FROM agent_spends WHERE wallet_id = $1 AND day = $3::date AND NOT (agent_id = $2 AND idempotency_key = $4)`,
-    [agent.walletId, agent.agentId, priced.day, idempotencyKey],
+     FROM agent_spends WHERE wallet_id = $1 AND day = $3::date`,
+    [agent.walletId, agent.agentId, priced.day],
   );
   const spent = totals.rows[0] ?? { agent: 0, wallet: 0 };
   const agentCap = effectiveLimits(agent.limits, agent.policy).dailyUsd;
@@ -37,14 +47,22 @@ async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext
   return null;
 }
 
-async function recordSpend(client: pg.ClientBase, agent: AgentContext, idempotencyKey: string, priced: Priced): Promise<string | null> {
+async function recordSpend(client: pg.ClientBase, agent: AgentContext, command: Send, priced: Priced): Promise<string | null> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent_spends:${agent.walletId}`]);
-  const refused = await dailyRefusal(client, agent, idempotencyKey, priced);
+  const recorded = await recordedSpend(client, agent, command);
+  if (recorded === "conflict") return KEY_REUSED;
+  if (recorded === "same") return null;
+  const refused = await dailyRefusal(client, agent, priced);
   if (refused) return refused;
-  await client.query(
-    "INSERT INTO agent_spends (agent_id, idempotency_key, account_id, wallet_id, usd, day) VALUES ($1, $2, $3, $4, $5, $6::date) ON CONFLICT (agent_id, idempotency_key) DO NOTHING",
-    [agent.agentId, idempotencyKey, agent.accountId, agent.walletId, priced.usd, priced.day],
-  );
+  await client.query("INSERT INTO agent_spends (agent_id, idempotency_key, binding, account_id, wallet_id, usd, day) VALUES ($1, $2, $3, $4, $5, $6, $7::date)", [
+    agent.agentId,
+    command.idempotencyKey,
+    bindingOf(command),
+    agent.accountId,
+    agent.walletId,
+    priced.usd,
+    priced.day,
+  ]);
   return null;
 }
 
@@ -62,8 +80,10 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
     };
   };
 
+  const recorded = await recordedSpend(pool, agent, command);
+  if (recorded === "conflict") return deny(KEY_REUSED);
   const approval = await approvalFor(pool, agent, command.idempotencyKey, command);
-  if (approval === "conflict") return deny("this idempotencyKey was already used for a different command");
+  if (approval === "conflict") return deny(KEY_REUSED);
   if (approval === "used") return deny("this approval was already used. Ask again with a new idempotencyKey");
   if (approval === "denied") return deny("the owner denied this operation");
   if (approval === "expired") return deny("the approval request expired. Ask again with a new idempotencyKey");
@@ -77,7 +97,7 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
     const cap = effectiveLimits(agent.limits, agent.policy).maxTxUsd;
     if (estimate !== null && estimate > cap) return deny(`the swap sells about ${usd(estimate)}, above this agent's ${usd(cap)} per-transaction cap`);
     priced = estimate === null ? null : { usd: estimate, day: new Date().toISOString().slice(0, 10) };
-    const overDaily = priced ? await dailyRefusal(pool, agent, command.idempotencyKey, priced) : null;
+    const overDaily = priced && recorded === "none" ? await dailyRefusal(pool, agent, priced) : null;
     if (overDaily) return deny(overDaily);
     if (!approved && estimate === null) return ask(null, "the swap sells a token Whale cannot price");
     if (!approved && estimate !== null && threshold !== null && estimate > threshold) return ask(estimate, `the swap sells about ${usd(estimate)}, above the ${usd(threshold)} approval threshold`);
@@ -85,7 +105,7 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
 
   const value = await executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });
   const refused = await inTransaction(pool, async (client) => {
-    const overDaily = priced ? await recordSpend(client, agent, command.idempotencyKey, priced) : null;
+    const overDaily = priced ? await recordSpend(client, agent, command, priced) : null;
     if (overDaily) return overDaily;
     if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) return "this approval was already used. Ask again with a new idempotencyKey";
     await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
