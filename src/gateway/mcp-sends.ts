@@ -16,7 +16,7 @@ function usd(value: number): string {
   return `${value.toFixed(2)} USD`;
 }
 
-export function sellUsd(command: Extract<HostedCommand, { kind: "swap" }>): number | null {
+function sellUsd(command: Extract<HostedCommand, { kind: "swap" }>): number | null {
   const asset = quoteAssetOf(QUOTE_ASSETS, command.chainKey, command.sellToken);
   if (!asset || !DOLLAR_TOKENS.has(asset.symbol)) return null;
   return Number(BigInt(command.sellAmount)) / 10 ** asset.decimals;
