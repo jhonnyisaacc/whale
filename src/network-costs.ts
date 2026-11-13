@@ -53,7 +53,8 @@ export function envCostReaders(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch =
       const headers: Record<string, string> = env.COINGECKO_API_KEY ? { "x-cg-demo-api-key": env.COINGECKO_API_KEY } : {};
       const response = await within(vendorResponse(fetchImpl, `${base}/simple/price?ids=${ids.join(",")}&vs_currencies=usd`, { headers, signal: AbortSignal.timeout(READ_TIMEOUT_MS) }));
       if (!response?.ok) return out;
-      const body = JSON.parse(await readVendorText(response, 64 * 1024)) as Record<string, { usd?: unknown }>;
+      const body = await within(readVendorText(response, 64 * 1024).then((text) => JSON.parse(text) as Record<string, { usd?: unknown }> | null));
+      if (!body) return out;
       for (const symbol of symbols) {
         const usd = body[NATIVE_COINGECKO_ID[symbol.toUpperCase()] ?? ""]?.usd;
         if (typeof usd === "number" && Number.isFinite(usd)) out.set(symbol.toUpperCase(), usd);

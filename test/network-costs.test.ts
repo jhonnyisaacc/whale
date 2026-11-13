@@ -3,7 +3,7 @@ import test from "node:test";
 import type { CommandDeps } from "../src/commands.js";
 import { registerHostedRoutes } from "../src/executor-server/hosted.js";
 import { buildApp } from "../src/http.js";
-import { cachedNetworkCosts, networkCosts, type CostReaders } from "../src/network-costs.js";
+import { cachedNetworkCosts, envCostReaders, networkCosts, type CostReaders } from "../src/network-costs.js";
 import { x402Quote, type JudgePayment } from "../src/gateway/x402.js";
 
 const GWEI = 1_000_000_000n;
@@ -36,6 +36,12 @@ test("a gas price or native price of zero is unreadable, so that chain falls bac
   assert.equal(costs.find((cost) => cost.chainKey === "solana")?.source, "static");
   assert.equal(costs.find((cost) => cost.chainKey === "arbitrum")?.source, "live");
   assert.ok(costs.every((cost) => cost.swapUsd > 0));
+});
+
+test("a price feed that answers 200 with a body that is not JSON falls back to the static ceiling", async () => {
+  const html: typeof fetch = async () => new Response("<html>rate limited</html>", { status: 200, headers: { "content-type": "text/html" } });
+  const costs = await networkCosts(["base"], { ...envCostReaders({}, html), evmGasPriceWei: async () => GWEI / 100n });
+  assert.deepEqual(costs.map((cost) => [cost.chainKey, cost.source]), [["base", "static"]]);
 });
 
 test("costs are cached for thirty seconds per chain set", async () => {
