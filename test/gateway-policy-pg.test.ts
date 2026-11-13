@@ -229,3 +229,34 @@ test("reading the pending change, which runs the sweep, is rate limited", { skip
     await drop();
   }
 });
+
+test("a chain this build dropped from a stored policy still reads, a narrowing applies at once, and a widening still needs a passkey and the delay", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, wallet, approve, put, advance, now, drop } = await harness();
+  const addDropped = (table: "policies" | "policy_changes", tokens: unknown = null) =>
+    pool.query(`UPDATE ${table} SET document = document || jsonb_build_object('chains', (document->'chains') || '["dogechain"]'::jsonb, 'tokenAllowlist', $1::jsonb)`, [JSON.stringify(tokens)]);
+  try {
+    await addDropped("policies");
+    const narrowed = await put({ baseVersion: 1, document: { ...DEFAULT_POLICY, maxTxUsd: 10 } });
+    assert.deepEqual(narrowed.json(), { status: "applied", version: 2 });
+
+    await addDropped("policies", [{ chain: "dogechain", address: "0x2222222222222222222222222222222222222222" }]);
+    assert.equal((await put({ baseVersion: 2, document: { ...DEFAULT_POLICY, maxTxUsd: 10 } })).statusCode, 428);
+    const wider = { ...DEFAULT_POLICY, maxTxUsd: 40, tokenAllowlist: [] };
+    assert.equal((await put({ baseVersion: 2, document: wider })).statusCode, 428);
+    const scheduled = await put({ baseVersion: 2, document: wider, assertion: await approve(widenAction(wallet.id, 2, wider)) });
+    assert.equal(scheduled.statusCode, 202, scheduled.body);
+    assert.equal(scheduled.json().effectiveAt, new Date(now() + WIDEN_DELAY_MS).toISOString());
+
+    await addDropped("policy_changes", []);
+    const pending = await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/policy/pending`, headers: user.headers });
+    assert.equal(pending.statusCode, 200, pending.body);
+    assert.deepEqual(pending.json().pending.document.chains, DEFAULT_POLICY.chains);
+
+    advance(WIDEN_DELAY_MS + 1);
+    assert.equal(await applyDueChanges(pool, now()), 1);
+    const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
+    assert.deepEqual([listed.policyVersion, listed.policy.maxTxUsd, listed.policy.chains], [3, 40, DEFAULT_POLICY.chains]);
+  } finally {
+    await drop();
+  }
+});

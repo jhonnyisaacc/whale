@@ -65,10 +65,12 @@ test("sealed values open only for their purpose, untampered, and before expiry",
 });
 
 test("return_to keeps same-origin paths only, and cookies parse by exact name", () => {
-  for (const bad of ["https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)", "/a\nb", 42, undefined, `/${"a".repeat(600)}`]) {
+  for (const bad of ["https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)", "/a\nb", "/ああ", '/a"b', 42, undefined, `/${"a".repeat(600)}`]) {
     assert.equal(safeReturnTo(bad), "/", String(bad));
   }
   assert.equal(safeReturnTo("/connect?request=abc"), "/connect?request=abc");
+  assert.equal(safeReturnTo("/%E3%81%82"), "/%E3%81%82");
+  assert.equal(safeReturnTo(`/${"a".repeat(511)}`), `/${"a".repeat(511)}`);
   assert.equal(readCookie("a=1; __Host-whale_session=tok; b=2", "__Host-whale_session"), "tok");
   assert.equal(readCookie("x__Host-whale_session=tok", "__Host-whale_session"), null);
 });

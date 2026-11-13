@@ -2,7 +2,7 @@ import type pg from "pg";
 import { audit, inTransaction } from "./accounts.js";
 import type { GatewayConfig } from "./config.js";
 import { verifyStepUp, type AssertionPayload } from "./passkeys.js";
-import { changeDirection, walletPolicySchema, type WalletPolicy } from "./policy.js";
+import { changeDirection, storedPolicySchema, type WalletPolicy } from "./policy.js";
 
 export const WIDEN_DELAY_MS = 24 * 60 * 60 * 1000;
 
@@ -43,7 +43,7 @@ export async function changePolicy(
   const row = current.rows[0];
   if (!row) return { refused: "not_found" };
   if (row.version !== input.baseVersion) return { refused: "stale" };
-  const direction = changeDirection(walletPolicySchema.parse(row.document), input.document);
+  const direction = changeDirection(storedPolicySchema.parse(row.document), input.document);
   if (direction === "same") return { status: "unchanged", version: row.version };
   const scope = { accountId: input.accountId, walletId: input.walletId, actor: "user" as const };
   if (direction === "narrow") {
@@ -132,7 +132,7 @@ export async function pendingChange(pool: pg.Pool, accountId: string, walletId: 
     [walletId, accountId],
   );
   const row = found.rows[0];
-  return row ? { id: row.id, document: walletPolicySchema.parse(row.document), requestedAt: row.requested_at.toISOString(), effectiveAt: row.effective_at.toISOString() } : null;
+  return row ? { id: row.id, document: storedPolicySchema.parse(row.document), requestedAt: row.requested_at.toISOString(), effectiveAt: row.effective_at.toISOString() } : null;
 }
 
 export async function freezeWallets(pool: pg.Pool, accountId: string, walletId: string | null, now = Date.now()): Promise<number> {

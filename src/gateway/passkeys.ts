@@ -7,6 +7,7 @@ import { verifyAssertion, verifyRegistration, type Registration, type RelyingPar
 
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const MAX_PASSKEYS = 10;
+const NOT_FIRST = "this account already has a passkey, so adding another needs a step-up";
 const b64url = z.string().regex(/^[A-Za-z0-9_-]+$/).max(8_192);
 
 export const registrationPayload = z
@@ -95,16 +96,19 @@ export async function registrationOptions(pool: pg.Pool, config: GatewayConfig, 
 export async function registerPasskey(
   pool: pg.Pool,
   config: GatewayConfig,
-  input: { accountId: string; payload: RegistrationPayload; label: string; binding?: string },
+  input: { accountId: string; payload: RegistrationPayload; label: string; binding?: string; firstOnly?: boolean },
   after?: (client: pg.PoolClient, registration: Registration & { challenge: string }) => Promise<void>,
   now = Date.now(),
 ): Promise<Registration | string> {
   const challenge = challengeIn(input.payload.response.clientDataJSON);
   if (!challenge) return "the passkey response has no challenge";
   return inTransaction(pool, async (client) => {
-    if (!(await consume(client, input.accountId, "register", input.binding ?? "passkey", challenge, now))) return "the challenge expired or was already used";
+    await client.query("SELECT 1 FROM accounts WHERE id = $1 FOR NO KEY UPDATE", [input.accountId]);
     const count = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL", [input.accountId]);
-    if ((count.rows[0]?.n ?? 0) >= MAX_PASSKEYS) return "this account already has ten passkeys";
+    const live = count.rows[0]?.n ?? 0;
+    if (input.firstOnly && live > 0) return NOT_FIRST;
+    if (!(await consume(client, input.accountId, "register", input.binding ?? "passkey", challenge, now))) return "the challenge expired or was already used";
+    if (live >= MAX_PASSKEYS) return "this account already has ten passkeys";
     let registration: Registration;
     try {
       registration = verifyRegistration(
@@ -144,7 +148,8 @@ export async function addPasskey(
     const approved = await verifyStepUp(pool, config, input.accountId, { kind: "passkey.add", credentialId: input.payload.id }, input.assertion, now);
     if (approved !== true) return { refused: "step_up_failed", detail: approved };
   }
-  const added = await registerPasskey(pool, config, { accountId: input.accountId, payload: input.payload, label: input.label, binding: input.binding }, after, now);
+  const added = await registerPasskey(pool, config, { accountId: input.accountId, payload: input.payload, label: input.label, binding: input.binding, firstOnly: (existing.rowCount ?? 0) === 0 }, after, now);
+  if (added === NOT_FIRST) return { refused: "step_up_required" };
   return typeof added === "string" ? { refused: "passkey_rejected", detail: added } : added;
 }
 
