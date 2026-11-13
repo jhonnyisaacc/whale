@@ -2,8 +2,9 @@ import { formatUnits } from "viem";
 import { chainByKey } from "./chains.js";
 import { quoteHop } from "./clients.js";
 import type { CommandDeps, WalletCommand } from "./commands.js";
-import { loadConfig } from "./config.js";
+import { configSecrets, loadConfig, rpcLists } from "./config.js";
 import type { ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
+import { redactError, urlSecretForms } from "./redact.js";
 import { evmReadClient, solanaConnection } from "./rpc.js";
 
 const QUOTE_KEY_NAMES = ["ZEROX_API_KEY", "JUPITER_API_KEY", "LIFI_API_KEY", "ONEINCH_API_KEY", "OKX_API_KEY"] as const;
@@ -107,4 +108,14 @@ export function commandDeps(env: NodeJS.ProcessEnv, command: WalletCommand): Com
   if (command.kind === "balance") return { readBalance: (chainKey, address) => readAddressBalance(env, chainKey, address) };
   if (command.kind === "swap" && command.mode === "live" && env.WHALE_BROADCAST === "true") return { execute: (intent) => postIntent(env, intent) };
   return {};
+}
+
+export function commandErrorText(env: NodeJS.ProcessEnv, error: unknown): string {
+  let secrets: string[];
+  try {
+    secrets = configSecrets(loadConfig(env));
+  } catch {
+    secrets = Object.values(rpcLists(env)).flat().flatMap(urlSecretForms);
+  }
+  return redactError(error, secrets);
 }

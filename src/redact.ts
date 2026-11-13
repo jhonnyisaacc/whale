@@ -43,13 +43,31 @@ export function zeroLoadedSecrets(): void {
   tracked.length = 0;
 }
 
+function looksLikeKey(part: string): boolean {
+  const classes = [/[a-z]/, /[A-Z]/, /\d/].filter((pattern) => pattern.test(part)).length;
+  return part.length >= 16 && classes >= 2;
+}
+
+function withDecoded(parts: readonly string[]): string[] {
+  return parts.flatMap((part) => {
+    try {
+      return [part, decodeURIComponent(part)];
+    } catch {
+      return [part];
+    }
+  });
+}
+
 export function urlSecretForms(url: string): string[] {
   try {
     const parsed = new URL(url);
     const normalized = parsed.href;
+    const credentials = withDecoded([parsed.username, parsed.password]);
+    const segments = parsed.pathname.split("/");
+    const values = parsed.search.slice(1).split("&").map((pair) => pair.slice(pair.indexOf("=") + 1));
     parsed.username = "";
     parsed.password = "";
-    return [url, normalized, parsed.href];
+    return [url, normalized, parsed.href, ...credentials, ...withDecoded([...segments, ...values]).filter(looksLikeKey)];
   } catch {
     return [url];
   }
