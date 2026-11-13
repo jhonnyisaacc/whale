@@ -29,6 +29,10 @@ test("the dashboard serves its page under a strict CSP and only hashed assets be
     assert.match(PAGE_CSP, /script-src 'self'/);
     assert.doesNotMatch(PAGE_CSP, /unsafe/);
     assert.equal(page.headers["cache-control"], "no-cache");
+    const head = await app.inject({ method: "HEAD", url: "/" });
+    assert.equal(head.statusCode, 200);
+    assert.equal(head.headers["content-type"], "text/html; charset=utf-8");
+    assert.equal(head.headers["content-security-policy"], PAGE_CSP);
     const asset = await app.inject({ method: "GET", url: "/assets/index-abc.js" });
     assert.equal(asset.headers["content-type"], "text/javascript; charset=utf-8");
     assert.match(String(asset.headers["cache-control"]), /immutable/);

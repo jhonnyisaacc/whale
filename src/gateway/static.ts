@@ -54,7 +54,7 @@ export function registerStatic(app: FastifyInstance, dir: string): void {
 
   app.setNotFoundHandler(async (request, reply) => {
     const url = request.url.split("?")[0] ?? "/";
-    if (request.method !== "GET" || SERVER_PREFIXES.some((prefix) => url.startsWith(prefix)) || path.extname(url) !== "") {
+    if ((request.method !== "GET" && request.method !== "HEAD") || SERVER_PREFIXES.some((prefix) => url.startsWith(prefix)) || path.extname(url) !== "") {
       return reply.code(404).send({ error: "not_found" });
     }
     return reply.header("content-type", "text/html; charset=utf-8").header("cache-control", "no-cache").header("content-security-policy", PAGE_CSP).send(page);
