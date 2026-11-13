@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+import pg from "pg";
 import { authenticateApiKey, createAgent } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
 import { applyDueChanges, unfreezeAction, WIDEN_DELAY_MS, widenAction } from "../src/gateway/policy-changes.js";
@@ -25,6 +27,33 @@ async function harness() {
   };
   const put = (payload: unknown) => app.inject({ method: "PUT", url: `/api/wallets/${wallet.id}/policy`, headers: user.headers, payload: payload as Record<string, unknown> });
   return { app, pool, user, wallet, approve, put, advance: (ms: number) => (clock += ms), now: () => clock, drop: async () => (await app.close(), await drop()) };
+}
+
+async function holdLock(pool: pg.Pool, sql: string, params: unknown[]) {
+  const holder = await pool.connect();
+  await holder.query("BEGIN");
+  await holder.query(sql, params);
+  const pid = (await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid as number;
+  const watcher = new pg.Client({ connectionString: TEST_DATABASE_URL });
+  await watcher.connect();
+  const waitingBehind = async (count: number) => {
+    for (let tries = 0; tries < 500; tries += 1) {
+      const found = await watcher.query<{ n: number }>(
+        `WITH RECURSIVE queue(pid) AS (SELECT $1::int UNION SELECT a.pid FROM pg_stat_activity a JOIN queue q ON q.pid = ANY(pg_blocking_pids(a.pid)))
+         SELECT count(*)::int - 1 AS n FROM queue`,
+        [pid],
+      );
+      if ((found.rows[0]?.n ?? 0) >= count) return;
+      await delay(10);
+    }
+    throw new Error(`fewer than ${count} transactions queued behind the held lock`);
+  };
+  const release = async () => {
+    await holder.query("COMMIT");
+    holder.release();
+    await watcher.end();
+  };
+  return { waitingBehind, release };
 }
 
 test("narrowing applies at once; widening needs a passkey for that exact document and waits a day", { skip: !TEST_DATABASE_URL }, async () => {
@@ -84,6 +113,30 @@ test("freezing stops every agent at once, and unfreezing takes a passkey", { ski
     assert.equal(await authenticateApiKey(pool, apiKey), null);
     const other = await signedInAccount(pool);
     assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: other.headers, payload: {} })).statusCode, 404);
+  } finally {
+    await drop();
+  }
+});
+
+test("a narrowing that races the sweep waits for it instead of deadlocking", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, wallet, approve, put, advance, now, drop } = await harness();
+  try {
+    const wider = { ...DEFAULT_POLICY, maxTxUsd: 80 };
+    assert.equal((await put({ baseVersion: 1, document: wider, assertion: await approve(widenAction(wallet.id, 1, wider)) })).statusCode, 202);
+    advance(WIDEN_DELAY_MS + 1);
+    const lock = await holdLock(pool, "SELECT 1 FROM policy_changes WHERE status = 'pending' FOR UPDATE", []);
+    const sweep = applyDueChanges(pool, now());
+    await lock.waitingBehind(1);
+    const narrowing = put({ baseVersion: 1, document: { ...DEFAULT_POLICY, maxTxUsd: 10 } });
+    await lock.waitingBehind(2);
+    await lock.release();
+    assert.equal(await sweep, 1);
+    const narrowed = await narrowing;
+    assert.equal(narrowed.statusCode, 409, narrowed.body);
+    assert.equal(narrowed.json().error, "stale");
+    assert.deepEqual((await put({ baseVersion: 2, document: { ...wider, maxTxUsd: 10 } })).json(), { status: "applied", version: 3 });
+    const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
+    assert.deepEqual([listed.policyVersion, listed.policy.maxTxUsd], [3, 10]);
   } finally {
     await drop();
   }

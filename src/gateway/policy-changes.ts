@@ -88,6 +88,7 @@ export async function applyDueChanges(pool: pg.Pool, now = Date.now()): Promise<
   let applied = 0;
   for (const { id } of due.rows) {
     const done = await inTransaction(pool, async (client) => {
+      await client.query("SELECT 1 FROM policies WHERE wallet_id = (SELECT wallet_id FROM policy_changes WHERE id = $1) FOR UPDATE", [id]);
       const change = await client.query<{ wallet_id: string; base_version: number; document: unknown; account_id: string }>(
         `SELECT c.wallet_id, c.base_version, c.document, w.account_id FROM policy_changes c JOIN wallets w ON w.id = c.wallet_id
          WHERE c.id = $1 AND c.status = 'pending' FOR UPDATE OF c`,
