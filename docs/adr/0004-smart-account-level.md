@@ -31,12 +31,12 @@ The wallet policy maps onto session policies:
 
 | Whale policy | Session policy |
 | --- | --- |
-| Allowed chains | One session per chain, enabled by the owner |
-| Per-token caps | The spending-limit policy, per token |
+| Allowed chains | One session per chain and sell token, enabled by the owner |
+| Per-token caps | A limited universal-action rule on the amount of each allowed call, described under "The cap is the bound" |
 | Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Step 4 under "Verify before code" picks one, and the period caps that ADR 0003 promises wait on it |
 | A 0x swap calls only a pinned Settler | Universal-action rules that pin the `exec` `operator` and `target` to the chain's Settler |
 | Swap recipient must be the account | Universal-action rules on **static** calldata offsets, listed below |
-| Transfers to listed destinations | A universal-action rule on the `transfer` recipient, which sits at a static offset |
+| Transfers to listed destinations | A universal-action rule on the `transfer` recipient, which sits at a static offset, and a limited rule on its amount |
 
 **Static offsets only.** A universal-action rule compares one 32-byte word at a fixed position with one reference value, and every rule of the action must pass. In Smart Sessions v1.0.0, `UniActionPolicy` reads the word at `4 + offset`, so a rule's `offset` counts from the end of the selector. A rule at a fixed position works only when the field cannot move.
 
@@ -45,14 +45,32 @@ The wallet policy maps onto session policies:
 | Calldata byte | Rule `offset` | Field | Required value |
 | --- | --- | --- | --- |
 | 4 | 0 | `operator` | The chain's pinned Settler |
+| 36 | 32 | `token` | The session's sell token |
+| 68 | 64 | `amount` | Greater than 0, with `isLimited` set and the session's swap cap as the limit. This rule is `GREATER_THAN` 0, not `EQUAL` |
 | 100 | 96 | `target` | The same Settler |
 | 132 | 128 | Offset of `data` | `0xa0` |
 | 196 | 192 | Inner selector and the first 28 bytes of the recipient word | The `Settler.execute` selector, then those 28 bytes for the account address |
 | 200 | 196 | `slippage.recipient` | The account address |
 
-The `exec` token and amount sit at fixed words too, at bytes 36 and 68. On 2026-11-13 these positions were checked again with viem 2.57.13. Canonical calldata passes every rule. Calldata whose offset word is `0x100`, with a decoy before the real inner call, passes the byte-200 rule but ABI-decodes to another recipient, and the byte-132 rule refuses it.
+On 2026-11-13 these positions were checked again with viem 2.57.13. Canonical calldata passes every rule. Calldata whose offset word is `0x100`, with a decoy before the real inner call, passes the byte-200 rule but ABI-decodes to another recipient, and the byte-132 rule refuses it.
 
 `exec` lends the sold-token allowance to `operator` for one call into `target`. Without the `operator` and `target` rules, a compromised Whale names its own contract for both and pulls the lent allowance. The app policy already requires both to be a pinned Settler, in `assertSettler` in `src/signing-policy.ts` and in the 0x entry of `docs/threat-model.md`. A rule holds one reference value, so one session pins one Settler. 0x rotates Settler addresses. After a rotation, 0x swaps at this level are refused until the owner enables a session for the new Settler.
+
+**The cap is the bound.** A universal-action rule with `isLimited` set adds the word it reads to a running total. The rule fails when the total would exceed its limit (`UniActionPolicy.sol:156-161`). The total is stored under a config id that hashes the account, the session's permission id, and the action id, and the action id hashes the call target and selector (`IdLib.sol:18-55`). Each session therefore keeps one total for each allowed call. Nothing resets the total on a schedule. Only the owner can reset it, by enabling the session again with new init data (`UniActionPolicy.sol:165-171`).
+
+The `exec` `amount` word at byte 68 feeds the swap cap. `AllowanceHolder.exec` gives `operator` an allowance of exactly `amount` of `token` from the calling account (`AllowanceHolderBase.sol:75-76`). `AllowanceHolder.transferFrom` subtracts from that allowance and reverts on underflow (`AllowanceHolderBase.sol:101-110`). `exec` clears the allowance after the call (`AllowanceHolder.sol:19-23`). AllowanceHolder reads `operator`, `token`, `amount`, and `target` from the same fixed words that the rules read (`AllowanceHolderBase.sol:158-164`). One `exec` can therefore move at most `amount` of the pinned token, whatever Settler actions the inner call carries. A policy holds one rule set for each action, so one session covers one sell token. Each sell token gets its own session.
+
+The owner approves AllowanceHolder for the sell token in the same passkey-signed batch that enables the session. AllowanceHolder spends that standing approval only inside an `exec` that the account makes, so the `amount` rule caps it too. The session has no `approve` action. A call that the session does not list, such as `approve` or `transferFrom`, falls through to the fallback action. The session leaves the fallback action empty, so Smart Sessions reverts (`PolicyLib.sol:215-238` and `PolicyLib.sol:71`). Every action sets `valueLimitPerUse` to 0, so no call sends native value (`UniActionPolicy.sol:89`). Native sells are refused at this level.
+
+Settler can also pull funds through Permit2 with the owner's signature. The session enables no ERC-7739 content and no ERC-1271 policy, so Smart Sessions accepts no signature that the session key makes for the account (`SmartSession.sol:438-442`).
+
+`ERC20SpendingLimitPolicy` is not used. It counts the amount of `approve`, `transfer`, and `transferFrom`, but it ignores the spender and the recipient (`ERC20SpendingLimitPolicy.sol:104-116`). A session with it passes `approve(attacker, remainingCap)`. It also fails every other selector (`ERC20SpendingLimitPolicy.sol:131-132`), so it cannot count `exec`.
+
+The cap has these limits:
+- It holds per session, not per period. Step 4 under "Verify before code" decides how a period cap works.
+- The swap total and the transfer total of a token are separate. The bound for a token is the sum of the two limits, so Whale splits the user's per-token cap between them.
+- A call consumes its amount at validation, even when the swap then reverts.
+- It does not cover userOp fees. The account pays gas from its native balance, and no policy in Smart Sessions v1.0.0 limits the gas fields or the fee of a userOp. A compromised Whale can submit valid userOps with a high fee. Step 6 under "Verify before code" decides how to bound that.
 
 In KyberSwap's `swap` and `swapSimpleMode`, the description is a dynamic tuple reached through an offset that the caller chooses. A rule at a fixed position can be dodged with a non-canonical offset.
 
@@ -72,8 +90,13 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
    - name a non-Settler contract as `operator`, with `target` still the pinned Settler;
    - name a non-Settler contract as `target`, with `operator` still the pinned Settler;
    - name the same non-Settler contract as both `operator` and `target`;
-   - exceed the token cap;
+   - exceed the swap cap in one `exec`, and over several `exec` calls that each stay under it;
+   - exceed the transfer cap over several transfers;
+   - name a sell token other than the session's in `exec`;
+   - send native value with any call;
+   - call `approve` or `transferFrom` on the sell token;
    - call a non-0x router.
+6. Decide how userOp fees are bounded: a userOp policy with an audit, a paymaster that the owner controls, or a native balance that the owner keeps to a gas float.
 
 ## Consequences
 
