@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
+import type pg from "pg";
 import { createAgent } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
 import type { ExecutorClient } from "../src/gateway/executor-client.js";
@@ -13,6 +14,17 @@ const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
 const OWN = "0x9999999999999999999999999999999999999999";
 const COLD = "0x2222222222222222222222222222222222222222";
+
+function countQueries(pool: pg.Pool) {
+  const counts = { queries: 0, lookups: 0 };
+  const query = pool.query.bind(pool) as (...args: unknown[]) => unknown;
+  (pool as unknown as { query: (...args: unknown[]) => unknown }).query = (...args: unknown[]) => {
+    counts.queries += 1;
+    if (String(args[0]).includes("FROM agent_credentials")) counts.lookups += 1;
+    return query(...args);
+  };
+  return counts;
+}
 
 const randomKey = () => `whale_${randomBytes(6).toString("hex")}_${randomBytes(32).toString("base64url").slice(0, 43)}`;
 
@@ -168,6 +180,25 @@ test("/mcp keeps serving a tenant already seen on an IP that a stranger floods w
     assert.equal((await rpc(ping, { authorization: `Bearer ${randomKey()}` }, "34.1.2.3")).statusCode, 429);
     assert.equal((await rpc(ping, {}, "34.1.2.3")).statusCode, 200);
     assert.equal((await rpc(ping, { authorization: `Bearer ${fresh.apiKey}` }, "34.1.2.3")).statusCode, 429);
+  } finally {
+    await drop();
+  }
+});
+
+test("/mcp runs at most one IP budget of credential lookups for a concurrent burst of bad keys", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, drop } = await harness();
+  try {
+    const counts = countQueries(pool);
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    const sources: ((index: number) => string)[] = [() => "203.0.113.9", (index) => `2001:db8:1:2::${index.toString(16)}`];
+    for (const source of sources) {
+      const before = counts.lookups;
+      const burst = await Promise.all(Array.from({ length: 400 }, (_, index) => app.inject({ method: "POST", url: "/mcp", remoteAddress: source(index), headers: { authorization: `Bearer ${randomKey()}` }, payload: ping })));
+      const statuses: Record<number, number> = {};
+      for (const response of burst) statuses[response.statusCode] = (statuses[response.statusCode] ?? 0) + 1;
+      assert.deepEqual(statuses, { 401: 120, 429: 280 });
+      assert.equal(counts.lookups - before, 120);
+    }
   } finally {
     await drop();
   }

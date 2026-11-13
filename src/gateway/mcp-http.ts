@@ -37,6 +37,12 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     known.set(digest, agentId);
     if (known.size > KNOWN_CREDENTIALS) known.delete(known.keys().next().value as string);
   };
+  const inFlight = new Map<string, number>();
+  const release = (slot: string) => {
+    const left = (inFlight.get(slot) ?? 1) - 1;
+    if (left > 0) inFlight.set(slot, left);
+    else inFlight.delete(slot);
+  };
 
   app.get("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
   app.delete("/mcp", async (_request, reply) => reply.code(405).header("allow", "POST").send({ error: "method_not_allowed" }));
@@ -46,24 +52,33 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     parseErrors.has(error.code) ? reply.code(400).send(rpcError(null, -32700, "parse error")) : app.errorHandler(error, request, reply);
 
   app.post("/mcp", { config: { rateLimit: false }, errorHandler }, async (request, reply) => {
-    const token = bearerOf(request);
-    const digest = token ? createHash("sha256").update(token).digest("base64url") : "";
-    const remembered = known.get(digest);
-    if (!remembered) {
-      const spent = await failures(request, { increment: false });
-      if (!spent.isAllowed && spent.remaining === 0) return reply.code(429).header("retry-after", spent.ttlInSeconds).send({ error: "rate_limit" });
-    }
     // Streamable HTTP servers must refuse foreign browser origins, which is how DNS rebinding reaches them.
     const origin = request.headers.origin;
     if (origin !== undefined && origin !== config.publicUrl.origin) return reply.code(403).send({ error: "origin_not_allowed" });
     const version = request.headers["mcp-protocol-version"];
     if (typeof version === "string" && !(MCP_VERSIONS as readonly string[]).includes(version)) return reply.code(400).send(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`));
-    const agent = token ? await authenticate(token) : null;
-    if (!agent) {
-      known.delete(digest);
-      await failures(request);
-      return challenge(config, reply, token ? "invalid_token" : undefined);
+    const token = bearerOf(request);
+    const digest = token ? createHash("sha256").update(token).digest("base64url") : "";
+    const remembered = known.get(digest);
+    let slot: string | undefined;
+    if (!remembered) {
+      const spent = await failures(request, { increment: false });
+      const pending = inFlight.get(spent.key) ?? 0;
+      if (!spent.isAllowed && spent.remaining - pending <= 0) return reply.code(429).header("retry-after", spent.ttlInSeconds).send({ error: "rate_limit" });
+      slot = spent.key;
+      inFlight.set(slot, pending + 1);
     }
+    let agent: AgentContext | null;
+    try {
+      agent = token ? await authenticate(token) : null;
+      if (!agent) {
+        known.delete(digest);
+        await failures(request);
+      }
+    } finally {
+      if (slot !== undefined) release(slot);
+    }
+    if (!agent) return challenge(config, reply, token ? "invalid_token" : undefined);
     remember(digest, agent.agentId);
     agentIds.set(request, agent.agentId);
     const limit = await perAgent(request);
