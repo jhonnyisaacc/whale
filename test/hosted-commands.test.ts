@@ -3,6 +3,7 @@ import test from "node:test";
 import type { CommandDeps, WalletCommand } from "../src/commands.js";
 import { hostedServiceToken, registerHostedRoutes } from "../src/executor-server/hosted.js";
 import { hostedCommandSchema, walletCommandOf } from "../src/hosted-commands.js";
+import { executorFrom } from "../src/gateway/config.js";
 import { executorClient } from "../src/gateway/executor-client.js";
 import { buildApp } from "../src/http.js";
 
@@ -115,4 +116,12 @@ test("the gateway reaches the hosted route under any path on HOSTED_EXECUTOR_URL
     await executorClient({ url: new URL(base), token: HOSTED_TOKEN }, fetchImpl).run(request);
   }
   assert.deepEqual(urls, ["http://executor.internal:8080/hosted/commands", "http://executor.internal:8080/whale/hosted/commands", "http://executor.internal:8080/whale/hosted/commands"]);
+});
+
+test("HOSTED_EXECUTOR_URL with a query or fragment is refused at config load", () => {
+  const env = { HOSTED_SERVICE_TOKEN: HOSTED_TOKEN };
+  assert.equal(executorFrom({ ...env, HOSTED_EXECUTOR_URL: "http://executor.internal:8080/whale" })?.url.pathname, "/whale");
+  for (const url of ["http://executor.internal:8080/whale?region=1", "http://executor.internal:8080/whale#top", "http://executor.internal:8080/whale?"]) {
+    assert.throws(() => executorFrom({ ...env, HOSTED_EXECUTOR_URL: url }), /HOSTED_EXECUTOR_URL must not carry a query or fragment/, url);
+  }
 });
