@@ -91,6 +91,7 @@ fn known(text: &str) -> [u8; 32] {
 
 fn jupiter_route(
     data: &[u8],
+    accounts: usize,
     account: &dyn Fn(usize) -> Option<[u8; 32]>,
     own: [u8; 32],
 ) -> Result<(), String> {
@@ -102,7 +103,11 @@ fn jupiter_route(
         .ok_or("this Jupiter instruction is not an exact-in route")?;
     let read = |slot: usize| {
         account(slot).ok_or_else(|| {
-            format!("jupiter account {slot} comes from a lookup table, so it cannot be checked")
+            if slot >= accounts {
+                format!("the Jupiter instruction has no account {slot}")
+            } else {
+                format!("jupiter account {slot} comes from a lookup table, so it cannot be checked")
+            }
         })
     };
     if read(route.authority)? != own {
@@ -574,7 +579,8 @@ impl Policy {
                     );
                 }
             } else if program_name == JUPITER {
-                if let Err(reason) = jupiter_route(data, &account, own) {
+                if let Err(reason) = jupiter_route(data, instruction.accounts.len(), &account, own)
+                {
                     refuse(&mut decision, &reason);
                 }
             } else {

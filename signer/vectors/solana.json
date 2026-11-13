@@ -269,6 +269,16 @@
       "reason": "exact-in"
     },
     {
+      "name": "a jupiter route with too few accounts",
+      "job": {
+        "id": "a jupiter route with too few accounts",
+        "kind": "solana",
+        "message": "AQABAqCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBHnVW/IxwG7udMVuzmgVB/2xst6j9I5RArHNola8E48JCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEBAwAAAAjlF8uXeuOtKg=="
+      },
+      "expect": "refused",
+      "reason": "has no account 6"
+    },
+    {
       "name": "a transfer whose destination comes from a lookup table",
       "job": {
         "id": "a transfer whose destination comes from a lookup table",

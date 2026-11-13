@@ -148,6 +148,7 @@ function jupiterCases() {
     ["a jupiter exact_out_route", routeMessage({ discriminator: "d033ef977b2bed5c" }), "refused", "exact-in"],
     ["a jupiter shared_accounts_exact_out_route", routeMessage({ discriminator: "b0d169a89a7d453e" }), "refused", "exact-in"],
     ["a jupiter route_v2", routeMessage({ discriminator: "bb64facc31c4af14" }), "refused", "exact-in"],
+    ["a jupiter route with too few accounts", message({ keys: [solanaOwn, JUPITER], instructions: [ix(1, [0, 0, 0], Buffer.from("e517cb977ae3ad2a", "hex"))] }), "refused", "has no account 6"],
   ];
 }
 const solanaCases = [
