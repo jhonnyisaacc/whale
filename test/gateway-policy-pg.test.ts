@@ -247,6 +247,27 @@ for (const scope of ["wallet", "account"] as const) {
   });
 }
 
+test("the sweep cancels a due widening on a frozen wallet instead of applying it", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, wallet, advance, now, drop } = await harness();
+  try {
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: user.headers, payload: {} })).statusCode, 200);
+    const inserted = await pool.query<{ id: string }>(
+      "INSERT INTO policy_changes (wallet_id, base_version, document, direction, effective_at, requested_at) VALUES ($1, 1, $2, 'widen', $3, $3) RETURNING id",
+      [wallet.id, JSON.stringify({ ...DEFAULT_POLICY, maxTxUsd: 80 }), new Date(now())],
+    );
+    advance(WIDEN_DELAY_MS + 1);
+    assert.equal(await applyDueChanges(pool, now()), 0);
+    const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
+    assert.deepEqual([listed.status, listed.policyVersion, listed.policy.maxTxUsd], ["frozen", 1, DEFAULT_POLICY.maxTxUsd]);
+    const change = await pool.query("SELECT status FROM policy_changes WHERE id = $1", [inserted.rows[0]?.id]);
+    assert.equal(change.rows[0]?.status, "cancelled");
+    const cancelled = await pool.query("SELECT actor, detail FROM audit_events WHERE action = 'policy.widen_cancelled'");
+    assert.deepEqual(cancelled.rows, [{ actor: "system", detail: { changeId: inserted.rows[0]?.id, reason: "frozen" } }]);
+  } finally {
+    await drop();
+  }
+});
+
 test("the widening delay runs on the database clock, so a skewed replica cannot shorten it", { skip: !TEST_DATABASE_URL }, async (t) => {
   const { pool, wallet, approve, put, drop } = await harness({ processClock: true });
   const day = 24 * 60 * 60 * 1000;

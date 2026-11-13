@@ -107,6 +107,7 @@ export async function applyDueChanges(pool: pg.Pool, now?: number): Promise<numb
   for (const { id } of due.rows) {
     const done = await inTransaction(pool, async (client) => {
       await client.query("SELECT 1 FROM policies WHERE wallet_id = (SELECT wallet_id FROM policy_changes WHERE id = $1) FOR UPDATE", [id]);
+      const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = (SELECT wallet_id FROM policy_changes WHERE id = $1) FOR SHARE", [id]);
       const change = await client.query<{ wallet_id: string; base_version: number; document: unknown; account_id: string }>(
         `SELECT c.wallet_id, c.base_version, c.document, w.account_id FROM policy_changes c JOIN wallets w ON w.id = c.wallet_id
          WHERE c.id = $1 AND c.status = 'pending' FOR UPDATE OF c`,
@@ -114,6 +115,11 @@ export async function applyDueChanges(pool: pg.Pool, now?: number): Promise<numb
       );
       const row = change.rows[0];
       if (!row) return false;
+      if (wallet.rows[0]?.status === "frozen") {
+        await client.query("UPDATE policy_changes SET status = 'cancelled', decided_at = COALESCE($2::timestamptz, now()) WHERE id = $1", [id, fixedTime(now)]);
+        await audit(client, { accountId: row.account_id, walletId: row.wallet_id, actor: "system", action: "policy.widen_cancelled", detail: { changeId: id, reason: "frozen" } });
+        return false;
+      }
       const updated = await client.query<{ version: number }>(
         "UPDATE policies SET version = version + 1, document = $3, updated_at = COALESCE($4::timestamptz, now()) WHERE wallet_id = $1 AND version = $2 RETURNING version",
         [row.wallet_id, row.base_version, JSON.stringify(row.document), fixedTime(now)],
