@@ -131,3 +131,21 @@ test("/mcp throttles one IP that rotates random keys and one agent that rotates 
     await drop();
   }
 });
+
+test("/mcp gives every tenant behind one egress IP its own budget", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, rpc, drop } = await harness();
+  try {
+    const { accountId } = await signedInAccount(pool);
+    const created = await createWallet(pool, accountId, { label: "other", level: "enclave" });
+    const walletId = "walletId" in created ? created.walletId : "";
+    const other = await createAgent(pool, { accountId, walletId, name: "other", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 20, dailyUsd: 40 } });
+    if ("refused" in other) throw new Error(other.refused);
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    const first: number[] = [];
+    for (let index = 0; index < 120; index += 1) first.push((await rpc(ping, {}, "34.1.2.3")).statusCode);
+    assert.deepEqual([...new Set(first)], [200]);
+    assert.equal((await rpc(ping, { authorization: `Bearer ${other.apiKey}` }, "34.1.2.3")).statusCode, 200);
+  } finally {
+    await drop();
+  }
+});

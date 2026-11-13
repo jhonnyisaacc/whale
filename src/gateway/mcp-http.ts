@@ -26,7 +26,7 @@ function challenge(config: GatewayConfig, reply: FastifyReply, error?: string) {
 export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; executor: ExecutorClient | null; authenticate?: BearerAuth }): void {
   const { config, pool } = deps;
   const authenticate: BearerAuth = deps.authenticate ?? ((token) => authenticateApiKey(pool, token));
-  const limited = { rateLimit: { max: 120, timeWindow: "1 minute" } };
+  const failures = app.createRateLimit({ max: 120, timeWindow: "1 minute" });
   const agentIds = new WeakMap<FastifyRequest, string>();
   const perAgent = app.createRateLimit({ max: 120, timeWindow: "1 minute", keyGenerator: (request) => agentIds.get(request) ?? request.ip });
 
@@ -37,16 +37,20 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
   const errorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) =>
     parseErrors.has(error.code) ? reply.code(400).send(rpcError(null, -32700, "parse error")) : app.errorHandler(error, request, reply);
 
-  app.post("/mcp", { config: limited, errorHandler }, async (request, reply) => {
+  app.post("/mcp", { config: { rateLimit: false }, errorHandler }, async (request, reply) => {
+    const spent = await failures(request, { increment: false });
+    if (!spent.isAllowed && spent.remaining === 0) return reply.code(429).header("retry-after", spent.ttlInSeconds).send({ error: "rate_limit" });
     // Streamable HTTP servers must refuse foreign browser origins, which is how DNS rebinding reaches them.
     const origin = request.headers.origin;
     if (origin !== undefined && origin !== config.publicUrl.origin) return reply.code(403).send({ error: "origin_not_allowed" });
     const version = request.headers["mcp-protocol-version"];
     if (typeof version === "string" && !(MCP_VERSIONS as readonly string[]).includes(version)) return reply.code(400).send(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`));
     const token = bearerOf(request);
-    if (!token) return challenge(config, reply);
-    const agent = await authenticate(token);
-    if (!agent) return challenge(config, reply, "invalid_token");
+    const agent = token ? await authenticate(token) : null;
+    if (!agent) {
+      await failures(request);
+      return challenge(config, reply, token ? "invalid_token" : undefined);
+    }
     agentIds.set(request, agent.agentId);
     const limit = await perAgent(request);
     if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate_limit" });
