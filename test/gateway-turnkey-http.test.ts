@@ -58,14 +58,15 @@ test("a pending create is submitted once and returns its activity id without pol
 });
 
 test("only an error on the submit request itself means Turnkey did not take the create", async () => {
-  for (const status of [429, 404]) {
-    const refused = await fakeTurnkeyApi({ [SUBMIT]: () => ({ status, text: "<html>no</html>" }) });
+  const answers: Answer[] = [{ status: 429, text: "<html>no</html>" }, { status: 404, text: "<html>no</html>" }, { status: 429, json: { code: 8, message: "rate limit exceeded", details: [] } }];
+  for (const answer of answers) {
+    const refused = await fakeTurnkeyApi({ [SUBMIT]: () => answer });
     try {
       await assert.rejects(refused.parent.submitSubOrganization(input), (error) => error instanceof TurnkeyNotSubmitted && error.reason === "turnkey_refused");
     } finally {
       await refused.close();
     }
-    const polled = await fakeTurnkeyApi({ [POLL]: () => ({ status, text: "<html>no</html>" }) });
+    const polled = await fakeTurnkeyApi({ [POLL]: () => answer });
     try {
       await assert.rejects(polled.parent.subOrganizationActivity("act-1", 1), (error) => error instanceof Error && !(error instanceof TurnkeyNotSubmitted));
     } finally {

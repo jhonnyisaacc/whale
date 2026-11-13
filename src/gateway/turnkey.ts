@@ -35,7 +35,7 @@ export class TurnkeyNotSubmitted extends Error {
   }
 }
 
-const REFUSED_GRPC_CODES = new Set([3, 5, 7, 9, 16]);
+const REFUSED_GRPC_CODES = new Set([3, 5, 7, 8, 9, 16]);
 const UNREACHABLE_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"]);
 const FAILED_ACTIVITY = new Set(["ACTIVITY_STATUS_FAILED", "ACTIVITY_STATUS_REJECTED"]);
 const POLL_INTERVAL_MS = 1000;
