@@ -33,7 +33,7 @@ The wallet policy maps onto session policies:
 | --- | --- |
 | Allowed chains | One session per chain and sell token, enabled by the owner |
 | Per-token caps | A limited universal-action rule on the amount of each allowed call, described under "The cap is the bound" |
-| Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Step 4 under "Verify before code" picks one, and the period caps that ADR 0003 promises wait on it |
+| Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Smart Sessions v1.0.0 has no time or period policy outside its tests, so either choice needs a module from outside that release. Step 4 under "Verify before code" picks one, and the period caps that ADR 0003 promises wait on it |
 | A 0x swap calls only a pinned Settler | Universal-action rules that pin the `exec` `operator` and `target` to the chain's Settler |
 | Swap recipient must be the account | Universal-action rules on **static** calldata offsets, listed below. They stop accidental and naive misuse. They do not bound loss, because the Settler actions are unchecked |
 | Transfers to listed destinations | A universal-action rule on the `transfer` recipient, which sits at a static offset, and a limited rule on its amount |
@@ -82,10 +82,10 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
 
 ## Verify before code
 
-1. Read the Smart Sessions spending-limit and universal-action policy source at the version Whale would pin, and its audit report. Confirm the audit covers use through Safe7579 and through a 7702 delegate.
+1. Read the Smart Sessions core and `UniActionPolicy` source at the version Whale would pin, and its audit reports. Confirm the audits cover use through Safe7579 and through a 7702 delegate.
 2. Confirm which 7579 account and WebAuthn validator are in the registry with audits, and their deployed addresses on each chain Whale enables.
 3. Confirm RIP-7212 availability on each enabled chain, or the gas cost of the fallback verifier.
-4. Pick between 24-hour sessions and a periodic spending-limit module.
+4. Pick between 24-hour sessions and a periodic spending-limit module. Find the source and an audit for the time or period policy that the choice needs, because Smart Sessions v1.0.0 does not ship one.
 5. Write a fork test with a session key. Send `exec` with `minAmountOut` 0, `buyToken` zero, and a `TRANSFER_FROM` action that pays the attacker, several times. The attacker must receive the lent amounts until the swap cap is used, and the next such `exec` must revert. Then try each of these. Each must revert on-chain:
    - pay a swap to another recipient in `slippage.recipient`;
    - send `exec` calldata whose `data` offset points past a decoy that keeps the account address at byte 200;
@@ -111,7 +111,7 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
 
 The versions below are the ones current on 2026-11-13. Repositories without a release tag are pinned to a commit.
 
-- [Smart Sessions](https://github.com/erc7579/smartsessions/tree/v1.0.0) by Rhinestone and Biconomy, release `v1.0.0` (commit `dc20f0b`). Its policies under `contracts/external/policies` include `ERC20SpendingLimitPolicy`, `UniActionPolicy`, `SudoPolicy`, `TimeFramePolicy`, and `UsageLimitPolicy`. The audit reports are in `audits/`. `UniActionPolicy` reads each rule's word at `4 + offset` and requires every rule to pass.
+- [Smart Sessions](https://github.com/erc7579/smartsessions/tree/v1.0.0) by Rhinestone and Biconomy, release `v1.0.0` (commit `dc20f0b`). Its policies under `contracts/external/policies` are `ERC20SpendingLimitPolicy`, `SudoPolicy`, and `UniActionPolicy`. `TimeFramePolicy` and `UsageLimitPolicy` exist only as mocks under `test/mock`. Their deployed addresses come from `@rhinestone/module-sdk` `0.4.0`, not from this release. The audit reports are in `audits/`. The text of the two Cantina reports names `ERC20SpendingLimitPolicy`, `SudoPolicy`, and `UniActionPolicy`, and neither names a time-frame or usage-limit policy. The other two reports have no extractable text, so step 1 under "Verify before code" reads them. `UniActionPolicy` reads each rule's word at `4 + offset` and requires every rule to pass.
 - [Rhinestone Module SDK](https://www.npmjs.com/package/@rhinestone/module-sdk), `@rhinestone/module-sdk` `0.4.0`, which builds the session and policy configuration for Smart Sessions.
 - [Rhinestone module registry](https://github.com/rhinestonewtf/registry/tree/v1.0.2), release `v1.0.2`: the on-chain registry where attesters, such as auditors, attest to 7579 modules. Its README at that tag says the contract is in active development and not for production, which step 2 under "Verify before code" has to settle.
 - [Safe7579](https://github.com/rhinestonewtf/safe7579/tree/v2.0.0), release `v2.0.0`: the adapter that makes a Safe a 7579 account.
