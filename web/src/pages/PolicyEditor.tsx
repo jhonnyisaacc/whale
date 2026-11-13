@@ -4,6 +4,11 @@ import { stepUp } from "../stepup.js";
 
 type Pending = { id: string; document: Policy; requestedAt: string; effectiveAt: string } | null;
 
+function summary(policy: Policy): string {
+  const ask = policy.approvalAboveUsd === null ? "never asks" : `asks above $${policy.approvalAboveUsd}`;
+  return `${policy.chains.join(", ")} · ${policy.actions.join(", ")} · $${policy.maxTxUsd}/tx · $${policy.dailyUsd}/day · ${policy.maxSlippageBps} bps slippage · ${ask} · ${policy.destinations.length} destinations`;
+}
+
 export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chains: string[]; onSaved: () => void }) {
   const [draft, setDraft] = useState<Policy>(wallet.policy);
   const [pending, setPending] = useState<Pending>(null);
@@ -35,8 +40,10 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
         const assertion = await stepUp({ kind: "policy.widen", walletId: wallet.id, baseVersion: wallet.policyVersion, document: draft });
         return api<{ status: string; effectiveAt?: string }>(`/api/wallets/${wallet.id}/policy`, { method: "PUT", body: { ...body, assertion } });
       });
-      if (result.status === "scheduled") setMessage(`This loosens the wallet, so it applies at ${new Date(result.effectiveAt ?? "").toLocaleString()}. You can cancel it until then.`);
-      else if (result.status === "applied") setMessage("Saved. Tighter limits apply now.");
+      if (result.status === "scheduled") {
+        setDraft(wallet.policy);
+        setMessage(`This loosens the wallet, so it applies at ${new Date(result.effectiveAt ?? "").toLocaleString()}. You can cancel it until then.`);
+      } else if (result.status === "applied") setMessage("Saved. Tighter limits apply now.");
       else setMessage("Nothing changed.");
       onSaved();
       await loadPending();
@@ -60,9 +67,13 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
     <div className="card stack">
       <h2>Policy · version {wallet.policyVersion}</h2>
       {pending ? (
-        <div className="notice row">
-          <span>A loosening waits until {new Date(pending.effectiveAt).toLocaleString()}.</span>
-          <button onClick={() => void cancel()}>Cancel it</button>
+        <div className="notice stack">
+          <span>A loosening waits until {new Date(pending.effectiveAt).toLocaleString()}. The form below shows the policy in force now.</span>
+          <span className="muted">Now: {summary(wallet.policy)}</span>
+          <span>Then: {summary(pending.document)}</span>
+          <div className="row">
+            <button onClick={() => void cancel()}>Cancel it</button>
+          </div>
         </div>
       ) : null}
       <fieldset>
