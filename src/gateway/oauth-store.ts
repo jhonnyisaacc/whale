@@ -118,6 +118,7 @@ export async function exchangeCode(
   now = Date.now(),
 ): Promise<TokenPair | OAuthError> {
   return inTransaction(pool, async (client) => {
+    await client.query("SELECT 1 FROM agents WHERE id = (SELECT agent_id FROM oauth_codes WHERE code_hash = $1) FOR NO KEY UPDATE", [secretHash(input.code)]);
     const found = await client.query<{ client_id: string; agent_id: string; redirect_uri: string; code_challenge: string; resource: string; expires_at: Date; used_at: Date | null }>(
       "SELECT client_id, agent_id, redirect_uri, code_challenge, resource, expires_at, used_at FROM oauth_codes WHERE code_hash = $1 FOR UPDATE",
       [secretHash(input.code)],
@@ -145,6 +146,7 @@ export async function refreshTokens(pool: pg.Pool, input: { refreshToken: string
   if (!match) return { error: "invalid_grant" };
   const [, id, secret] = match as unknown as [string, string, string];
   return inTransaction(pool, async (client) => {
+    await client.query("SELECT 1 FROM agents WHERE id = (SELECT agent_id FROM agent_credentials WHERE id = $1) FOR NO KEY UPDATE", [id]);
     const found = await client.query<{ secret_hash: Buffer; agent_id: string; audience: string; expires_at: Date; revoked_at: Date | null; oauth_client_id: string | null; agent_revoked: Date | null }>(
       `SELECT c.secret_hash, c.agent_id, c.audience, c.expires_at, c.revoked_at, a.oauth_client_id, a.revoked_at AS agent_revoked
        FROM agent_credentials c JOIN agents a ON a.id = c.agent_id WHERE c.id = $1 AND c.kind = 'oauth_refresh' FOR UPDATE OF c`,
