@@ -39,7 +39,8 @@
     ],
     "maxPriorityLamports": "100000",
     "dailyLimits": {
-      "solana:native": "2000000000"
+      "solana:native": "2000000000",
+      "solana:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "1000000"
     }
   }
 }

@@ -316,7 +316,8 @@ fn a_token_account_created_for_this_wallet_also_counts_its_rent_against_the_nati
 }
 
 #[test]
-fn a_jupiter_swap_that_creates_two_token_accounts_fits_eleven_times_in_a_tenth_of_a_sol() {
+fn a_jupiter_swap_that_creates_two_token_accounts_sells_its_sol_once_and_fits_ten_times_in_a_tenth_of_a_sol()
+ {
     let mut file = load("policy.json");
     file["solana"]["dailyLimits"]["solana:native"] = "100000000".into();
     let policy = Policy::parse(&file).expect("policy");
@@ -332,17 +333,46 @@ fn a_jupiter_swap_that_creates_two_token_accounts_fits_eleven_times_in_a_tenth_o
         .unwrap()["job"]
         .clone();
     let ledger = fresh_ledger("ledger-jupiter-swap");
-    let decisions: Vec<Value> = (0..12)
+    let decisions: Vec<Value> = (0..11)
         .map(|_| run_job(&swap, &policy, &keys, &ledger, DAY)["decision"].clone())
         .collect();
-    let mut expected = vec!["signed"; 11];
+    let mut expected = vec!["signed"; 10];
     expected.push("refused");
     assert_eq!(
         decisions, expected,
-        "two 4454400 lamport rent bounds, a 5000 lamport fee, and 30000 lamports of priority per swap"
+        "1000000 lamports wrapped and sold, two 4454400 lamport rent bounds, a 5000 lamport fee, and 30000 lamports of priority per swap"
     );
     let written: Value = serde_json::from_str(&std::fs::read_to_string(&ledger).unwrap()).unwrap();
-    assert_eq!(written["spent"]["solana:native"], "98381800");
+    assert_eq!(written["spent"]["solana:native"], "99438000");
+    let _ = std::fs::remove_file(ledger);
+}
+
+#[test]
+fn jupiter_sales_count_against_the_sold_token_day() {
+    let policy = Policy::parse(&load("policy.json")).expect("policy");
+    let keys = keys();
+    let solana = load("solana.json");
+    let sell = solana["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "a jupiter route selling 0.6 USDC")
+        .unwrap()["job"]
+        .clone();
+    let ledger = fresh_ledger("ledger-jupiter-usdc");
+    let decisions: Vec<Value> = (0..2)
+        .map(|_| run_job(&sell, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .collect();
+    assert_eq!(
+        decisions,
+        ["signed", "refused"],
+        "two 600000 USDC sales against a 1000000 USDC day"
+    );
+    let written: Value = serde_json::from_str(&std::fs::read_to_string(&ledger).unwrap()).unwrap();
+    assert_eq!(
+        written["spent"]["solana:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+        "600000"
+    );
     let _ = std::fs::remove_file(ledger);
 }
 

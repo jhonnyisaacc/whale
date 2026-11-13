@@ -1,5 +1,6 @@
 use crate::abi;
 use crate::evm::{self, Call};
+use crate::jupiter;
 use crate::solana::{self, Message};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
@@ -38,116 +39,7 @@ const COMPUTE_BUDGET: &str = "ComputeBudget111111111111111111111111111111";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
-const JUPITER: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
-const QUOTE_MINTS: [&str; 3] = [
-    WSOL_MINT,
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-];
-
-struct JupiterRoute {
-    discriminator: [u8; 8],
-    authority: usize,
-    destinations: &'static [usize],
-    mint: usize,
-    fee: usize,
-}
-
-const JUPITER_ROUTES: [JupiterRoute; 4] = [
-    JupiterRoute {
-        discriminator: [0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a],
-        authority: 1,
-        destinations: &[3, 4],
-        mint: 5,
-        fee: 6,
-    },
-    JupiterRoute {
-        discriminator: [0x96, 0x56, 0x47, 0x74, 0xa7, 0x5d, 0x0e, 0x68],
-        authority: 1,
-        destinations: &[3, 4],
-        mint: 5,
-        fee: 6,
-    },
-    JupiterRoute {
-        discriminator: [0xc1, 0x20, 0x9b, 0x33, 0x41, 0xd6, 0x9c, 0x81],
-        authority: 2,
-        destinations: &[6],
-        mint: 8,
-        fee: 9,
-    },
-    JupiterRoute {
-        discriminator: [0xe6, 0x79, 0x8f, 0x50, 0x77, 0x9f, 0x6a, 0xaa],
-        authority: 2,
-        destinations: &[6],
-        mint: 8,
-        fee: 9,
-    },
-];
-
-fn known(text: &str) -> [u8; 32] {
-    solana::key(text).expect("a built-in program id is valid base58")
-}
-
-fn jupiter_route(
-    data: &[u8],
-    accounts: usize,
-    account: &dyn Fn(usize) -> Option<[u8; 32]>,
-    own: [u8; 32],
-) -> Result<(), String> {
-    let jupiter = known(JUPITER);
-    let discriminator = data.get(..8).ok_or("jupiter instruction is too short")?;
-    let route = JUPITER_ROUTES
-        .iter()
-        .find(|route| route.discriminator.as_slice() == discriminator)
-        .ok_or("this Jupiter instruction is not an exact-in route")?;
-    let read = |slot: usize| {
-        account(slot).ok_or_else(|| {
-            if slot >= accounts {
-                format!("the Jupiter instruction has no account {slot}")
-            } else {
-                format!("jupiter account {slot} comes from a lookup table, so it cannot be checked")
-            }
-        })
-    };
-    if read(route.authority)? != own {
-        return Err("the Jupiter transfer authority is not this wallet".into());
-    }
-    if read(route.fee)? != jupiter {
-        return Err("the Jupiter platform fee account is set".into());
-    }
-    let mints = match account(route.mint) {
-        Some(mint) => vec![mint],
-        None => QUOTE_MINTS.map(known).to_vec(),
-    };
-    let ata = known(ASSOCIATED_TOKEN);
-    let mut owned = vec![crate::pda::associated_token_address(
-        &own,
-        &known(WSOL_MINT),
-        &known(TOKEN),
-        &ata,
-    )];
-    for mint in &mints {
-        for program in [TOKEN, TOKEN_2022] {
-            owned.push(crate::pda::associated_token_address(
-                &own,
-                mint,
-                &known(program),
-                &ata,
-            ));
-        }
-    }
-    for (position, slot) in route.destinations.iter().enumerate() {
-        let destination = read(*slot)?;
-        if position > 0 && destination == jupiter {
-            continue;
-        }
-        if !owned.contains(&Some(destination)) {
-            return Err("the Jupiter swap pays a token account that is not this wallet's".into());
-        }
-    }
-    Ok(())
-}
 const JITO_TIPS: [&str; 8] = [
     "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
     "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
@@ -465,6 +357,12 @@ impl Policy {
             &known(ASSOCIATED_TOKEN),
         );
         let static_key = |index: usize| message.keys.get(index).copied();
+        let limited_mints: Vec<[u8; 32]> = self
+            .daily_limits
+            .keys()
+            .filter_map(|key| key.strip_prefix("solana:"))
+            .filter_map(|mint| solana::key(mint).ok())
+            .collect();
         let (mut unit_limit, mut unit_price, mut tipped) = (1_400_000u128, 0u128, 0u128);
         for (position, instruction) in message.instructions.iter().enumerate() {
             let Some(program) = static_key(instruction.program) else {
@@ -578,10 +476,16 @@ impl Policy {
                         MAX_TOKEN_ACCOUNT_RENT_LAMPORTS,
                     );
                 }
-            } else if program_name == JUPITER {
-                if let Err(reason) = jupiter_route(data, instruction.accounts.len(), &account, own)
-                {
-                    refuse(&mut decision, &reason);
+            } else if program_name == jupiter::PROGRAM {
+                match jupiter::route(
+                    data,
+                    instruction.accounts.len(),
+                    &account,
+                    own,
+                    &limited_mints,
+                ) {
+                    Ok((key, sold)) => self.spend(&mut decision, key, sold),
+                    Err(reason) => refuse(&mut decision, &reason),
                 }
             } else {
                 refuse(

@@ -1,5 +1,7 @@
 pub mod abi;
 pub mod evm;
+pub mod jupiter;
+mod jupiter_swaps;
 pub mod keystore;
 pub mod ledger;
 pub mod pda;

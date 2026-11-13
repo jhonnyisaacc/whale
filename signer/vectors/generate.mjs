@@ -88,6 +88,7 @@ const TOKEN_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ATA_ID = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const USDC_MINT_ID = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const BONK_MINT_ID = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
 const ata = (owner, mint, program) => Buffer.from(PublicKey.findProgramAddressSync([new PublicKey(owner).toBuffer(), new PublicKey(program).toBuffer(), new PublicKey(mint).toBuffer()], new PublicKey(ATA_ID))[0].toBytes());
 const SOL_DEST = Buffer.alloc(32, 0x33);
 const STRANGER = Buffer.alloc(32, 0x44);
@@ -116,54 +117,75 @@ const createAta = message({ keys: [solanaOwn, DEST_USDC, SOL_DEST, USDC_MINT, SY
 const OWN_USDC = PublicKey.findProgramAddressSync([solanaOwn, TOKEN_PROGRAM.toBuffer(), USDC_MINT], ATA_PROGRAM)[0].toBuffer();
 const createOwnAta = message({ keys: [solanaOwn, OWN_USDC, USDC_MINT, SYSTEM, TOKEN_PROGRAM.toBuffer(), ATA_PROGRAM.toBuffer()], instructions: [ix(5, [0, 1, 0, 2, 3, 4], Buffer.from([1]))] });
 
+const WHIRLPOOL = Buffer.from([17, 1]);
+const step = (swap = WHIRLPOOL, input = 0, output = 1) => Buffer.concat([swap, Buffer.from([100, input, output])]);
+const routeArgs = ({ discriminator = "e517cb977ae3ad2a", id = null, steps = [step()], sold = 1_000_000n, tail = Buffer.alloc(0) } = {}) =>
+  Buffer.concat([Buffer.from(discriminator, "hex"), id === null ? Buffer.alloc(0) : Buffer.from([id]), u32(steps.length), ...steps, u64(sold), u64(1), Buffer.from([50, 0, 0]), tail]);
+
 function jupiterCases() {
   const ownUsdc = ata(solanaOwn, USDC_MINT_ID, TOKEN_ID);
+  const ownBonk = ata(solanaOwn, BONK_MINT_ID, TOKEN_ID);
   const strangerUsdc = ata(STRANGER, USDC_MINT_ID, TOKEN_ID);
-  const routeMessage = ({ authority = solanaOwn, destination = ownUsdc, second = JUPITER, outputMint = Buffer.from(bs58.decode(USDC_MINT_ID)), fee = JUPITER, discriminator = "e517cb977ae3ad2a", mintFromLookup = false } = {}) => {
-    const routeKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_ID)), Buffer.alloc(32, 0x51), destination, outputMint, Buffer.alloc(32, 0x52), JUPITER, COMPUTE];
+  const routeMessage = ({ authority = solanaOwn, source = WRAPPED_SOL, destination = ownUsdc, second = JUPITER, outputMint = Buffer.from(bs58.decode(USDC_MINT_ID)), fee = JUPITER, data = routeArgs(), mintFromLookup = false } = {}) => {
+    const routeKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_ID)), source, destination, outputMint, Buffer.alloc(32, 0x52), JUPITER, COMPUTE];
     if (!authority.equals(solanaOwn)) routeKeys.push(authority);
     if (!second.equals(JUPITER)) routeKeys.push(second);
     if (!fee.equals(JUPITER)) routeKeys.push(fee);
     const index = (key) => routeKeys.findIndex((entry) => entry.equals(key));
     const mint = mintFromLookup ? routeKeys.length : 4;
     const accounts = [1, index(authority), 2, 3, index(second), mint, index(fee), 5, 6];
-    const instructions = [limit(7, 300_000), price(7, 100), ix(6, accounts, Buffer.concat([Buffer.from(discriminator, "hex"), Buffer.alloc(16, 1)]))];
+    const instructions = [limit(7, 300_000), price(7, 100), ix(6, accounts, data)];
     if (!mintFromLookup) return message({ keys: routeKeys, instructions });
     return message({ version: 0, keys: routeKeys, instructions, lookups: [{ key: Buffer.alloc(32, 7), writable: [1] }] });
   };
+  const sellUsdc = (sold) => routeMessage({ source: ownUsdc, destination: WRAPPED_SOL, outputMint: WSOL_MINT.toBuffer(), data: routeArgs({ sold }) });
   const ownUsdc2022 = ata(solanaOwn, USDC_MINT_ID, TOKEN_2022_ID);
-  const sharedKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_2022_ID)), Buffer.alloc(32, 0x61), Buffer.alloc(32, 0x62), Buffer.alloc(32, 0x63), Buffer.alloc(32, 0x64), ownUsdc2022, Buffer.alloc(32, 0x65), Buffer.from(bs58.decode(USDC_MINT_ID)), JUPITER, COMPUTE];
-  const shared = message({ keys: sharedKeys, instructions: [ix(9, [1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 1, 9, 9], Buffer.concat([Buffer.from("c1209b3341d69c81", "hex"), Buffer.alloc(8, 2)]))] });
+  const sharedKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_2022_ID)), Buffer.alloc(32, 0x61), WRAPPED_SOL, Buffer.alloc(32, 0x63), Buffer.alloc(32, 0x64), ownUsdc2022, WSOL_MINT.toBuffer(), Buffer.from(bs58.decode(USDC_MINT_ID)), JUPITER, COMPUTE];
+  const shared = message({ keys: sharedKeys, instructions: [ix(9, [1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 1, 9, 9], routeArgs({ discriminator: "c1209b3341d69c81", id: 3 }))] });
   const usdc = Buffer.from(bs58.decode(USDC_MINT_ID));
   const swapKeys = [solanaOwn, WRAPPED_SOL, ownUsdc, WSOL_MINT.toBuffer(), usdc, SYSTEM, TOKEN_PROGRAM.toBuffer(), ATA_PROGRAM.toBuffer(), JUPITER, COMPUTE, Buffer.alloc(32, 0x52)];
-  const swap = message({
-    keys: swapKeys,
-    instructions: [
-      limit(9, 300_000),
-      price(9, 100_000),
-      ix(7, [0, 1, 0, 3, 5, 6], Buffer.from([1])),
-      transfer(5, 1, 100_000_000),
-      ix(6, [1], Buffer.from([17])),
-      ix(7, [0, 2, 0, 4, 5, 6], Buffer.from([1])),
-      ix(8, [6, 0, 1, 2, 8, 4, 8, 10, 8], Buffer.concat([Buffer.from("e517cb977ae3ad2a", "hex"), Buffer.alloc(16, 1)])),
-      ix(6, [1, 0, 0], Buffer.from([9])),
-    ],
-  });
+  const solSwap = (lamports) =>
+    message({
+      keys: swapKeys,
+      instructions: [
+        limit(9, 300_000),
+        price(9, 100_000),
+        ix(7, [0, 1, 0, 3, 5, 6], Buffer.from([1])),
+        transfer(5, 1, lamports),
+        ix(6, [1], Buffer.from([17])),
+        ix(7, [0, 2, 0, 4, 5, 6], Buffer.from([1])),
+        ix(8, [6, 0, 1, 2, 8, 4, 8, 10, 8], routeArgs({ sold: lamports })),
+        ix(6, [1, 0, 0], Buffer.from([9])),
+      ],
+    });
+  const whirlpoolV2 = Buffer.from([47, 1, 1, 1, 0, 0, 0, 0, 2]);
   return [
-    ["a jupiter swap from SOL to USDC that creates both token accounts", swap, "signed"],
+    ["a jupiter swap from SOL to USDC that creates both token accounts", solSwap(1_000_000), "signed"],
+    ["a jupiter swap that wraps a million SOL and sells it", solSwap(1_000_000_000_000_000), "refused", "above its whole 2000000000 daily limit"],
     ["a jupiter route into this wallet's USDC account", routeMessage(), "signed"],
     ["a jupiter shared route into this wallet's Token-2022 account", shared, "signed"],
+    ["a jupiter route selling 0.6 USDC", sellUsdc(600_000n), "signed"],
+    ["a jupiter route selling a million USDC", sellUsdc(1_000_000_000_000n), "refused", "above its whole 1000000 daily limit"],
+    ["a jupiter route selling the most BONK a u64 holds", routeMessage({ source: ownBonk, destination: WRAPPED_SOL, outputMint: WSOL_MINT.toBuffer(), data: routeArgs({ sold: 2n ** 64n - 1n }) }), "refused", "mint with a daily limit"],
+    ["a jupiter route selling from someone else's account", routeMessage({ source: strangerUsdc }), "refused", "mint with a daily limit"],
+    ["a jupiter route with bytes after its arguments", routeMessage({ data: routeArgs({ tail: Buffer.from([0]) }) }), "refused", "bytes after its arguments"],
+    ["a jupiter route whose arguments stop early", routeMessage({ data: Buffer.concat([Buffer.from("e517cb977ae3ad2a", "hex"), u32(1), WHIRLPOOL]) }), "refused", "truncated"],
+    ["a jupiter route through a swap variant the IDL does not have", routeMessage({ data: routeArgs({ steps: [step(Buffer.from([255]))] }) }), "refused", "not in the pinned IDL"],
+    ["a jupiter route through a swap the signer cannot size", routeMessage({ data: routeArgs({ steps: [step(Buffer.from([111, 0, 0, 0, 0, 0]))] }) }), "refused", "cannot size the Jupiter swap DynamicV1"],
+    ["a jupiter route through two steps, one with remaining accounts", routeMessage({ data: routeArgs({ steps: [step(whirlpoolV2), step(Buffer.from([7]), 1, 2)] }) }), "signed"],
     ["a jupiter route whose output mint comes from a lookup table", routeMessage({ mintFromLookup: true }), "signed"],
     ["a jupiter route from a lookup table mint into someone else's account", routeMessage({ mintFromLookup: true, destination: strangerUsdc }), "refused", "not this wallet's"],
     ["a jupiter route into someone else's account", routeMessage({ destination: strangerUsdc }), "refused", "not this wallet's"],
     ["a jupiter route with a platform fee", routeMessage({ fee: Buffer.alloc(32, 0x77) }), "refused", "platform fee"],
     ["a jupiter route signed for another authority", routeMessage({ authority: STRANGER }), "refused", "authority"],
-    ["a jupiter instruction that is not an exact-in route", routeMessage({ discriminator: "0102030405060708" }), "refused", "exact-in"],
-    ["a jupiter route into this wallet's wrapped SOL account", routeMessage({ destination: WRAPPED_SOL, outputMint: WSOL_MINT.toBuffer() }), "signed"],
+    ["a jupiter instruction that is not an exact-in route", routeMessage({ data: routeArgs({ discriminator: "0102030405060708" }) }), "refused", "exact-in"],
+    ["a jupiter route into this wallet's wrapped SOL account", routeMessage({ source: ownUsdc, destination: WRAPPED_SOL, outputMint: WSOL_MINT.toBuffer(), data: routeArgs({ sold: 500_000n }) }), "signed"],
     ["a jupiter route whose second destination is someone else's account", routeMessage({ second: strangerUsdc }), "refused", "not this wallet's"],
-    ["a jupiter exact_out_route", routeMessage({ discriminator: "d033ef977b2bed5c" }), "refused", "exact-in"],
-    ["a jupiter shared_accounts_exact_out_route", routeMessage({ discriminator: "b0d169a89a7d453e" }), "refused", "exact-in"],
-    ["a jupiter route_v2", routeMessage({ discriminator: "bb64facc31c4af14" }), "refused", "exact-in"],
+    ["a jupiter route_with_token_ledger, whose sold amount is not in the instruction", routeMessage({ data: routeArgs({ discriminator: "96564774a75d0e68" }) }), "refused", "exact-in"],
+    ["a jupiter shared_accounts_route_with_token_ledger", routeMessage({ data: routeArgs({ discriminator: "e6798f50779f6aaa", id: 3 }) }), "refused", "exact-in"],
+    ["a jupiter exact_out_route", routeMessage({ data: routeArgs({ discriminator: "d033ef977b2bed5c" }) }), "refused", "exact-in"],
+    ["a jupiter shared_accounts_exact_out_route", routeMessage({ data: routeArgs({ discriminator: "b0d169a89a7d453e" }) }), "refused", "exact-in"],
+    ["a jupiter route_v2", routeMessage({ data: routeArgs({ discriminator: "bb64facc31c4af14" }) }), "refused", "exact-in"],
     ["a jupiter route with too few accounts", message({ keys: [solanaOwn, JUPITER], instructions: [ix(1, [0, 0, 0], Buffer.from("e517cb977ae3ad2a", "hex"))] }), "refused", "has no account 6"],
   ];
 }
@@ -206,7 +228,7 @@ const policy = {
     programs: [JUPITER_ID],
     destinations: [bs58.encode(SOL_DEST)],
     maxPriorityLamports: "100000",
-    dailyLimits: { "solana:native": "2000000000" },
+    dailyLimits: { "solana:native": "2000000000", [`solana:${USDC_MINT_ID}`]: "1000000" },
   },
 };
 writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);

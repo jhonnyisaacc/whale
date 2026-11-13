@@ -143,47 +143,147 @@
       "job": {
         "id": "a jupiter swap from SOL to USDC that creates both token accounts",
         "kind": "solana",
-        "message": "AQAKC6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu40j7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqAabiFf+q4GE+2h/Y0YYwDXaxDncGus7VZig8AAAAAABxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQgJAAUC4JMEAAkACQOghgEAAAAAAAcGAAEAAwUGAQEFAgABDAIAAAAA4fUFAAAAAAYBAQERBwYAAgAEBQYBAQgJBgABAggECAoIGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQYDAQAAAQk="
+        "message": "AQAKC6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu40j7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqAabiFf+q4GE+2h/Y0YYwDXaxDncGus7VZig8AAAAAABxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQgJAAUC4JMEAAkACQOghgEAAAAAAAcGAAEAAwUGAQEFAgABDAIAAABAQg8AAAAAAAYBAQERBwYAAgAEBQYBAQgJBgABAggECAoIJOUXy5d6460qAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAAYDAQAAAQk="
       },
       "expect": "signed",
-      "signature": "5aKaGdmhbPYQFb29wAq1LkAEbXwgGJJBJWXiqj1i8oFkX71KpPeGH8SwRX2zszHZP4ZQhjFfqFVuNGnmQarhSi3D"
+      "signature": "5vADzbPVoDMzoCEpo5BwZVG28Bfcq78uAjSpnGF2rvjzjLw2tsPH8Z6xyv22qcXJFC5jw3QijST6HpBrLmbsZQuZ"
+    },
+    {
+      "name": "a jupiter swap that wraps a million SOL and sells it",
+      "job": {
+        "id": "a jupiter swap that wraps a million SOL and sells it",
+        "kind": "solana",
+        "message": "AQAKC6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu40j7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqAabiFf+q4GE+2h/Y0YYwDXaxDncGus7VZig8AAAAAABxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQgJAAUC4JMEAAkACQOghgEAAAAAAAcGAAEAAwUGAQEFAgABDAIAAAAAgMakfo0DAAYBAQERBwYAAgAEBQYBAQgJBgABAggECAoIJOUXy5d6460qAQAAABEBZAABAIDGpH6NAwABAAAAAAAAADIAAAYDAQAAAQk="
+      },
+      "expect": "refused",
+      "reason": "above its whole 2000000000 daily limit"
     },
     {
       "name": "a jupiter route into this wallet's USDC account",
       "job": {
         "id": "a jupiter route into this wallet's USDC account",
         "kind": "solana",
-        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQ=="
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJOUXy5d6460qAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "signed",
-      "signature": "32pyvex8M1qRZ8SiDZQJzGjVXT8gwqxiKg4dgBW16RszQDhobkM62gvzMueAkx2RaXoVJB8mR7BpNtfZcLnbm2Vf"
+      "signature": "H1Nznifc3kKLTRzQeaUGCu4MaUozWEtN3kevuCzDqeo48KNXwHtGn7nZFKUyCsiPJMnnGfRjQU85rBHTM3twTis"
     },
     {
       "name": "a jupiter shared route into this wallet's Token-2022 account",
       "job": {
         "id": "a jupiter shared route into this wallet's Token-2022 account",
         "kind": "solana",
-        "message": "AQAKC6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324e51j94YQl285GzN2rYa/E2DuQ0n/r35KNihi/xhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZJteqaFqu6n2Syu3XxmI4SG6QuZmT2FQ0FiRVuIAjUlvZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWXG+nrzvtutOj1l82qryXQxsbvkwtL24OR8pgIDRS9dYQR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEJDQECAAMEBQYHCAkBCQkQwSCbM0HWnIECAgICAgICAg=="
+        "message": "AQAKC6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324e51j94YQl285GzN2rYa/E2DuQ0n/r35KNihi/xhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRU+MGNc+Z3L1H89UVydnFVKguPS4imE2Fb6ueTOMruNY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZJteqaFqu6n2Syu3XxmI4SG6QuZmT2FQ0FiRVuIAjUlvBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAHG+nrzvtutOj1l82qryXQxsbvkwtL24OR8pgIDRS9dYQR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEJDQECAAMEBQYHCAkBCQklwSCbM0HWnIEDAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "signed",
-      "signature": "5KRKP1hdc6A1PQqYPrTHgsb5iY4cHMJaJ3Fz3aXeCFEptyRiTgCEHnK8mWkCNL4VDYuHCVfx1ukDP4ujuaytLP7m"
+      "signature": "46Qai42PBkrb3fGebjHoB7HtLeTA4jhn1a6ovTkRBUgvcbUWXkVTJgWwwKdP1CzoArSoAKyETvn2cKwQGUp9cR1J"
+    },
+    {
+      "name": "a jupiter route selling 0.6 USDC",
+      "job": {
+        "id": "a jupiter route selling 0.6 USDC",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkj7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqBU+MGNc+Z3L1H89UVydnFVKguPS4imE2Fb6ueTOMruNBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJOUXy5d6460qAQAAABEBZAABwCcJAAAAAAABAAAAAAAAADIAAA=="
+      },
+      "expect": "signed",
+      "signature": "2jYRtnzLhtwXwyAr9jb7cw3M1cYrkwizvLoyMitu9BLohYi4W5zUQdqifo5Xucs88ULVHeUxumVwJjMy5tMB8wR3"
+    },
+    {
+      "name": "a jupiter route selling a million USDC",
+      "job": {
+        "id": "a jupiter route selling a million USDC",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkj7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqBU+MGNc+Z3L1H89UVydnFVKguPS4imE2Fb6ueTOMruNBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJOUXy5d6460qAQAAABEBZAABABCl1OgAAAABAAAAAAAAADIAAA=="
+      },
+      "expect": "refused",
+      "reason": "above its whole 1000000 daily limit"
+    },
+    {
+      "name": "a jupiter route selling the most BONK a u64 holds",
+      "job": {
+        "id": "a jupiter route selling the most BONK a u64 holds",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKnt0rphP/7sgFEA/K+VCd2v8xuC2x4acC6aeG8/kcaaSBU+MGNc+Z3L1H89UVydnFVKguPS4imE2Fb6ueTOMruNBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJOUXy5d6460qAQAAABEBZAAB//////////8BAAAAAAAAADIAAA=="
+      },
+      "expect": "refused",
+      "reason": "mint with a daily limit"
+    },
+    {
+      "name": "a jupiter route selling from someone else's account",
+      "job": {
+        "id": "a jupiter route selling from someone else's account",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlkdhBQopTOjTcWuwmX1kKiBDJmkUZ7pfhf26jdfLJ/XCPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJOUXy5d6460qAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
+      },
+      "expect": "refused",
+      "reason": "mint with a daily limit"
+    },
+    {
+      "name": "a jupiter route with bytes after its arguments",
+      "job": {
+        "id": "a jupiter route with bytes after its arguments",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJeUXy5d6460qAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAAA="
+      },
+      "expect": "refused",
+      "reason": "bytes after its arguments"
+    },
+    {
+      "name": "a jupiter route whose arguments stop early",
+      "job": {
+        "id": "a jupiter route whose arguments stop early",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGDuUXy5d6460qAQAAABEB"
+      },
+      "expect": "refused",
+      "reason": "truncated"
+    },
+    {
+      "name": "a jupiter route through a swap variant the IDL does not have",
+      "job": {
+        "id": "a jupiter route through a swap variant the IDL does not have",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGI+UXy5d6460qAQAAAP9kAAFAQg8AAAAAAAEAAAAAAAAAMgAA"
+      },
+      "expect": "refused",
+      "reason": "not in the pinned IDL"
+    },
+    {
+      "name": "a jupiter route through a swap the signer cannot size",
+      "job": {
+        "id": "a jupiter route through a swap the signer cannot size",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGKOUXy5d6460qAQAAAG8AAAAAAGQAAUBCDwAAAAAAAQAAAAAAAAAyAAA="
+      },
+      "expect": "refused",
+      "reason": "cannot size the Jupiter swap DynamicV1"
+    },
+    {
+      "name": "a jupiter route through two steps, one with remaining accounts",
+      "job": {
+        "id": "a jupiter route through two steps, one with remaining accounts",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGL+UXy5d6460qAgAAAC8BAQEAAAAAAmQAAQdkAQJAQg8AAAAAAAEAAAAAAAAAMgAA"
+      },
+      "expect": "signed",
+      "signature": "4bBmFG4AjSKafhHTY9LqFF9CKi4dzqUV7GdiEpkE2Dqw7jRkP7mHZSnKXJNy142EkrxiRenwbTTF4Fz3umAusknQ"
     },
     {
       "name": "a jupiter route whose output mint comes from a lookup table",
       "job": {
         "id": "a jupiter route whose output mint comes from a lookup table",
         "kind": "solana",
-        "message": "gAEABwigmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8Abd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVEj7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDBwAFAuCTBAAHAAkDZAAAAAAAAAAGCQEAAgMGCAYFBhjlF8uXeuOtKgEBAQEBAQEBAQEBAQEBAQEBBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+        "message": "gAEABwigmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8Abd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu40j7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDBwAFAuCTBAAHAAkDZAAAAAAAAAAGCQEAAgMGCAYFBiTlF8uXeuOtKgEAAAARAWQAAUBCDwAAAAAAAQAAAAAAAAAyAAABBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
       },
       "expect": "signed",
-      "signature": "tE2fK67KXf7hg6Aya2Fpfs1V5FMNCw6kBc3Pvrmfhio3p9aA3Xiz9UUfPCE37A113GQYTSn6YnGCgKfFV6cbksB"
+      "signature": "2aJoeKTDiLXYBEY65aK8nMtSTSibpmpYXdBT4Jw1YfBbDCdWxGsGxApwiJ8v8hrMshimk9fPaeWbTBRvdgHzP1dS"
     },
     {
       "name": "a jupiter route from a lookup table mint into someone else's account",
       "job": {
         "id": "a jupiter route from a lookup table mint into someone else's account",
         "kind": "solana",
-        "message": "gAEABwigmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8Abd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFkdhBQopTOjTcWuwmX1kKiBDJmkUZ7pfhf26jdfLJ/XMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDBwAFAuCTBAAHAAkDZAAAAAAAAAAGCQEAAgMGCAYFBhjlF8uXeuOtKgEBAQEBAQEBAQEBAQEBAQEBBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+        "message": "gAEABwigmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8Abd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpFT4wY1z5ncvUfz1RXJ2cVUqC49LiKYTYVvq55M4yu41kdhBQopTOjTcWuwmX1kKiBDJmkUZ7pfhf26jdfLJ/XMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlIEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkDBwAFAuCTBAAHAAkDZAAAAAAAAAAGCQEAAgMGCAYFBiTlF8uXeuOtKgEAAAARAWQAAUBCDwAAAAAAAQAAAAAAAAAyAAABBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
       },
       "expect": "refused",
       "reason": "not this wallet's"
@@ -193,7 +293,7 @@
       "job": {
         "id": "a jupiter route into someone else's account",
         "kind": "solana",
-        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUWR2EFCilM6NNxa7CZfWQqIEMmaRRnul+F/bqN18sn9cxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQ=="
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jWR2EFCilM6NNxa7CZfWQqIEMmaRRnul+F/bqN18sn9cxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJOUXy5d6460qAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "refused",
       "reason": "not this wallet's"
@@ -203,7 +303,7 @@
       "job": {
         "id": "a jupiter route with a platform fee",
         "kind": "solana",
-        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBAAIDBgQIBQYY5RfLl3rjrSoBAQEBAQEBAQEBAQEBAQEB"
+        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBAAIDBgQIBQYk5RfLl3rjrSoBAAAAEQFkAAFAQg8AAAAAAAEAAAAAAAAAMgAA"
       },
       "expect": "refused",
       "reason": "platform fee"
@@ -213,7 +313,7 @@
       "job": {
         "id": "a jupiter route signed for another authority",
         "kind": "solana",
-        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAABERERERERERERERERERERERERERERERERERERERERERAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBCAIDBgQGBQYY5RfLl3rjrSoBAQEBAQEBAQEBAQEBAQEB"
+        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAABERERERERERERERERERERERERERERERERERERERERERAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBCAIDBgQGBQYk5RfLl3rjrSoBAAAAEQFkAAFAQg8AAAAAAAEAAAAAAAAAMgAA"
       },
       "expect": "refused",
       "reason": "authority"
@@ -223,7 +323,7 @@
       "job": {
         "id": "a jupiter instruction that is not an exact-in route",
         "kind": "solana",
-        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGAECAwQFBgcIAQEBAQEBAQEBAQEBAQEBAQ=="
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJAECAwQFBgcIAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "refused",
       "reason": "exact-in"
@@ -233,27 +333,47 @@
       "job": {
         "id": "a jupiter route into this wallet's wrapped SOL account",
         "kind": "solana",
-        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRURU+MGNc+Z3L1H89UVydnFVKguPS4imE2Fb6ueTOMruNBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGOUXy5d6460qAQEBAQEBAQEBAQEBAQEBAQ=="
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkj7VLLB61fizNTTp9OxJt62ZSIeHFENEbYV4AuVH6QqBU+MGNc+Z3L1H89UVydnFVKguPS4imE2Fb6ueTOMruNBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJOUXy5d6460qAQAAABEBZAABIKEHAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "signed",
-      "signature": "49sqQKPGQUYbwtJFeRDfqK1RGLFHqGCkbFLCcHeJ5na5rrwUm7nwvEy5xK9HkodCoXAEYZRFAanEW6HALef3W5Fh"
+      "signature": "4NEDZAPSTfNf7n4grRQKSLh9rCHG3WeAoVkWzCXHKoo2TmDkYSh9yVxB79TdCX1o7PjZSp5rZAKV4vbThcyD4Csp"
     },
     {
       "name": "a jupiter route whose second destination is someone else's account",
       "job": {
         "id": "a jupiter route whose second destination is someone else's account",
         "kind": "solana",
-        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAABkdhBQopTOjTcWuwmX1kKiBDJmkUZ7pfhf26jdfLJ/XAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBAAIDCAQGBQYY5RfLl3rjrSoBAQEBAQEBAQEBAQEBAQEB"
+        "message": "AQAICaCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAABkdhBQopTOjTcWuwmX1kKiBDJmkUZ7pfhf26jdfLJ/XAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAwcABQLgkwQABwAJA2QAAAAAAAAABgkBAAIDCAQGBQYk5RfLl3rjrSoBAAAAEQFkAAFAQg8AAAAAAAEAAAAAAAAAMgAA"
       },
       "expect": "refused",
       "reason": "not this wallet's"
+    },
+    {
+      "name": "a jupiter route_with_token_ledger, whose sold amount is not in the instruction",
+      "job": {
+        "id": "a jupiter route_with_token_ledger, whose sold amount is not in the instruction",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJJZWR3SnXQ5oAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
+      },
+      "expect": "refused",
+      "reason": "exact-in"
+    },
+    {
+      "name": "a jupiter shared_accounts_route_with_token_ledger",
+      "job": {
+        "id": "a jupiter shared_accounts_route_with_token_ledger",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJeZ5j1B3n2qqAwEAAAARAWQAAUBCDwAAAAAAAQAAAAAAAAAyAAA="
+      },
+      "expect": "refused",
+      "reason": "exact-in"
     },
     {
       "name": "a jupiter exact_out_route",
       "job": {
         "id": "a jupiter exact_out_route",
         "kind": "solana",
-        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGNAz75d7K+1cAQEBAQEBAQEBAQEBAQEBAQ=="
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJNAz75d7K+1cAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "refused",
       "reason": "exact-in"
@@ -263,7 +383,7 @@
       "job": {
         "id": "a jupiter shared_accounts_exact_out_route",
         "kind": "solana",
-        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGLDRaaiafUU+AQEBAQEBAQEBAQEBAQEBAQ=="
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJLDRaaiafUU+AQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "refused",
       "reason": "exact-in"
@@ -273,7 +393,7 @@
       "job": {
         "id": "a jupiter route_v2",
         "kind": "solana",
-        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKlRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGGLtk+swxxK8UAQEBAQEBAQEBAQEBAQEBAQ=="
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkVPjBjXPmdy9R/PVFcnZxVSoLj0uIphNhW+rnkzjK7jSPtUssHrV+LM1NOn07Em3rZlIh4cUQ0RthXgC5UfpCoxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWFSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUgR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMHAAUC4JMEAAcACQNkAAAAAAAAAAYJAQACAwYEBgUGJLtk+swxxK8UAQAAABEBZAABQEIPAAAAAAABAAAAAAAAADIAAA=="
       },
       "expect": "refused",
       "reason": "exact-in"
