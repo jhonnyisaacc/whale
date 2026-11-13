@@ -67,7 +67,7 @@ To enable quotes, set `HOSTED_EXECUTOR_URL` (the executor's private address) and
 A client that only knows the URL `https://<gateway>/mcp` gets the 401 challenge, reads `/.well-known/oauth-protected-resource/mcp`, then `/.well-known/oauth-authorization-server`. The issuer is the bare origin.
 
 A client registers in one of two ways:
-- By its metadata document URL as `client_id`. The gateway fetches it over https only, from a host that resolves only to public addresses, with no redirects, 64 KiB at most, and caches it for an hour. The document's `client_id` must equal its URL.
+- By its metadata document URL as `client_id`. The gateway fetches it over https only, from a host that resolves only to public addresses, with no redirects, 64 KiB at most, and a five-second total deadline, and caches it for an hour. A document that fails to load or validate is not fetched again for a minute. The document's `client_id` must equal its URL.
 - Through `POST /oauth/register`, which the MCP spec now marks deprecated.
 
 Redirect URIs must be https, a loopback `http` address, or an app scheme such as `cursor://`. A redirect must match a registered URI exactly, except that a loopback redirect may use any port (OAuth 2.1 8.4.2).

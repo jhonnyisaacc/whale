@@ -10,13 +10,15 @@ const REDIRECT = "http://127.0.0.1:33418/callback";
 const LIMITS = { chains: ["base"], actions: ["swap"], maxTxUsd: 20, dailyUsd: 40 };
 const CIMD = "https://client.example/oauth/metadata.json";
 
-async function harness(documents: Record<string, unknown> = {}) {
+async function harness(documents: Record<string, unknown> = {}, now: () => number = Date.now) {
   const { pool, drop } = await migratedSchema();
+  const fetches: string[] = [];
   const fetchDocument = async (url: string) => {
+    fetches.push(url);
     if (!(url in documents)) throw new Error("no such document");
     return JSON.stringify(documents[url]);
   };
-  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, fetchDocument, executor: null });
+  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, fetchDocument, executor: null, now });
   const user = await signedInAccount(pool);
   const created = await createWallet(pool, user.accountId, { label: "main", level: "enclave" });
   const walletId = "walletId" in created ? created.walletId : "";
@@ -36,7 +38,7 @@ async function harness(documents: Record<string, unknown> = {}) {
     return { request, code, verifier, approved };
   };
   const mcp = (token: string) => app.inject({ method: "POST", url: "/mcp", headers: { authorization: `Bearer ${token}` }, payload: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
-  return { app, pool, user, walletId, form, authorize, connect, mcp, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, user, walletId, form, authorize, connect, mcp, fetches, drop: async () => (await app.close(), await drop()) };
 }
 
 async function register(form: (url: string, fields: Record<string, string>) => Promise<unknown>, app: Awaited<ReturnType<typeof harness>>["app"]) {
@@ -176,6 +178,21 @@ test("revoking a refresh token also stops the access tokens of that grant", { sk
     assert.equal((await form("/oauth/revoke", { token: pair.refresh_token })).statusCode, 200);
     assert.equal((await mcp(pair.access_token)).statusCode, 401);
     assert.equal((await form("/oauth/token", { grant_type: "refresh_token", refresh_token: pair.refresh_token, client_id: clientId })).json().error, "invalid_grant");
+  } finally {
+    await drop();
+  }
+});
+
+test("a metadata document that fails to load is not fetched again for a minute", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { authorize, fetches, drop } = await harness({}, () => clock);
+  try {
+    assert.equal((await authorize(CIMD)).reply.statusCode, 400);
+    assert.equal((await authorize(CIMD)).reply.statusCode, 400);
+    assert.equal(fetches.length, 1);
+    clock += 61_000;
+    assert.equal((await authorize(CIMD)).reply.statusCode, 400);
+    assert.equal(fetches.length, 2);
   } finally {
     await drop();
   }

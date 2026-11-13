@@ -4,7 +4,7 @@ import type pg from "pg";
 import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
-import { fetchMetadataDocument, isLoopbackRedirect, redirectMatches, registerClient, registrationSchema, resolveClient, type MetadataFetch } from "./oauth-clients.js";
+import { clientResolver, fetchMetadataDocument, isLoopbackRedirect, redirectMatches, registerClient, registrationSchema, type MetadataFetch } from "./oauth-clients.js";
 import { approveRequest, createRequest, denyRequest, exchangeCode, pendingRequest, refreshTokens, revokeToken } from "./oauth-store.js";
 import { agentLimitsSchema, limitsWithin } from "./policy.js";
 import { listWallets } from "./wallets.js";
@@ -31,7 +31,7 @@ function cors(reply: FastifyReply): FastifyReply {
 export function registerOAuthRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; fetchDocument?: MetadataFetch; now?: () => number }): void {
   const { config, pool } = deps;
   const now = deps.now ?? Date.now;
-  const fetchDocument = deps.fetchDocument ?? fetchMetadataDocument;
+  const resolveClient = clientResolver(pool, deps.fetchDocument ?? fetchMetadataDocument);
   const issuer = config.publicUrl.origin;
   const resource = new URL("/mcp", config.publicUrl).toString();
   const endpoint = (path: string) => new URL(path, config.publicUrl).toString();
@@ -75,7 +75,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
   app.get("/oauth/authorize", { config: perMinute(30) }, async (request, reply) => {
     const query = authorizeQuery.safeParse(request.query);
     if (!query.success) return reply.code(400).send({ error: "invalid_request" });
-    const client = await resolveClient(pool, query.data.client_id, fetchDocument, now());
+    const client = await resolveClient(query.data.client_id, now());
     if (!client) return reply.code(400).send({ error: "invalid_client" });
     if (!redirectMatches(client.redirectUris, query.data.redirect_uri)) return reply.code(400).send({ error: "invalid_redirect_uri" });
     if (query.data.response_type !== "code") return reply.code(400).send({ error: "unsupported_response_type" });
