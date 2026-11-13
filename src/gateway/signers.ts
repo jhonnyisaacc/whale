@@ -16,10 +16,12 @@ export function registrationMessage(walletId: string, code: string): string {
 }
 
 export async function newRegistrationCode(pool: pg.Pool, accountId: string, walletId: string, now = Date.now()): Promise<string | null> {
-  const wallet = await pool.query("SELECT 1 FROM wallets WHERE id = $1 AND account_id = $2 AND level = 'self_hosted' AND status = 'pending'", [walletId, accountId]);
-  if ((wallet.rowCount ?? 0) === 0) return null;
   const code = `wreg_${randomBytes(24).toString("base64url")}`;
-  await pool.query("INSERT INTO signer_registrations (code_hash, account_id, wallet_id, expires_at) VALUES ($1, $2, $3, $4)", [secretHash(code), accountId, walletId, new Date(now + REGISTRATION_TTL_MS)]);
+  const issued = await pool.query(
+    "INSERT INTO signer_registrations (code_hash, account_id, wallet_id, expires_at) SELECT $1, $2, w.id, $4 FROM (SELECT id FROM wallets WHERE id = $3 AND account_id = $2 AND level = 'self_hosted' AND status = 'pending' FOR SHARE) w",
+    [secretHash(code), accountId, walletId, new Date(now + REGISTRATION_TTL_MS)],
+  );
+  if ((issued.rowCount ?? 0) === 0) return null;
   await audit(pool, { accountId, walletId, actor: "user", action: "signer.code_issued" });
   return code;
 }

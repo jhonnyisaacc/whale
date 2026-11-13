@@ -6,9 +6,9 @@ import test from "node:test";
 import bs58 from "bs58";
 import { privateKeyToAccount } from "viem/accounts";
 import { buildGateway } from "../src/gateway/app.js";
-import { unfreezeAction } from "../src/gateway/policy-changes.js";
+import { freezeWallets, unfreezeAction } from "../src/gateway/policy-changes.js";
 import { signerCodeAction } from "../src/gateway/routes-signers.js";
-import { enqueueJob, LEASE_MS, registrationMessage } from "../src/gateway/signers.js";
+import { enqueueJob, LEASE_MS, newRegistrationCode, registrationMessage } from "../src/gateway/signers.js";
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
 import { softAuthenticator } from "./webauthn-fixtures.js";
@@ -349,6 +349,28 @@ test("a result is not stored for a frozen wallet or a job past its expiry", { sk
     assert.equal(late.statusCode, 409, late.body);
     assert.equal(late.json().error, "expired");
     assert.deepEqual((await signer.pool.query("SELECT status, result FROM signing_jobs WHERE id = $1", [lateId])).rows[0], { status: "expired", result: null });
+  } finally {
+    await signer.close();
+  }
+});
+
+test("a freeze that commits while a code is being issued leaves no usable code", { skip: !TEST_DATABASE_URL }, async () => {
+  const signer = await registeredSigner();
+  try {
+    const { pool, user } = signer;
+    const walletId = await signer.newWallet("office");
+    const racing = new Proxy(pool, {
+      get(target, key) {
+        if (key !== "query") return Reflect.get(target, key);
+        return async (text: string, values?: unknown[]) => {
+          if (typeof text === "string" && text.includes("INSERT INTO signer_registrations")) await freezeWallets(target, user.accountId, walletId);
+          return target.query(text, values);
+        };
+      },
+    });
+    assert.equal(await newRegistrationCode(racing, user.accountId, walletId), null);
+    const codes = await pool.query("SELECT count(*)::int AS n FROM signer_registrations WHERE wallet_id = $1 AND used_at IS NULL AND expires_at > now()", [walletId]);
+    assert.equal(codes.rows[0]?.n, 0);
   } finally {
     await signer.close();
   }
