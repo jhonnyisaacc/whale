@@ -5,7 +5,7 @@ import { audit, inTransaction } from "./accounts.js";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
 import { addPasskey, assertionPayload, REFUSED_STATUS, registrationOptions, registrationPayload } from "./passkeys.js";
-import { walletPolicySchema } from "./policy.js";
+import { storedPolicySchema } from "./policy.js";
 import { DELEGATE_USER_NAME, expectedPolicies, turnkeyTransports, verifyDelegation, type CreatedSubOrg, type DelegationConfig, type TurnkeyParent } from "./turnkey.js";
 import type { Registration } from "./webauthn.js";
 
@@ -120,7 +120,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     if (!wallet?.turnkey_sub_org_id || !wallet.turnkey_wallet_id || !wallet.solana) return reply.code(404).send({ error: "not_found" });
     const state = await deps.turnkey.readSubOrganization(wallet.turnkey_sub_org_id);
     const delegate = state.users.find((user) => user.apiPublicKeys.some((key) => key.toLowerCase() === deps.delegation?.delegatePublicKey));
-    const policy = walletPolicySchema.parse(wallet.document);
+    const policy = storedPolicySchema.parse(wallet.document);
     return {
       subOrganizationId: wallet.turnkey_sub_org_id,
       delegateUser: { userName: DELEGATE_USER_NAME, apiKeys: [{ apiKeyName: "whale-executor", publicKey: deps.delegation.delegatePublicKey, curveType: "API_KEY_CURVE_P256" }], authenticators: [], oauthProviders: [], userTags: [] },
@@ -139,7 +139,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     if (!wallet?.turnkey_sub_org_id || !wallet.turnkey_wallet_id || !wallet.turnkey_owner_user_id || !wallet.root_credential_id || !wallet.solana) return reply.code(404).send({ error: "not_found" });
     if (wallet.status !== "pending") return { walletId: wallet.id, status: wallet.status };
     const { turnkey_wallet_id: turnkeyWalletId, solana } = wallet;
-    const policy = walletPolicySchema.parse(wallet.document);
+    const policy = storedPolicySchema.parse(wallet.document);
     const state = await deps.turnkey.readSubOrganization(wallet.turnkey_sub_org_id);
     const verdict = verifyDelegation(state, {
       ownerUserId: wallet.turnkey_owner_user_id,

@@ -239,3 +239,26 @@ test("an enclave create on an account that already has a passkey needs a step-up
     await gateway.close();
   }
 });
+
+test("a chain this build dropped from the stored policy is left out of the delegation, which still reads and confirms", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, fake, user, newWallet, create, close } = await enclaveGateway();
+  try {
+    const walletId = await newWallet();
+    assert.equal((await (await create(walletId))()).statusCode, 201);
+    const url = `/api/wallets/${walletId}/enclave/delegation`;
+    const subOrganizationId = (await app.inject({ method: "GET", url, headers: user.headers })).json().subOrganizationId;
+    const state = fake.orgs.get(subOrganizationId) as SubOrgState;
+    state.users.push({ userId: randomUUID(), userName: "whale-delegate", credentialIds: [], apiPublicKeys: [DELEGATE_KEY] });
+    const baseline = (await app.inject({ method: "GET", url, headers: user.headers })).json().policies;
+
+    await pool.query(`UPDATE policies SET document = document || jsonb_build_object('chains', (document->'chains') || '["dogechain"]'::jsonb)`);
+    const delegation = await app.inject({ method: "GET", url, headers: user.headers });
+    assert.equal(delegation.statusCode, 200, delegation.body);
+    assert.deepEqual(delegation.json().policies, baseline);
+    state.policies = baseline;
+    const confirmed = await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/confirm`, headers: user.headers, payload: {} });
+    assert.deepEqual(confirmed.json(), { walletId, status: "active" });
+  } finally {
+    await close();
+  }
+});
