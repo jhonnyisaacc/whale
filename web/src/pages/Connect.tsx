@@ -3,6 +3,8 @@ import { api, ApiError, describe, type Limits, type Me, type Wallet } from "../a
 import { LimitsFields, limitsFrom } from "../components/LimitsFields.js";
 import { googleStart } from "./Login.js";
 
+const EXPIRED = "This connection request expired or was already answered. Start again from your app.";
+
 type Request = { client: { name: string; id: string; redirectHost: string; localhost: boolean } };
 
 // The MCP spec asks the server to show the client and get consent before any third-party sign-in, so this page names
@@ -22,7 +24,7 @@ export function Connect({ requestId }: { requestId: string }) {
         setRequest(reply);
         setName(reply.client.name.trim().slice(0, 64));
       })
-      .catch(() => setError("This connection request expired or was already answered. Start again from your app."));
+      .catch(() => setError(EXPIRED));
     api<Me>("/api/me")
       .then((reply) => {
         setMe(reply);
@@ -53,8 +55,13 @@ export function Connect({ requestId }: { requestId: string }) {
     }
   };
   const deny = async () => {
-    const reply = await api<{ redirect: string }>(`/oauth/requests/${encodeURIComponent(requestId)}/deny`, { method: "POST", body: {} }).catch(() => null);
-    if (reply) leave(reply.redirect);
+    setError(null);
+    try {
+      const reply = await api<{ redirect: string }>(`/api/oauth/requests/${encodeURIComponent(requestId)}/deny`, { method: "POST", body: {} });
+      leave(reply.redirect);
+    } catch (caught) {
+      setError(caught instanceof ApiError && caught.status === 404 ? EXPIRED : describe(caught));
+    }
   };
 
   if (error && !request) return <p className="error">{error}</p>;
