@@ -52,7 +52,7 @@ test("a gateway URL that does not parse is refused without echoing it", () => {
 test("a gateway URL whose host is a Whale key is refused before any request, without echoing it", async () => {
   let called = false;
   const fetchImpl = (async () => ((called = true), new Response("{}"))) as typeof fetch;
-  const key = "whale_0123456789ab_SECRETsecretSECRETsecretSECRETsecretSECRET1234";
+  const key = "whale_0123456789ab_SECRETSECRETSECRETSECRETSECRETSECRETSECRETSEC";
   for (const url of [`https://${key}`, `https://${key}/`, `https://${key.toUpperCase()}:8443`, `https://whale%5F0123456789ab_SECRET.example`, `https://mcp.${key}.example`]) {
     for (const make of [() => mcpEndpoint(url), () => createHostedClient({ gatewayUrl: url, apiKey: key, fetchImpl }), () => createBridge({ gatewayUrl: url, apiKey: key, fetchImpl })]) {
       assert.throws(make, (error: Error) => error.message === "the gateway URL's host looks like a Whale API key" && !/secret/i.test(JSON.stringify(Object.entries(error))) && !/secret/i.test(String(error.cause ?? "")));
