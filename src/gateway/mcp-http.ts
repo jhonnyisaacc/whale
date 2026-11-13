@@ -5,12 +5,12 @@ import { bearerOf } from "../bearer.js";
 import { authenticateBearer, type AgentContext } from "./agents.js";
 import type { GatewayConfig } from "./config.js";
 import type { ExecutorClient } from "./executor-client.js";
+import { knownCredentials } from "./known-credentials.js";
 import { callHostedTool, HOSTED_TOOLS } from "./mcp-tools.js";
 import { listWallets } from "./wallets.js";
 
 export const MCP_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"] as const;
 const DEFAULT_VERSION = "2025-03-26";
-const KNOWN_CREDENTIALS = 10_000;
 
 type Rpc = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
 export type BearerAuth = (token: string) => Promise<AgentContext | null>;
@@ -32,12 +32,7 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
   const failures = app.createRateLimit({ max: 120, timeWindow: "1 minute" });
   const agentIds = new WeakMap<FastifyRequest, string>();
   const perAgent = app.createRateLimit({ max: 120, timeWindow: "1 minute", keyGenerator: (request) => agentIds.get(request) ?? request.ip });
-  const known = new Map<string, string>();
-  const remember = (digest: string, agentId: string) => {
-    known.delete(digest);
-    known.set(digest, agentId);
-    if (known.size > KNOWN_CREDENTIALS) known.delete(known.keys().next().value as string);
-  };
+  const known = knownCredentials();
   const spendAgent = async (request: FastifyRequest, agentId: string) => {
     agentIds.set(request, agentId);
     const limit = await perAgent(request);
@@ -65,7 +60,7 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     if (typeof version === "string" && !(MCP_VERSIONS as readonly string[]).includes(version)) return reply.code(400).send(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`));
     const token = bearerOf(request);
     const digest = token ? createHash("sha256").update(token).digest("base64url") : "";
-    const remembered = known.get(digest);
+    const remembered = known.agentOf(digest);
     let slot: string | undefined;
     if (remembered) {
       const wait = await spendAgent(request, remembered);
@@ -81,14 +76,14 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     try {
       agent = token ? await authenticate(token) : null;
       if (!agent) {
-        known.delete(digest);
+        known.forget(digest);
         await failures(request);
       }
     } finally {
       if (slot !== undefined) release(slot);
     }
     if (!agent) return challenge(config, reply, token ? "invalid_token" : undefined);
-    remember(digest, agent.agentId);
+    known.remember(digest, agent);
     const wait = remembered ? null : await spendAgent(request, agent.agentId);
     if (wait !== null) return reply.code(429).header("retry-after", wait).send({ error: "rate_limit" });
 
