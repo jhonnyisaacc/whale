@@ -8,7 +8,7 @@ Proposed on 2026-11-03. No code ships with this record. The `smart_account` leve
 
 ADR 0003 defines three signing levels. At the third, the chain itself enforces the rules: the user's key owns an on-chain account, and Whale holds a session key whose permissions an on-chain module checks. A full Whale compromise can then do only what the module allows.
 
-Whale must not write an account or a module contract. Its exposure would be the funds of every user, and it has no audit budget for that. This record picks the existing pieces and the limits they impose. The sources were read on 2026-11-03 and are listed at the end. Several of them are vendor documentation, and the steps under "Verify before code" exist for that reason.
+Whale must not write an account or a module contract. Its exposure would be the funds of every user, and it has no audit budget for that. This record picks the existing pieces and the limits they impose. The sources were read on 2026-11-03 and are listed at the end, with links and versions. Several of them are vendor documentation, and the steps under "Verify before code" exist for that reason.
 
 ## Options considered
 
@@ -83,8 +83,14 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
 
 ## Sources
 
-- Rhinestone Module SDK, Smart Sessions: the policies offered are spending limits, universal action, and sudo, among others.
-- Rhinestone module registry: lists audited 7579 modules with their auditor and report.
-- EIP-7702 guides (Fluent docs): 7702 adds delegation only. Session keys and limits live in the delegate.
-- Coinbase `SpendPermissionManager` (coinbase/spend-permissions, CDP and Base docs): a spender pulls an allowance.
-- Squads blog and docs on v4 spending limits.
+The versions below are the ones current on 2026-11-13. Repositories without a release tag are pinned to a commit.
+
+- [Smart Sessions](https://github.com/erc7579/smartsessions/tree/v1.0.0) by Rhinestone and Biconomy, release `v1.0.0` (commit `dc20f0b`). Its policies under `contracts/external/policies` include `ERC20SpendingLimitPolicy`, `UniActionPolicy`, `SudoPolicy`, `TimeFramePolicy`, and `UsageLimitPolicy`. The audit reports are in `audits/`. `UniActionPolicy` reads each rule's word at `4 + offset` and requires every rule to pass.
+- [Rhinestone Module SDK](https://www.npmjs.com/package/@rhinestone/module-sdk), `@rhinestone/module-sdk` `0.4.0`, which builds the session and policy configuration for Smart Sessions.
+- [Rhinestone module registry](https://github.com/rhinestonewtf/registry/tree/v1.0.2), release `v1.0.2`: the on-chain registry where attesters, such as auditors, attest to 7579 modules. Its README at that tag says the contract is in active development and not for production, which step 2 under "Verify before code" has to settle.
+- [Safe7579](https://github.com/rhinestonewtf/safe7579/tree/v2.0.0), release `v2.0.0`: the adapter that makes a Safe a 7579 account.
+- [ERC-7579](https://eips.ethereum.org/EIPS/eip-7579), [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702), and [RIP-7212](https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md).
+- [Fluent's EIP-7702 guide](https://docs.fluent.xyz/developer-guides/account-abstraction/eip-7702): 7702 adds delegation only. Session keys and limits live in the delegate.
+- [0x Settler](https://github.com/0xProject/0x-settler/tree/ad7c844c6a2a263ae6ba6c72700534aae9bb4a48), commit `ad7c844` on `master`. `src/allowanceholder/IAllowanceHolder.sol` defines `exec`, and `src/interfaces/ISettlerTakerSubmitted.sol` defines `execute`.
+- [Coinbase spend permissions](https://github.com/coinbase/spend-permissions/tree/v1.0.0), release `v1.0.0`, and the [Base spend permissions guide](https://docs.base.org/base-account/improve-ux/spend-permissions): a spender pulls an allowance.
+- Squads: the [spending limits blog post](https://squads.xyz/blog/spending-limits), the [spending limits reference](https://docs.squads.so/main/development/reference/spending-limits), and the [v4 program](https://github.com/Squads-Protocol/v4/tree/release-0.1.0) at tag `release-0.1.0`. The [Smart Account Program](https://github.com/Squads-Protocol/smart-account-program) has no release tag.
