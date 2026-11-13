@@ -44,8 +44,10 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
         await addDelegate(delegation);
         delegation = await api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`);
       }
-      setStatus("Approve the signing policy with your passkey…");
-      await addPolicies(delegation);
+      if (!delegation.policiesInPlace) {
+        setStatus("Approve the signing policy with your passkey…");
+        await addPolicies(delegation);
+      }
       setStatus("Checking Turnkey…");
       await api(`/api/wallets/${wallet.id}/enclave/confirm`, { method: "POST", body: {} });
       onDone();

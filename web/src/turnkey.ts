@@ -43,6 +43,7 @@ export type Delegation = {
   delegateUser: unknown;
   delegateUserId: string | null;
   policies: unknown[] | null;
+  policiesInPlace: boolean;
 };
 
 export function addDelegate(delegation: Delegation): Promise<unknown> {
