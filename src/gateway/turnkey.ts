@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { chainByKey } from "../chains.js";
-import { DEFAULT_MAX_VALUE_WEI } from "../signing-policy.js";
-import { turnkeyPolicyDocument } from "../signing-policy/turnkey.js";
+import { DEFAULT_MAX_VALUE_WEI, turnkeyPolicyDocument } from "../signing-policy/turnkey.js";
 import type { WalletPolicy } from "./policy.js";
 
 export type RootAuthenticator = { name: string; challenge: string; credentialId: string; clientDataJson: string; attestationObject: string; transports: string[] };
