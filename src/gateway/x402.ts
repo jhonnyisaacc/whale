@@ -71,6 +71,7 @@ export async function x402Quote(url: string, judge: JudgePayment, fetchImpl: Fet
     return { status: "unreadable", reason: error instanceof Error ? error.message : "the resource could not be reached" };
   }
   if (response.status !== 402) return { status: "no_payment_required", httpStatus: response.status };
+  if (response.truncated) return { status: "unreadable", reason: "the 402 body is larger than 64 KiB" };
   let challenge: z.infer<typeof challengeSchema>;
   try {
     challenge = challengeSchema.parse(JSON.parse(response.body));

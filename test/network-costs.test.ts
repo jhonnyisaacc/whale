@@ -136,7 +136,7 @@ test("an x402 challenge becomes a plan: the cheapest option that fits, and nothi
       { scheme: "upto", network: "base", maxAmountRequired: "1", asset: BASE_USDC, payTo: "0x5" },
     ],
   };
-  const quote = await x402Quote("https://paid.example/data", fits, async () => ({ status: 402, body: JSON.stringify(challenge) }));
+  const quote = await x402Quote("https://paid.example/data", fits, async () => ({ status: 402, body: JSON.stringify(challenge), truncated: false }));
   assert.equal(quote.status, "plan");
   if (quote.status !== "plan") return;
   assert.equal(quote.paid, false);
@@ -144,8 +144,8 @@ test("an x402 challenge becomes a plan: the cheapest option that fits, and nothi
   const reasons = quote.options.map((entry) => entry.reasons.join("; "));
   assert.match(reasons[1] ?? "", /not a supported mainnet/);
   assert.match(reasons[3] ?? "", /scheme upto/);
-  assert.deepEqual(await x402Quote("https://free.example", fits, async () => ({ status: 200, body: "" })), { status: "no_payment_required", httpStatus: 200 });
-  assert.equal((await x402Quote("https://odd.example", fits, async () => ({ status: 402, body: "pay me" }))).status, "unreadable");
+  assert.deepEqual(await x402Quote("https://free.example", fits, async () => ({ status: 200, body: "", truncated: false })), { status: "no_payment_required", httpStatus: 200 });
+  assert.equal((await x402Quote("https://odd.example", fits, async () => ({ status: 402, body: "pay me", truncated: false }))).status, "unreadable");
   assert.equal((await x402Quote("https://down.example", fits, async () => Promise.reject(new Error("host resolves to a private address")))).status, "unreadable");
 });
 
@@ -158,10 +158,15 @@ test("an x402 option that names no amount is refused, never planned as a free pa
       { scheme: "exact", network: "base", maxAmountRequired: "50000", asset: BASE_USDC, payTo: "0x8" },
     ],
   };
-  const quote = await x402Quote("https://paid.example/data", fits, async () => ({ status: 402, body: JSON.stringify(challenge) }));
+  const quote = await x402Quote("https://paid.example/data", fits, async () => ({ status: 402, body: JSON.stringify(challenge), truncated: false }));
   assert.equal(quote.status, "plan");
   if (quote.status !== "plan") return;
   assert.deepEqual(quote.options.map((entry) => entry.verdict), ["refused", "refused", "fits"]);
   assert.match(quote.options[0]?.reasons.join("; ") ?? "", /names no amount/);
   assert.equal(quote.best?.payTo, "0x8");
+});
+
+test("an x402 challenge cut short at the size cap is unreadable, not parsed", async () => {
+  const quote = await x402Quote("https://paid.example/data", fits, async () => ({ status: 402, body: JSON.stringify({ x402Version: 1, accepts: [{ scheme: "exact", network: "base", maxAmountRequired: "1000", asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", payTo: "0x000000000000000000000000000000000000dEaD" }] }), truncated: true }));
+  assert.equal(quote.status, "unreadable");
 });

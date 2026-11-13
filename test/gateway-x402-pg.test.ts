@@ -17,7 +17,7 @@ type Plan = { status: string; options: Option[]; best: Option | null };
 async function harness(options: { approvalAboveUsd: number | null; actions: ("swap" | "transfer")[] }) {
   const { pool, drop } = await migratedSchema();
   let challenge: unknown = null;
-  const fetch402 = async () => ({ status: 402, body: JSON.stringify(challenge) });
+  const fetch402 = async () => ({ status: 402, body: JSON.stringify(challenge), truncated: false });
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: null, delegation: null, fetch402 });
   const user = await signedInAccount(pool);
   const created = await createWallet(pool, user.accountId, { label: "main", level: "enclave" });
