@@ -31,6 +31,7 @@ impl Decision {
     }
 }
 
+const LAMPORTS_PER_SIGNATURE: u128 = 5_000;
 const SYSTEM: &str = "11111111111111111111111111111111";
 const COMPUTE_BUDGET: &str = "ComputeBudget111111111111111111111111111111";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -391,7 +392,7 @@ impl Policy {
                         if from == own && data.len() == 12 =>
                     {
                         if tips.contains(&to) {
-                            tipped += value;
+                            tipped = tipped.saturating_add(value);
                         } else if to == own || Some(to) == wrapped_sol {
                         } else if self.solana_destinations.contains(&to) {
                             self.spend(&mut decision, "solana:native".into(), value);
@@ -480,6 +481,11 @@ impl Policy {
                 self.max_priority_lamports
             ));
         }
+        self.spend(
+            &mut decision,
+            "solana:native".into(),
+            LAMPORTS_PER_SIGNATURE.saturating_add(priority),
+        );
         decision
     }
 }

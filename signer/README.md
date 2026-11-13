@@ -59,6 +59,8 @@ The instruction rules:
 | Associated Token Account | A create funded by this wallet, for itself or a listed destination |
 | Compute Budget | Unit price times unit limit, plus tips, at or under `solana.maxPriorityLamports` |
 
+Every Solana transaction also pays its fee from the wallet. The 5000 lamport signature fee, plus the priority fee at the requested unit limit (1,400,000 units when none is set), plus every Jito tip, counts against the `solana:native` daily limit.
+
 A rule that needs an account loaded from an address lookup table refuses.
 
 A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.

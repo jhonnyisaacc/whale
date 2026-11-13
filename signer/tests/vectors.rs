@@ -234,3 +234,31 @@ fn approvals_never_name_a_settler_and_count_against_the_day() {
     );
     let _ = std::fs::remove_file(ledger);
 }
+
+#[test]
+fn solana_fees_count_against_the_native_day() {
+    let mut file = load("policy.json");
+    file["solana"]["dailyLimits"]["solana:native"] = "2000000".into();
+    let policy = Policy::parse(&file).expect("policy");
+    let keys = keys();
+    let solana = load("solana.json");
+    let transfer = solana["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "sol transfer to a listed destination")
+        .unwrap()["job"]
+        .clone();
+    let ledger = fresh_ledger("ledger-solana-fees");
+    let decisions: Vec<Value> = (0..3)
+        .map(|_| run_job(&transfer, &policy, &keys, &ledger, DAY)["decision"].clone())
+        .collect();
+    assert_eq!(
+        decisions,
+        ["signed", "refused", "refused"],
+        "a 1000000 lamport transfer plus a 5200 lamport fee against a 2000000 lamport day"
+    );
+    let written: Value = serde_json::from_str(&std::fs::read_to_string(&ledger).unwrap()).unwrap();
+    assert_eq!(written["spent"]["solana:native"], "1005200");
+    let _ = std::fs::remove_file(ledger);
+}
