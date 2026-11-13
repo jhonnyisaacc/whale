@@ -116,7 +116,6 @@ const createAta = message({ keys: [solanaOwn, DEST_USDC, SOL_DEST, USDC_MINT, SY
 const OWN_USDC = PublicKey.findProgramAddressSync([solanaOwn, TOKEN_PROGRAM.toBuffer(), USDC_MINT], ATA_PROGRAM)[0].toBuffer();
 const createOwnAta = message({ keys: [solanaOwn, OWN_USDC, USDC_MINT, SYSTEM, TOKEN_PROGRAM.toBuffer(), ATA_PROGRAM.toBuffer()], instructions: [ix(5, [0, 1, 0, 2, 3, 4], Buffer.from([1]))] });
 
-// route: token program, authority, source, destination, optional destination, mint, platform fee, event authority, program.
 function jupiterCases() {
   const ownUsdc = ata(solanaOwn, USDC_MINT_ID, TOKEN_ID);
   const strangerUsdc = ata(STRANGER, USDC_MINT_ID, TOKEN_ID);
@@ -128,7 +127,6 @@ function jupiterCases() {
     const accounts = [1, index(authority), 2, 3, 6, 4, index(fee), 5, 6];
     return message({ keys: routeKeys, instructions: [limit(7, 300_000), price(7, 100), ix(6, accounts, Buffer.concat([Buffer.from(discriminator, "hex"), Buffer.alloc(16, 1)]))] });
   };
-  // shared_accounts_route: authority at 2, destination at 6, output mint at 8, platform fee at 9.
   const ownUsdc2022 = ata(solanaOwn, USDC_MINT_ID, TOKEN_2022_ID);
   const sharedKeys = [solanaOwn, Buffer.from(bs58.decode(TOKEN_2022_ID)), Buffer.alloc(32, 0x61), Buffer.alloc(32, 0x62), Buffer.alloc(32, 0x63), Buffer.alloc(32, 0x64), ownUsdc2022, Buffer.alloc(32, 0x65), Buffer.from(bs58.decode(USDC_MINT_ID)), JUPITER, COMPUTE];
   const shared = message({ keys: sharedKeys, instructions: [ix(9, [1, 2, 0, 3, 4, 5, 6, 7, 8, 9, 1, 9, 9], Buffer.concat([Buffer.from("c1209b3341d69c81", "hex"), Buffer.alloc(8, 2)]))] });

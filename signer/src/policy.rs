@@ -41,8 +41,6 @@ const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const JUPITER: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
-// Jupiter v6 exact-in routes, from the published IDL, as the app signing policy reads them. Exact-out and newer routes
-// are refused.
 struct JupiterRoute {
     discriminator: [u8; 8],
     authority: usize,
@@ -86,8 +84,6 @@ fn known(text: &str) -> [u8; 32] {
     solana::key(text).expect("a built-in program id is valid base58")
 }
 
-// The swap's output must land in this wallet: its wrapped SOL account or its associated token account for the output
-// mint, under Token or Token-2022. The optional second destination may be left as the Jupiter program id (unset).
 fn jupiter_route(
     data: &[u8],
     account: &dyn Fn(usize) -> Option<[u8; 32]>,
