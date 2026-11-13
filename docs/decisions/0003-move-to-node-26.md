@@ -2,7 +2,7 @@
 
 ## Context
 
-Whale runs Node 22, in the Dockerfile and in `.node-version`. Node 22 support ends on 2027-04-30. `.github/dependabot.yml` ignores major updates of Node and `@types/node`, so no pull request will warn about this date.
+Whale runs Node 22, in the Dockerfile and in `.node-version`. Node 22 support ends on 2027-04-30. `.github/dependabot.yml` ignores major updates of the Node image and of every npm package, `@types/node` included, so no pull request will warn about this date.
 
 ## Decision
 

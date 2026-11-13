@@ -115,3 +115,10 @@ test("dependabot waits at least as long as pnpm before proposing a release", () 
   assert.equal(days.length, ecosystems, "every ecosystem has a cooldown");
   for (const value of days) assert.ok(value >= 7, "cooldown is at least seven days");
 });
+
+test("dependabot never proposes a major npm update, so a person starts each one", () => {
+  const config = read(".github/dependabot.yml");
+  const npm = config.split(/\n  - package-ecosystem: /).find((block) => block.includes("package-ecosystem: npm") || block.startsWith("npm"));
+  assert.ok(npm, "an npm ecosystem is configured");
+  assert.match(npm, /ignore:\n\s+- dependency-name: "\*"\n\s+update-types:\n\s+- version-update:semver-major$/m);
+});
