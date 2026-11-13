@@ -55,3 +55,4 @@ jobs:
         with:
           persist-credentials: false
       - run: docker build --tag whale:ci .
+      - run: test "$(docker run --rm whale:ci node -p 'process.versions.node.split(".")[0]')" = "$(cat .node-version)"
