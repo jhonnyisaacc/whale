@@ -135,6 +135,19 @@ test("the Cargo source check refuses git, path, registry, patch, and replace in 
   for (const source of ['source = "git+https://example.com/foo#abc"\n', 'source = "registry+https://example.com/index"\n', 'source = "sparse+https://example.com/index/"\n', ""]) {
     assert.notDeepEqual(cargoLockSourceProblems(lock(source), "whale-signer"), [], source || "no source");
   }
+  const root = '[[package]]\nname = "whale-signer"\nversion = "0.1.0"\n';
+  const evil = 'name = "evil"\nversion = "1.0.0"\nsource = "git+https://example.com/evil#abc"\n';
+  const hidden = [
+    `version = 4\n\n[[package]] \n${evil}\n${root}`,
+    `version = 4\n\n[[package]] # x\n${evil}\n${root}`,
+    `version = 4\n\n[[ package ]]\nname = "evil"\nversion = "1.0.0"\n\n${root}`,
+    `version = 4\n\n[[package]]\r\n${evil.replace(/\n/g, "\r\n")}\r\n${root}`,
+    'version = 4\npackage = [\n { name = "whale-signer", version = "0.1.0" },\n { name = "evil", version = "1.0.0", source = "git+https://example.com/evil#abc" },\n]\n',
+    `version = 4\n\n${root}\n[[package]]\nname = "whale-signer"\nversion = "9.0.0"\nsource = 'git+https://example.com/evil#abc'\n`,
+    `version = 4\n\n[[package]]\nversion = "1.0.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nname = "evil"\nsource2 = "git+https://example.com/evil#abc"\n\n${root}`,
+    `version = 4\n\n[[package]]\nname="evil"\nversion="1.0.0"\nsource="git+https://example.com/evil#abc"\n\n${root}`,
+  ];
+  for (const lockfile of hidden) assert.notDeepEqual(cargoLockSourceProblems(lockfile, "whale-signer"), [], lockfile);
 });
 
 test("workflows pin every action and service image, and install only from the lockfile", () => {

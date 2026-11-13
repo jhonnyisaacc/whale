@@ -14,8 +14,12 @@ function decodeBasic(basic: string): string {
   });
 }
 
-function tomlKeyPaths(text: string): string[][] {
-  const paths: string[][] = [];
+type TomlEntry = { kind: "table" | "array-table" | "key"; path: string[]; value?: string };
+
+const LOCK_PACKAGE_KEYS = new Set(["name", "version", "source", "checksum", "dependencies"]);
+
+function tomlEntries(text: string): TomlEntry[] {
+  const entries: TomlEntry[] = [];
   let at = 0;
   const skipBlank = (newlines: boolean) => {
     for (;;) {
@@ -54,51 +58,51 @@ function tomlKeyPaths(text: string): string[][] {
     if (text[at] !== "=") throw new Error(`expected = at offset ${at}`);
     at += 1;
   };
-  const value = (prefix: string[]) => {
+  const value = (prefix: string[]): string | undefined => {
     skipBlank(false);
     const char = text[at];
-    if (char === '"' || char === "'") return void string();
+    if (char === '"' || char === "'") return string();
     if (char === "[" || char === "{") {
       const close = char === "[" ? "]" : "}";
       at += 1;
       for (;;) {
         skipBlank(true);
         if (at >= text.length) throw new Error(`unclosed ${char} in TOML`);
-        if (text[at] === close) return void (at += 1);
+        if (text[at] === close) {
+          at += 1;
+          return undefined;
+        }
         if (text[at] === ",") at += 1;
         else if (char === "[") value(prefix);
-        else {
-          const path = [...prefix, ...key()];
-          paths.push(path);
-          equals();
-          value(path);
-        }
+        else assign(prefix);
       }
     }
     while (at < text.length && !/[,\]}\s#]/.test(text[at])) at += 1;
+    return undefined;
+  };
+  const assign = (prefix: string[]) => {
+    const path = [...prefix, ...key()];
+    equals();
+    entries.push({ kind: "key", path, value: value(path) });
   };
   let table: string[] = [];
   for (;;) {
     skipBlank(true);
-    if (at >= text.length) return paths;
+    if (at >= text.length) return entries;
     if (text[at] === "[") {
       const brackets = text[at + 1] === "[" ? 2 : 1;
       at += brackets;
       table = key();
+      if (!text.startsWith("]".repeat(brackets), at)) throw new Error(`unclosed table header at offset ${at}`);
       at += brackets;
-      paths.push(table);
-    } else {
-      const path = [...table, ...key()];
-      paths.push(path);
-      equals();
-      value(path);
-    }
+      entries.push({ kind: brackets === 2 ? "array-table" : "table", path: table });
+    } else assign(table);
   }
 }
 
 export function cargoManifestSourceProblems(manifest: string): string[] {
   const problems = new Set<string>();
-  for (const path of tomlKeyPaths(manifest)) {
+  for (const { path } of tomlEntries(manifest)) {
     if (path[0] === "patch" || path[0] === "replace") problems.add(`[${path[0]}] redirects a crate away from crates.io`);
     path.forEach((part, index) => {
       if (DEPENDENCY_TABLES.has(part) && path.length === index + 3 && SOURCE_KEYS.has(path[index + 2])) {
@@ -110,10 +114,29 @@ export function cargoManifestSourceProblems(manifest: string): string[] {
 }
 
 export function cargoLockSourceProblems(lock: string, rootPackage: string): string[] {
-  return lock.split(/^\[\[package\]\]$/m).slice(1).flatMap((block) => {
-    const name = /^name = "([^"]+)"$/m.exec(block)?.[1] ?? "?";
-    const source = /^source = "([^"]*)"$/m.exec(block)?.[1];
-    if (source === undefined) return name === rootPackage ? [] : [`${name} has no source, so it is a path or workspace crate`];
-    return source === CRATES_IO ? [] : [`${name} comes from ${source}`];
-  });
+  const problems = new Set<string>();
+  const packages: { name?: string; source?: string }[] = [];
+  let scope: "top" | "package" | "other" = "top";
+  for (const entry of tomlEntries(lock)) {
+    const at = entry.path.join(".");
+    if (entry.kind !== "key") {
+      scope = entry.kind === "array-table" && at === "package" ? "package" : "other";
+      if (scope === "package") packages.push({});
+      else problems.add(`[${at}] is not a Cargo.lock package table`);
+    } else if (scope === "top" && at !== "version") problems.add(`${at} is not a Cargo.lock top-level key`);
+    else if (scope === "package") {
+      const field = entry.path[1];
+      if (entry.path.length !== 2 || !LOCK_PACKAGE_KEYS.has(field)) problems.add(`package.${entry.path.slice(1).join(".")} is not a Cargo.lock package key`);
+      else if (field === "name" || field === "source") packages[packages.length - 1][field] = entry.value ?? "a non-string value";
+    }
+  }
+  const roots = packages.filter((pkg) => pkg.name === rootPackage);
+  if (roots.length !== 1) problems.add(`Cargo.lock has ${roots.length} ${rootPackage} packages instead of one`);
+  for (const { name = "?", source } of packages) {
+    if (name === rootPackage) {
+      if (source !== undefined) problems.add(`${name} comes from ${source}, but the root package has no source`);
+    } else if (source === undefined) problems.add(`${name} has no source, so it is a path or workspace crate`);
+    else if (source !== CRATES_IO) problems.add(`${name} comes from ${source}`);
+  }
+  return [...problems];
 }
