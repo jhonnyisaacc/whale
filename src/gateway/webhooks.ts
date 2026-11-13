@@ -114,7 +114,9 @@ export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Sen
   );
   const open = sealer(gatewaySecret, "webhook-secret");
   let delivered = 0;
+  const disabled = new Set<string>();
   for (const row of claimed.rows) {
+    if (disabled.has(row.webhook_id)) continue;
     const body = payload(row);
     const secret = open.open(row.secret_sealed, now);
     let status = 0;
@@ -149,7 +151,17 @@ export async function deliverDue(pool: pg.Pool, gatewaySecret: Buffer, send: Sen
       new Date(now + (retry ?? 0)),
       retry === undefined ? new Date(now) : null,
     ]);
-    await pool.query(`UPDATE webhooks SET failures = failures + 1, disabled_at = CASE WHEN failures + 1 >= ${DISABLE_AFTER_FAILURES} THEN now() ELSE disabled_at END WHERE id = $1 AND account_id = $2`, [row.webhook_id, row.account_id]);
+    const hook = await pool.query<{ disabled: boolean }>(
+      `UPDATE webhooks SET failures = failures + 1, disabled_at = CASE WHEN failures + 1 >= ${DISABLE_AFTER_FAILURES} THEN now() ELSE disabled_at END WHERE id = $1 AND account_id = $2 RETURNING disabled_at IS NOT NULL AS disabled`,
+      [row.webhook_id, row.account_id],
+    );
+    if (!hook.rows[0]?.disabled) continue;
+    disabled.add(row.webhook_id);
+    await pool.query("UPDATE webhook_deliveries SET gave_up_at = $3, last_error = COALESCE(last_error, 'the webhook was disabled') WHERE webhook_id = $1 AND account_id = $2 AND delivered_at IS NULL AND gave_up_at IS NULL", [
+      row.webhook_id,
+      row.account_id,
+      new Date(now),
+    ]);
   }
   return delivered;
 }

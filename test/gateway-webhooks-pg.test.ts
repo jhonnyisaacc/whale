@@ -163,3 +163,29 @@ test("a receiver that drips its answer is cut off at the send deadline, well ins
     await drop();
   }
 });
+
+test("disabling a webhook settles every delivery it still had queued", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, user, hook, drop } = await harness();
+  try {
+    const { id } = await hook();
+    await pool.query("UPDATE webhooks SET failures = 49 WHERE id = $1", [id]);
+    for (let n = 0; n < 3; n += 1) await audit(pool, { accountId: user.accountId, actor: "user", action: "wallet.frozen" });
+    const sent: string[] = [];
+    const failing: Send = async (_url, init) => (sent.push(init.body), { status: 500, body: "", truncated: false });
+    let clock = Date.now() + 1_000;
+    await deliverDue(pool, SECRET, failing, clock);
+    assert.equal(sent.length, 1);
+    const listed = await pool.query("SELECT disabled_at IS NOT NULL AS disabled FROM webhooks WHERE id = $1", [id]);
+    assert.equal(listed.rows[0]?.disabled, true);
+    const pending = async () => (await pool.query("SELECT id, next_attempt_at FROM webhook_deliveries WHERE delivered_at IS NULL AND gave_up_at IS NULL ORDER BY id")).rows;
+    assert.deepEqual(await pending(), []);
+    clock += 24 * 3_600_000;
+    await deliverDue(pool, SECRET, failing, clock);
+    assert.deepEqual(await pending(), []);
+    assert.equal(sent.length, 1);
+    const errors = (await pool.query("SELECT last_error FROM webhook_deliveries ORDER BY id")).rows.map((row) => row.last_error);
+    assert.deepEqual(errors, ["answered 500", "the webhook was disabled", "the webhook was disabled"]);
+  } finally {
+    await drop();
+  }
+});
