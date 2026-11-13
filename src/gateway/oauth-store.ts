@@ -8,8 +8,8 @@ export const REQUEST_TTL_MS = 15 * 60 * 1000;
 export const CODE_TTL_MS = 5 * 60 * 1000;
 export const ACCESS_TTL_MS = 60 * 60 * 1000;
 export const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export const REFRESH_GRACE_MS = 10 * 1000;
-export const EXPIRED_RETENTION_MS = 24 * 60 * 60 * 1000;
+const REFRESH_GRACE_MS = 10 * 1000;
+const EXPIRED_RETENTION_MS = 24 * 60 * 60 * 1000;
 const REFRESH_TOKEN = /^wrt_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 const ACCESS_TOKEN = /^wat_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 
@@ -146,8 +146,6 @@ export async function exchangeCode(
   });
 }
 
-// Refresh tokens rotate. Presenting one that was already rotated or revoked is treated as theft and ends the family,
-// except that a client racing itself may present a just-rotated token again while the grant is still live.
 export async function refreshTokens(pool: pg.Pool, input: { refreshToken: string; clientId: string }, now = Date.now()): Promise<TokenPair | OAuthError> {
   const match = REFRESH_TOKEN.exec(input.refreshToken);
   if (!match) return { error: "invalid_grant" };

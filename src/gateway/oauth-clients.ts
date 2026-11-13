@@ -11,7 +11,7 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const METADATA_TTL_MS = 60 * 60 * 1000;
 const METADATA_MAX_BYTES = 64 * 1024;
 const METADATA_DEADLINE_MS = 5_000;
-export const METADATA_FAILURE_TTL_MS = 60 * 1000;
+const METADATA_FAILURE_TTL_MS = 60 * 1000;
 
 // Redirects go to https, to a loopback port for native apps, or to an app's own private scheme (cursor://, vscode://).
 export function redirectUriAllowed(raw: string): boolean {
@@ -89,7 +89,7 @@ export function metadataUrlAllowed(raw: string): boolean {
 export type MetadataFetch = (url: string) => Promise<string>;
 
 // The connection uses the address this lookup checked, so a DNS answer that flips to a private address after the
-// check (rebinding) never reaches the socket. No redirects, a size cap, and a total deadline.
+// check (rebinding) never reaches the socket. No redirects, a size cap, and a short timeout.
 export const fetchMetadataDocument = (raw: string, { deadlineMs = METADATA_DEADLINE_MS, send = request }: { deadlineMs?: number; send?: typeof request } = {}): Promise<string> =>
   new Promise((done, fail) => {
     const deadline = setTimeout(() => req.destroy(new Error("client metadata timed out")), deadlineMs);
@@ -160,9 +160,7 @@ async function storedClient(pool: pg.Pool, id: string): Promise<(OAuthClient & {
   return row ? { id: row.id, kind: row.kind, name: row.name, redirectUris: row.redirect_uris, fetchedAt: row.fetched_at } : null;
 }
 
-export type ClientResolver = (clientId: string, now: number) => Promise<OAuthClient | null>;
-
-export function clientResolver(pool: pg.Pool, fetchDocument: MetadataFetch): ClientResolver {
+export function clientResolver(pool: pg.Pool, fetchDocument: MetadataFetch): (clientId: string, now: number) => Promise<OAuthClient | null> {
   const failedUntil = new Map<string, number>();
   return async (clientId, now) => {
     if ((failedUntil.get(clientId) ?? 0) > now) return null;
