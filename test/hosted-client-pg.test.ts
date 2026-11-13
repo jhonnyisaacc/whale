@@ -12,7 +12,6 @@ import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
 
-// Routes the client's fetch into the gateway in-process, so the test covers the real routes, auth, and limits.
 function viaInject(app: FastifyInstance): typeof fetch {
   return (async (url: string | URL | Request, init?: RequestInit) => {
     const reply = await app.inject({ method: "POST", url: new URL(String(url)).pathname, headers: init?.headers as Record<string, string>, payload: String(init?.body ?? "") });

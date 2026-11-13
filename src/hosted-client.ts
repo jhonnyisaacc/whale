@@ -1,5 +1,3 @@
-// A dependency-free client for a hosted Whale gateway. It speaks MCP over HTTP with an agent key, so a bot gets the
-// same tools, limits, and approvals an MCP client gets. It holds no key and signs nothing.
 export type HostedClientOptions = { gatewayUrl: string; apiKey: string; fetchImpl?: typeof fetch; timeoutMs?: number };
 
 export class WhaleToolError extends Error {
@@ -65,8 +63,6 @@ export function createHostedClient(options: HostedClientOptions) {
   };
 }
 
-// Stdio clients that cannot speak HTTP get the hosted tools through this bridge: each JSON-RPC line goes to the gateway
-// with the agent key, and the reply comes back on stdout. Notifications get no reply, as in stdio MCP.
 export function createBridge(options: HostedClientOptions) {
   const endpoint = mcpEndpoint(options.gatewayUrl);
   const fetchImpl = options.fetchImpl ?? fetch;

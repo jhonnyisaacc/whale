@@ -88,7 +88,6 @@ if (entry.endsWith("mcp-server.js")) {
     executorUrl: process.env.EXECUTOR_URL ?? "http://127.0.0.1:8788",
     executorAuthToken: process.env.EXECUTOR_AUTH_TOKEN ?? process.env.AUTH_TOKEN ?? null,
   };
-  // With a hosted gateway and an agent key, this stdio server forwards to the hosted tools instead of the local ones.
   const gatewayUrl = process.env.WHALE_GATEWAY_URL;
   const apiKey = process.env.WHALE_API_KEY;
   const { createBridge } = await import("./hosted-client.js");
