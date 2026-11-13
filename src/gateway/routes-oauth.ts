@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
 import { fetchMetadataDocument, isLoopbackRedirect, registerClient, registrationSchema, resolveClient, type MetadataFetch } from "./oauth-clients.js";
-import { approveRequest, createRequest, denyRequest, exchangeCode, pendingRequest, refreshTokens, revokeToken, withParams } from "./oauth-store.js";
+import { approveRequest, createRequest, denyRequest, exchangeCode, pendingRequest, refreshTokens, revokeToken } from "./oauth-store.js";
 import { agentLimitsSchema, limitsWithin } from "./policy.js";
 import { listWallets } from "./wallets.js";
 
@@ -72,17 +72,15 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
     return reply.code(201).send({ client_id: client.id, client_name: client.name, redirect_uris: client.redirectUris, token_endpoint_auth_method: "none", grant_types: ["authorization_code", "refresh_token"], response_types: ["code"] });
   });
 
-  // Until the client and its redirect URI check out, errors render here. After that, they go back to the client.
   app.get("/oauth/authorize", { config: perMinute(30) }, async (request, reply) => {
     const query = authorizeQuery.safeParse(request.query);
     if (!query.success) return reply.code(400).send({ error: "invalid_request" });
     const client = await resolveClient(pool, query.data.client_id, fetchDocument, now());
     if (!client) return reply.code(400).send({ error: "invalid_client" });
     if (!client.redirectUris.includes(query.data.redirect_uri)) return reply.code(400).send({ error: "invalid_redirect_uri" });
-    const back = (error: string) => reply.redirect(withParams(query.data.redirect_uri, { error, state: query.data.state ?? null, iss: issuer }), 302);
-    if (query.data.response_type !== "code") return back("unsupported_response_type");
-    if (query.data.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(query.data.code_challenge ?? "")) return back("invalid_request");
-    if ((query.data.resource ?? resource) !== resource) return back("invalid_target");
+    if (query.data.response_type !== "code") return reply.code(400).send({ error: "unsupported_response_type" });
+    if (query.data.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(query.data.code_challenge ?? "")) return reply.code(400).send({ error: "invalid_request" });
+    if ((query.data.resource ?? resource) !== resource) return reply.code(400).send({ error: "invalid_target" });
     const id = await createRequest(pool, { clientId: client.id, redirectUri: query.data.redirect_uri, codeChallenge: query.data.code_challenge as string, state: query.data.state ?? null, resource }, now());
     return reply.redirect(`/connect?request=${id}`, 302);
   });

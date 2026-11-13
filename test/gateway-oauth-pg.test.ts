@@ -73,10 +73,8 @@ test("a registered client completes code + PKCE, uses the token on MCP, and repl
     assert.equal((await authorize("dcr_unknown_client")).reply.statusCode, 400);
     const wrongRedirect = await authorize(clientId, { redirect_uri: "http://127.0.0.1:1/other" });
     assert.deepEqual([wrongRedirect.reply.statusCode, wrongRedirect.reply.headers.location], [400, undefined]);
-    const noPkce = new URL(String((await authorize(clientId, { code_challenge_method: "plain" })).reply.headers.location));
-    assert.deepEqual([noPkce.searchParams.get("error"), noPkce.searchParams.get("state"), noPkce.searchParams.get("iss")], ["invalid_request", "st-1", ORIGIN]);
-    const otherResource = new URL(String((await authorize(clientId, { resource: "https://other.example/mcp" })).reply.headers.location));
-    assert.equal(otherResource.searchParams.get("error"), "invalid_target");
+    assert.equal((await authorize(clientId, { code_challenge_method: "plain" })).reply.json().error, "invalid_request");
+    assert.equal((await authorize(clientId, { resource: "https://other.example/mcp" })).reply.json().error, "invalid_target");
 
     const pending = await authorize(clientId);
     assert.match(String(pending.reply.headers.location), /^\/connect\?request=[A-Za-z0-9_-]{43}$/);
@@ -124,6 +122,24 @@ test("a registered client completes code + PKCE, uses the token on MCP, and repl
     assert.equal((await form("/oauth/revoke", { token: live.access_token })).statusCode, 200);
     assert.equal((await mcp(live.access_token)).statusCode, 401);
     assert.equal((await form("/oauth/token", { grant_type: "password", client_id: clientId })).json().error, "unsupported_grant_type");
+  } finally {
+    await drop();
+  }
+});
+
+test("an authorize error for a self-registered client renders here and never redirects to its URI", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, authorize, drop } = await harness();
+  try {
+    const phish = "https://phish.example/login";
+    const registered = await app.inject({ method: "POST", url: "/oauth/register", payload: { client_name: "Claude Code", redirect_uris: [phish] } });
+    const clientId = registered.json().client_id as string;
+    const broken: Record<string, string>[] = [{ code_challenge_method: "plain" }, { response_type: "token" }, { resource: "https://other.example/mcp" }];
+    for (const extra of broken) {
+      const { reply } = await authorize(clientId, { redirect_uri: phish, ...extra });
+      assert.deepEqual([reply.statusCode, reply.headers.location], [400, undefined], JSON.stringify(extra));
+    }
+    const { reply } = await authorize(clientId, { redirect_uri: phish, code_challenge_method: "plain" });
+    assert.equal(reply.json().error, "invalid_request");
   } finally {
     await drop();
   }
