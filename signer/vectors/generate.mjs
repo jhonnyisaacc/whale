@@ -14,6 +14,8 @@ const DESTINATION = "0x2222222222222222222222222222222222222222";
 const KYBER = "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5";
 const ALLOWANCE_HOLDER = "0x0000000000001fF3684f28c67538d4D072C22734";
 const SETTLER = "0x5555555555555555555555555555555555555555";
+const EXECUTOR = "0x7777777777777777777777777777777777777777";
+const NONE = "0x0000000000000000000000000000000000000000";
 const LIFI = "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
@@ -28,15 +30,22 @@ const holderAbi = parseAbi(["function exec(address operator, address token, uint
 const settlerAbi = parseAbi(["struct AllowedSlippage { address recipient; address buyToken; uint256 minAmountOut; }", "function execute(AllowedSlippage slippage, bytes[] actions, bytes32 zid) payable returns (bool)"]);
 const erc20 = parseAbi(["function transfer(address to, uint256 amount)", "function approve(address spender, uint256 amount)"]);
 
-const desc = (recipient, amount) => ({ srcToken: USDC, dstToken: WETH, srcReceivers: [ATTACKER], srcAmounts: [1n], feeReceivers: [], feeAmounts: [], dstReceiver: recipient, amount, minReturnAmount: 1n, flags: 0n, permit: "0x" });
+const desc = (recipient, amount, overrides = {}) => ({ srcToken: USDC, dstToken: WETH, srcReceivers: [EXECUTOR], srcAmounts: [amount], feeReceivers: [], feeAmounts: [], dstReceiver: recipient, amount, minReturnAmount: 1n, flags: 0n, permit: "0x", ...overrides });
+const kyberSwap = (description, execution = {}) => encodeFunctionData({ abi: kyberAbi, functionName: "swap", args: [{ callTarget: EXECUTOR, approveTarget: NONE, targetData: "0xabcdef", desc: description, clientData: "0x01", ...execution }] });
 const settlerCall = (recipient) => encodeFunctionData({ abi: settlerAbi, functionName: "execute", args: [{ recipient, buyToken: WETH, minAmountOut: 1n }, ["0x1234"], `0x${"00".repeat(32)}`] });
 const tx = (to, data = "0x", value = 0n, chainId = 8453, fees = {}) => ({ chainId, nonce: 7, to, value, data, gas: 300000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n, type: "eip1559", ...fees });
 const job = (name, transaction) => ({ id: name, kind: "evm", chainId: transaction.chainId, tx: { nonce: String(transaction.nonce), to: transaction.to, value: String(transaction.value), data: transaction.data, gas: String(transaction.gas), maxFeePerGas: String(transaction.maxFeePerGas), maxPriorityFeePerGas: String(transaction.maxPriorityFeePerGas) } });
 
 const evmCases = [
-  ["kyber simple swap to this wallet", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [ATTACKER, desc(own, 5_000_000n), "0x", "0x"] })), "signed", null, own],
-  ["kyber swap paying an attacker", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swap", args: [{ callTarget: ATTACKER, approveTarget: ATTACKER, targetData: "0x", desc: desc(ATTACKER, 5_000_000n), clientData: "0x" }] })), "refused", "not this wallet", ATTACKER],
-  ["kyber swap to this wallet", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swap", args: [{ callTarget: ATTACKER, approveTarget: ATTACKER, targetData: "0xabcdef", desc: desc(own, 2_000_000n), clientData: "0x01" }] })), "signed", null, own],
+  ["kyber simple swap to this wallet", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 5_000_000n), "0x", "0x"] })), "signed", null, own],
+  ["kyber swap paying an attacker", tx(KYBER, kyberSwap(desc(ATTACKER, 5_000_000n))), "refused", "not this wallet", ATTACKER],
+  ["kyber swap to this wallet", tx(KYBER, kyberSwap(desc(own, 2_000_000n))), "signed", null, own],
+  ["kyber swap sending the sold tokens to an attacker", tx(KYBER, kyberSwap(desc(own, 2_000_000n, { srcReceivers: [ATTACKER] }))), "refused", "listed Kyber executor", own],
+  ["kyber swap whose executor is an attacker", tx(KYBER, kyberSwap(desc(own, 2_000_000n), { callTarget: ATTACKER })), "refused", "listed Kyber executor", own],
+  ["kyber swap approving an attacker", tx(KYBER, kyberSwap(desc(own, 2_000_000n), { approveTarget: ATTACKER })), "refused", "listed Kyber executor", own],
+  ["kyber swap paying a fee to an attacker", tx(KYBER, kyberSwap(desc(own, 2_000_000n, { feeReceivers: [ATTACKER], feeAmounts: [1_000_000n] }))), "refused", "listed Kyber executor", own],
+  ["kyber simple swap through an attacker executor", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [ATTACKER, desc(own, 5_000_000n), "0x", "0x"] })), "refused", "listed Kyber executor", own],
+  ["kyber swap whose source amounts exceed the sold amount", tx(KYBER, kyberSwap(desc(own, 2_000_000n, { srcAmounts: [9_000_000n] }))), "refused", "not one the signer can read", own],
   ["0x exec into settler for this wallet", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [SETTLER, USDC, 3_000_000n, SETTLER, settlerCall(own)] })), "signed", null, own],
   ["0x exec into settler paying an attacker", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [SETTLER, USDC, 3_000_000n, SETTLER, settlerCall(ATTACKER)] })), "refused", "not this wallet", ATTACKER],
   ["0x exec whose operator and target are an attacker", tx(ALLOWANCE_HOLDER, encodeFunctionData({ abi: holderAbi, functionName: "exec", args: [ATTACKER, USDC, 3_000_000n, ATTACKER, settlerCall(own)] })), "refused", "pinned Settler", own],
@@ -54,8 +63,8 @@ const evmCases = [
   ["a native transfer whose fee crosses the native day", tx(DESTINATION, "0x", 4_500_000_000_000_000n), "refused", "above the 5000000000000000 limit"],
   ["native transfer to anyone else", tx(ATTACKER, "0x", 1n), "refused", "listed destination"],
   ["an undecoded router call", tx(LIFI, "0x12345678"), "refused", "not one the signer can read"],
-  ["a chain outside the policy", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [ATTACKER, desc(own, 1n), "0x", "0x"] }), 0n, 1), "refused", "chain 1 is not in the policy"],
-  ["a swap with native value above the cap", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [ATTACKER, desc(own, 1n), "0x", "0x"] }), 10n ** 18n), "refused", "above the"],
+  ["a chain outside the policy", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 1), "refused", "chain 1 is not in the policy"],
+  ["a swap with native value above the cap", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 10n ** 18n), "refused", "above the"],
 ];
 
 const account = privateKeyToAccount(EVM_KEY);
@@ -118,6 +127,7 @@ const policy = {
     chains: [8453],
     routers: { 8453: [KYBER, ALLOWANCE_HOLDER] },
     settlers: { 8453: [SETTLER] },
+    kyberExecutors: { 8453: [EXECUTOR] },
     destinations: [DESTINATION],
     maxValueWei: "2000000000000000",
     maxFeeWei: "1000000000000000",

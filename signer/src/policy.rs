@@ -1,3 +1,4 @@
+use crate::abi;
 use crate::evm::{self, Call};
 use crate::solana::{self, Message};
 use serde_json::Value;
@@ -7,6 +8,7 @@ pub struct Policy {
     evm_chains: HashSet<u64>,
     routers: BTreeMap<u64, HashSet<[u8; 20]>>,
     settlers: BTreeMap<u64, HashSet<[u8; 20]>>,
+    kyber_executors: BTreeMap<u64, HashSet<[u8; 20]>>,
     evm_destinations: HashSet<[u8; 20]>,
     max_value_wei: u128,
     max_fee_wei: u128,
@@ -96,6 +98,7 @@ impl Policy {
         let sol = file.get("solana").cloned().unwrap_or(Value::Null);
         let routers = addresses_by_chain(evm.get("routers"), "router")?;
         let settlers = addresses_by_chain(evm.get("settlers"), "settler")?;
+        let kyber_executors = addresses_by_chain(evm.get("kyberExecutors"), "kyber executor")?;
         let mut daily_limits = BTreeMap::new();
         for section in [&evm, &sol] {
             if let Some(map) = section.get("dailyLimits").and_then(Value::as_object) {
@@ -121,6 +124,7 @@ impl Policy {
                 .unwrap_or_default(),
             routers,
             settlers,
+            kyber_executors,
             evm_destinations: text_list(evm.get("destinations"))
                 .iter()
                 .map(|item| evm::parse_address(item))
@@ -255,32 +259,42 @@ impl Policy {
                         .reasons
                         .push("the swap router is not listed for this chain".into());
                 }
-                if terms.provider == "zeroex" {
-                    let target = terms.exec.as_ref().map_or(router, |exec| exec.target);
-                    if terms
-                        .exec
-                        .as_ref()
-                        .is_some_and(|exec| exec.operator != exec.target)
-                    {
-                        decision
-                            .reasons
-                            .push("the 0x exec operator is not its target".into());
+                let listed = |table: &BTreeMap<u64, HashSet<[u8; 20]>>, address: &[u8; 20]| {
+                    table.get(&chain).is_some_and(|set| set.contains(address))
+                };
+                match &terms.route {
+                    abi::Route::ZeroEx { exec } => {
+                        let target = exec.as_ref().map_or(router, |exec| exec.target);
+                        if exec
+                            .as_ref()
+                            .is_some_and(|exec| exec.operator != exec.target)
+                        {
+                            decision
+                                .reasons
+                                .push("the 0x exec operator is not its target".into());
+                        }
+                        if !listed(&self.settlers, &target) {
+                            decision.reasons.push(format!(
+                                "the 0x target 0x{} is not a pinned Settler",
+                                hex::encode(target)
+                            ));
+                        }
                     }
-                    if !self
-                        .settlers
-                        .get(&chain)
-                        .is_some_and(|settlers| settlers.contains(&target))
-                    {
-                        decision.reasons.push(format!(
-                            "the 0x target 0x{} is not a pinned Settler",
-                            hex::encode(target)
-                        ));
+                    abi::Route::Kyber { parties } => {
+                        for party in parties {
+                            if !listed(&self.kyber_executors, party) {
+                                decision.reasons.push(format!(
+                                    "the kyberswap swap hands the sold tokens or the call to 0x{}, which is not a listed Kyber executor",
+                                    hex::encode(party)
+                                ));
+                            }
+                        }
                     }
                 }
                 if terms.recipient != own {
                     decision.reasons.push(format!(
                         "the {} swap pays 0x{}, not this wallet",
-                        terms.provider,
+                        terms.route.provider(),
                         hex::encode(terms.recipient)
                     ));
                 }

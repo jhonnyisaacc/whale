@@ -40,16 +40,45 @@ pub fn bytes_at(data: &[u8], start: usize) -> Option<&[u8]> {
     data.get(start + 32..start.checked_add(32)?.checked_add(length)?)
 }
 
+fn words<T>(
+    data: &[u8],
+    start: usize,
+    slot: usize,
+    read: fn(&[u8], usize) -> Option<T>,
+) -> Option<Vec<T>> {
+    let at = offset(data, start.checked_add(slot * 32)?, start)?;
+    let count = usize::try_from(uint(data, at)?).ok()?;
+    if count > (data.len() - at) / 32 {
+        return None;
+    }
+    (1..=count)
+        .map(|index| read(data, at + index * 32))
+        .collect()
+}
+
 pub struct Exec {
     pub operator: [u8; 20],
     pub target: [u8; 20],
 }
 
+pub enum Route {
+    ZeroEx { exec: Option<Exec> },
+    Kyber { parties: Vec<[u8; 20]> },
+}
+
+impl Route {
+    pub fn provider(&self) -> &'static str {
+        match self {
+            Route::ZeroEx { .. } => "zeroex",
+            Route::Kyber { .. } => "kyberswap",
+        }
+    }
+}
+
 pub struct SwapTerms {
-    pub provider: &'static str,
+    pub route: Route,
     pub recipient: [u8; 20],
     pub sell: Option<([u8; 20], u128)>,
-    pub exec: Option<Exec>,
 }
 
 fn settler(args: &[u8]) -> Option<[u8; 20]> {
@@ -60,12 +89,20 @@ const ZERO_EX_EXEC: &str = "exec(address,address,uint256,address,bytes)";
 const ZERO_EX_EXECUTE: &str = "execute((address,address,uint256),bytes[],bytes32)";
 const KYBER_DESC: &str = "(address,address,address[],uint256[],address[],uint256[],address,uint256,uint256,uint256,bytes)";
 
-fn kyber_desc(data: &[u8], start: usize) -> Option<SwapTerms> {
+fn kyber_desc(data: &[u8], start: usize, mut parties: Vec<[u8; 20]>) -> Option<SwapTerms> {
+    let amount = uint(data, start + 7 * 32)?;
+    let routed = words(data, start, 3, uint)?
+        .into_iter()
+        .try_fold(0u128, u128::checked_add)?;
+    if routed > amount {
+        return None;
+    }
+    parties.extend(words(data, start, 2, address)?);
+    parties.extend(words(data, start, 4, address)?);
     Some(SwapTerms {
-        provider: "kyberswap",
+        route: Route::Kyber { parties },
         recipient: address(data, start + 6 * 32)?,
-        sell: Some((address(data, start)?, uint(data, start + 7 * 32)?)),
-        exec: None,
+        sell: Some((address(data, start)?, amount)),
     })
 }
 
@@ -74,10 +111,9 @@ pub fn swap_terms(calldata: &[u8]) -> Option<SwapTerms> {
     let args = &calldata[4..];
     if head == selector(ZERO_EX_EXECUTE) {
         return Some(SwapTerms {
-            provider: "zeroex",
+            route: Route::ZeroEx { exec: None },
             recipient: settler(args)?,
             sell: None,
-            exec: None,
         });
     }
     if head == selector(ZERO_EX_EXEC) {
@@ -89,21 +125,27 @@ pub fn swap_terms(calldata: &[u8]) -> Option<SwapTerms> {
             return None;
         }
         return Some(SwapTerms {
-            provider: "zeroex",
+            route: Route::ZeroEx {
+                exec: Some(Exec {
+                    operator,
+                    target: address(args, 96)?,
+                }),
+            },
             recipient: settler(&inner[4..])?,
             sell: Some((token, amount)),
-            exec: Some(Exec {
-                operator,
-                target: address(args, 96)?,
-            }),
         });
     }
     if head == selector(&format!("swapSimpleMode(address,{KYBER_DESC},bytes,bytes)")) {
-        return kyber_desc(args, offset(args, 32, 0)?);
+        return kyber_desc(args, offset(args, 32, 0)?, vec![address(args, 0)?]);
     }
     if head == selector(&format!("swap((address,address,bytes,{KYBER_DESC},bytes))")) {
         let execution = offset(args, 0, 0)?;
-        return kyber_desc(args, offset(args, execution + 3 * 32, execution)?);
+        let mut parties = vec![address(args, execution)?];
+        let approve = address(args, execution + 32)?;
+        if approve != [0u8; 20] {
+            parties.push(approve);
+        }
+        return kyber_desc(args, offset(args, execution + 3 * 32, execution)?, parties);
     }
     None
 }
