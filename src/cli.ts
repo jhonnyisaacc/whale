@@ -96,8 +96,9 @@ if (entry.endsWith("cli.js")) {
       .then((result) => {
         process.stdout.write(`${JSON.stringify(result)}\n`);
       })
-      .catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : "command failed");
+      .catch(async (error: unknown) => {
+        const { commandErrorText } = await import("./command-callers.js");
+        console.error(commandErrorText(process.env, error));
         process.exit(1);
       });
   }

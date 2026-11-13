@@ -74,7 +74,8 @@ export function createHandler(deps: McpDeps) {
         const value = await callTool(deps, name, request.params?.arguments ?? {});
         return { jsonrpc: "2.0", id: request.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(value) }] } };
       } catch (error) {
-        return { jsonrpc: "2.0", id: request.id ?? null, result: { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : "tool failed" }] } };
+        const { commandErrorText } = await import("./command-callers.js");
+        return { jsonrpc: "2.0", id: request.id ?? null, result: { isError: true, content: [{ type: "text", text: commandErrorText(process.env, error) }] } };
       }
     }
     if (request.id === undefined) return null;
