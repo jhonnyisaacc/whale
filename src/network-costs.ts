@@ -19,6 +19,11 @@ export type CostReaders = {
 };
 
 export type NetworkCost = { chainKey: string; swapUsd: number; transferUsd: number; source: "live" | "static" };
+export type SkippedNetwork = { chainKey: string; reason: string };
+
+export function skippedNetworks(chainKeys: readonly string[]): SkippedNetwork[] {
+  return chainKeys.filter((key) => chainByKey(key)?.chain.kind === "hypercore").map((chainKey) => ({ chainKey, reason: "Hyperliquid charges trading fees, not gas, so it has no network cost to compare" }));
+}
 
 function within<T>(work: Promise<T>): Promise<T | null> {
   return Promise.race([work, new Promise<null>((resolve) => setTimeout(() => resolve(null), READ_TIMEOUT_MS).unref())]).catch(() => null);

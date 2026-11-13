@@ -98,6 +98,15 @@ test("the executor answers a costs command on the hosted route without reaching 
       payload: { accountId: "5d2b9e14-7c3a-4f61-b8e0-3a9c6d1f2e47", walletId: "8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31", agentId: "1b6e7d3c-9a2f-4e18-8c55-2f7a9d0e4c6b", command: { kind: "costs", chainKeys: ["arbitrum", "solana"] } },
     });
     assert.deepEqual(valid.json().networks.map((cost: { chainKey: string }) => cost.chainKey), ["solana", "arbitrum"]);
+    const perp = await app.inject({
+      method: "POST",
+      url: "/hosted/commands",
+      headers: { authorization: `Bearer ${"h".repeat(40)}` },
+      payload: { accountId: "5d2b9e14-7c3a-4f61-b8e0-3a9c6d1f2e47", walletId: "8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31", agentId: "1b6e7d3c-9a2f-4e18-8c55-2f7a9d0e4c6b", command: { kind: "costs", chainKeys: ["base", "hypercore"] } },
+    });
+    assert.deepEqual(perp.json().networks.map((cost: { chainKey: string }) => cost.chainKey), ["base"]);
+    assert.equal(perp.json().skipped[0].chainKey, "hypercore");
+    assert.match(perp.json().skipped[0].reason, /not gas/);
   } finally {
     await app.close();
   }

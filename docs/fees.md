@@ -72,7 +72,7 @@ The native coin price comes from CoinGecko. A chain whose RPC or price does not 
 
 A run on 2026-11-03 against public RPCs gave about 0.0005 USD a swap on Solana, 0.0024 on Base, and 0.008 on Arbitrum.
 
-The hosted MCP tool `network_costs` returns these numbers for the agent's chains, cheapest first. The executor answers it on `/hosted/commands` without reaching `run()`.
+The hosted MCP tool `network_costs` returns these numbers for the agent's chains, cheapest first. The executor answers it on `/hosted/commands` without reaching `run()`. Hyperliquid charges trading fees, not gas, so it has no estimate and comes back under `skipped` with that reason.
 
 ## x402
 

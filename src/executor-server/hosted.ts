@@ -4,7 +4,7 @@ import { run } from "../commands.js";
 import { hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
 import { bearerOf } from "../bearer.js";
 import { anyTokenMatches } from "../http.js";
-import { cachedNetworkCosts, envCostReaders, type CostReaders } from "../network-costs.js";
+import { cachedNetworkCosts, envCostReaders, skippedNetworks, type CostReaders } from "../network-costs.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
 
@@ -40,7 +40,7 @@ export function registerHostedRoutes(app: FastifyInstance, options: { token: str
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
     const limit = await perAccount(request);
     if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate limit" });
-    if (parsed.data.command.kind === "costs") return { kind: "costs", networks: await cachedNetworkCosts(parsed.data.command.chainKeys, costReaders) };
+    if (parsed.data.command.kind === "costs") return { kind: "costs", networks: await cachedNetworkCosts(parsed.data.command.chainKeys, costReaders), skipped: skippedNetworks(parsed.data.command.chainKeys) };
     const command = walletCommandOf(parsed.data.command);
     const deps = await depsFor(command);
     const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });
