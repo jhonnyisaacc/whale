@@ -93,8 +93,6 @@ export async function registrationOptions(pool: pg.Pool, config: GatewayConfig, 
   };
 }
 
-// The caller decides what the new passkey is for. A plain passkey stores it here; an enclave wallet also hands the
-// same attestation to Turnkey, inside the same transaction, so both sides agree on the root credential.
 export async function registerPasskey(
   pool: pg.Pool,
   config: GatewayConfig,
@@ -135,11 +133,13 @@ export async function registerPasskey(
 }
 
 export type PasskeyRefusal = { refused: "step_up_required" | "step_up_failed" | "passkey_rejected"; detail?: string };
+export const REFUSED_STATUS: Record<PasskeyRefusal["refused"], number> = { step_up_required: 428, step_up_failed: 403, passkey_rejected: 400 };
 
 export async function addPasskey(
   pool: pg.Pool,
   config: GatewayConfig,
-  input: { accountId: string; payload: RegistrationPayload; label: string; assertion: AssertionPayload | null },
+  input: { accountId: string; payload: RegistrationPayload; label: string; assertion: AssertionPayload | null; binding?: string },
+  after?: (client: pg.PoolClient, registration: Registration & { challenge: string }) => Promise<void>,
   now = Date.now(),
 ): Promise<Registration | PasskeyRefusal> {
   const existing = await pool.query("SELECT 1 FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL LIMIT 1", [input.accountId]);
@@ -148,7 +148,7 @@ export async function addPasskey(
     const approved = await verifyStepUp(pool, config, input.accountId, { kind: "passkey.add", credentialId: input.payload.id }, input.assertion, now);
     if (approved !== true) return { refused: "step_up_failed", detail: approved };
   }
-  const added = await registerPasskey(pool, config, { accountId: input.accountId, payload: input.payload, label: input.label, firstOnly: (existing.rowCount ?? 0) === 0 }, undefined, now);
+  const added = await registerPasskey(pool, config, { accountId: input.accountId, payload: input.payload, label: input.label, binding: input.binding, firstOnly: (existing.rowCount ?? 0) === 0 }, after, now);
   if (added === NOT_FIRST) return { refused: "step_up_required" };
   return typeof added === "string" ? { refused: "passkey_rejected", detail: added } : added;
 }

@@ -82,7 +82,7 @@ test("one account cannot see or touch another account's wallets and agents", { s
 
     await pool.query("UPDATE wallets SET status = 'frozen'");
     assert.equal(await authenticateApiKey(pool, apiKey), null);
-    await pool.query("UPDATE wallets SET status = 'active'");
+    await pool.query("UPDATE wallets SET status = 'pending'");
     await pool.query("UPDATE accounts SET status = 'frozen' WHERE id = $1", [alice.accountId]);
     assert.equal(await authenticateApiKey(pool, apiKey), null);
     assert.equal((await app.inject({ method: "GET", url: "/api/wallets" })).statusCode, 401);

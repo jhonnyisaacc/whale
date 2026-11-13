@@ -86,6 +86,32 @@ A replayed code, or a refresh token presented after rotation, revokes every OAut
 
 A sensitive action asks for a step-up. `POST /api/passkeys/step-up` with `{ action }` returns a challenge bound to the SHA-256 of that action. The route that performs the action recomputes the hash and calls `verifyStepUp`, so an assertion approves that one action once. A counter that does not move forward is refused, unless the authenticator never counts, which is the case for synced passkeys.
 
+### Enclave wallets
+
+An enclave wallet takes three steps. Each step reads or writes Turnkey, and none gives Whale root.
+
+1. `POST /api/wallets/:id/enclave/options`, then `POST /api/wallets/:id/enclave` with `{ credential, label }`. The gateway verifies the new passkey, then creates a Turnkey sub-organization:
+   - The only root user is `owner`, holding that passkey, with a quorum of one.
+   - Email, SMS, and OTP sign-in are disabled, so the passkey is the only way in.
+   - One HD wallet holds an EVM account and a Solana account.
+
+   The addresses are stored and the wallet stays `pending`.
+
+   The gateway frees a wallet and deletes its new passkey only when it knows Turnkey created nothing. A lookup that finds nothing is not that proof, because a Turnkey activity can stay pending after the lookup runs. Every release writes a `passkey.removed` audit event with the reason.
+   - The gateway submits the create and stores Turnkey's activity id on the wallet before it polls. From then on, every options or create call reads that activity. Completed records the sub-organization and answers 409 `enclave_exists`. Failed or rejected frees the wallet, and the create answers 502 `turnkey_refused`. Anything else answers 409 `enclave_in_progress` and changes nothing.
+   - Only an error on the submit request itself proves that no activity exists. Turnkey refused it (HTTP 400, 401, 403, 404, 422, or 429, or gRPC 3, 5, 7, 8, 9, or 16) and the create answers 502 `turnkey_refused`. Or the connection never opened (connection refused, DNS failure, or connect timeout) and the create answers 503 `turnkey_unreachable`. An error while polling is never proof, because Turnkey already holds the activity. Any other submit error, and any error while polling, answers 409 `enclave_in_progress`, changes nothing, and is logged.
+   - With no activity id stored (a timeout, a lost response, or a crash during the submit), the claim is held for two minutes. After that, the next call asks Turnkey for sub-organizations whose root holds the claimed passkey (`list_suborgs` with `CREDENTIAL_ID`). One match is recorded. Two or more answer 409 `enclave_conflict`, and an operator must pick the right one in Turnkey. The lookup asks for Turnkey's largest page, 100 sub-organizations. A full page also answers 409 `enclave_conflict` and frees nothing, because the match could be on a page Whale did not read. With no match, the wallet answers `enclave_in_progress` until the claim is 24 hours old, and only then is it freed.
+
+   The 24-hour bound covers the time a submit Whale never heard back from can still become a sub-organization. On Whale's side, a hung submit ends within about ten minutes, because Node's fetch gives up after 300 seconds without response headers and after 300 seconds between body chunks. The parent organization runs no consensus policy, so a create Turnkey receives is expected to settle in seconds. The staging run must confirm that. 24 hours is far above both. The cost is that a user whose create never reached Turnkey waits a day to retry that wallet, or makes a new one. If the parent organization ever adds a consensus policy for sub-organization creation, this bound no longer holds.
+2. The browser, signed with the user's passkey, adds the delegate user and the policies that `GET /api/wallets/:id/enclave/delegation` returns. The delegate holds the executor's API key (`TURNKEY_DELEGATE_API_PUBLIC_KEY`). The policies are `turnkeyPolicyDocument` scoped to that user, the sub-organization's wallet, and the EVM chains in the wallet policy.
+3. `POST /api/wallets/:id/enclave/confirm`. The gateway reads the sub-organization and activates the wallet only if all of these hold: the owner is the sole root and holds the registered passkey; exactly one user holds Whale's key, is not root, and holds nothing else; and the allow policies are exactly the rendered ones. Otherwise it answers `delegation_not_safe` with the problems, and writes an audit event.
+
+The gateway needs these variables:
+- `TURNKEY_PARENT_ORGANIZATION_ID`, `TURNKEY_PARENT_API_PUBLIC_KEY`, and `TURNKEY_PARENT_API_PRIVATE_KEY`. The parent key creates sub-organizations and can read them. It cannot sign inside one, because the sub-organization's only root is the user's passkey.
+- `TURNKEY_DELEGATE_API_PUBLIC_KEY`, and the same `ROUTER_ALLOWLIST_JSON` and `MAX_NATIVE_VALUE_WEI` the executor uses.
+
+Without these variables the enclave routes answer `enclave_unavailable`.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.
