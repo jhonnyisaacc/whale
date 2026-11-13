@@ -42,7 +42,7 @@ test("a signed-in user creates a wallet with the default policy and an agent wit
     assert.equal(await authenticateApiKey(pool, apiKey.slice(0, -1) + (apiKey.endsWith("A") ? "B" : "A")), null);
 
     const stored = await pool.query("SELECT secret_hash FROM agent_credentials");
-    assert.equal(JSON.stringify(stored.rows).includes(apiKey.split("_")[2]), false);
+    assert.equal(JSON.stringify(stored.rows).includes(apiKey.split("_").slice(2).join("_")), false);
 
     const listed = await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/agents`, headers });
     assert.equal(listed.json().agents[0].keyPrefixes[0], `${apiKey.split("_").slice(0, 2).join("_")}_`);

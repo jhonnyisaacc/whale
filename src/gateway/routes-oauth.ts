@@ -85,7 +85,6 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
     return reply.redirect(`/connect?request=${id}`, 302);
   });
 
-  // Public on purpose: the consent page names the client before the user is sent to Google.
   app.get("/oauth/requests/:id", async (request, reply) => {
     const params = requestId.safeParse(request.params);
     const pending = params.success ? await pendingRequest(pool, params.data.id, now()) : null;
@@ -97,7 +96,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
     });
   });
 
-  app.post("/oauth/requests/:id/deny", async (request, reply) => {
+  app.post("/api/oauth/requests/:id/deny", { config: perMinute(10) }, async (request, reply) => {
     const params = requestId.safeParse(request.params);
     const redirect = params.success ? await denyRequest(pool, params.data.id, issuer, now()) : null;
     if (!redirect) return reply.code(404).send({ error: "not_found" });

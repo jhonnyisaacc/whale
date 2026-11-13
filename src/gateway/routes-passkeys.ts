@@ -3,10 +3,18 @@ import type pg from "pg";
 import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
-import { addPasskey, assertionPayload, listPasskeys, REFUSED_STATUS, registrationOptions, registrationPayload, stepUpOptions } from "./passkeys.js";
+import { addPasskey, assertionPayload, bindingOf, listPasskeys, REFUSED_STATUS, registrationOptions, registrationPayload, stepUpOptions } from "./passkeys.js";
 
 const addBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64), assertion: assertionPayload.optional() }).strict();
-const stepUpBody = z.object({ action: z.record(z.string(), z.unknown()) }).strict();
+const bindable = (action: unknown) => {
+  try {
+    bindingOf(action);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const stepUpBody = z.object({ action: z.record(z.string(), z.unknown()).refine(bindable) }).strict();
 
 export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool }): void {
   const { config, pool } = deps;
