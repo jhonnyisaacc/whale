@@ -17,6 +17,8 @@ const destination = z
   });
 const token = z.object({ chain: chainKey, address: z.string().min(32).max(64) }).strict();
 
+const destinationKey = (entry: { family: string; address: string }) => `${entry.family}:${entry.family === "evm" ? entry.address.toLowerCase() : entry.address}`;
+
 function unique<T>(items: readonly T[], key: (item: T) => string): boolean {
   return new Set(items.map(key)).size === items.length;
 }
@@ -38,7 +40,7 @@ export const walletPolicySchema = z
   .superRefine((policy, ctx) => {
     if (policy.dailyUsd < policy.maxTxUsd) ctx.addIssue({ code: "custom", message: "dailyUsd must be at least maxTxUsd" });
     if (!unique(policy.chains, (chain) => chain) || !unique(policy.actions, (action) => action)) ctx.addIssue({ code: "custom", message: "chains and actions must not repeat" });
-    if (!unique(policy.destinations, (entry) => `${entry.family}:${entry.address.toLowerCase()}`)) ctx.addIssue({ code: "custom", message: "destinations must not repeat" });
+    if (!unique(policy.destinations, destinationKey)) ctx.addIssue({ code: "custom", message: "destinations must not repeat" });
   });
 export type WalletPolicy = z.infer<typeof walletPolicySchema>;
 
@@ -94,7 +96,6 @@ function adds<T>(before: readonly T[], after: readonly T[], key: (item: T) => st
   return after.some((item) => !known.has(key(item)));
 }
 
-const destinationKey = (entry: WalletPolicy["destinations"][number]) => `${entry.family}:${entry.family === "evm" ? entry.address.toLowerCase() : entry.address}`;
 const tokenKey = (entry: { chain: string; address: string }) => `${entry.chain}:${entry.address.toLowerCase()}`;
 
 // Any single loosening makes the whole change a widening. Widening needs a passkey and a delay, narrowing applies at once.
