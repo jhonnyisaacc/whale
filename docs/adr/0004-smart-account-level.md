@@ -33,13 +33,23 @@ The wallet policy maps onto session policies:
 | --- | --- |
 | Allowed chains | One session per chain, enabled by the owner |
 | Per-token caps | The spending-limit policy, per token |
-| Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. The record must pick one after the verification below |
-| Swap recipient must be the account | A universal-action rule on a **static** calldata offset |
+| Daily caps | A session that expires after 24 hours, or a periodic spending-limit module if an audited one exists. Step 4 under "Verify before code" picks one |
+| Swap recipient must be the account | Universal-action rules on **static** calldata offsets, listed below |
 | Transfers to listed destinations | A universal-action rule on the `transfer` recipient, which sits at a static offset |
 
-**Static offsets only.** A calldata rule checks bytes at a fixed position. That works when the field cannot move:
-- In 0x `AllowanceHolder.exec(address,address,uint256,address,bytes)` wrapping `Settler.execute`, the `bytes` argument is the only dynamic one, so the inner call starts at a fixed place. The recipient word is at byte 200 of the calldata. This was checked by encoding with viem on 2026-11-03. The `exec` token and amount sit at fixed words too.
-- In KyberSwap's `swap` and `swapSimpleMode`, the description is a dynamic tuple reached through an offset that the caller chooses. A rule at a fixed position can be dodged with a non-canonical offset.
+**Static offsets only.** A universal-action rule compares one 32-byte word at a fixed position with one reference value, and every rule of the action must pass. In Smart Sessions v1.0.0, `UniActionPolicy` reads the word at `4 + offset`, so a rule's `offset` counts from the end of the selector. A rule at a fixed position works only when the field cannot move.
+
+0x `AllowanceHolder.exec(address,address,uint256,address,bytes)` wraps `Settler.execute`. Every `exec` argument except `data` sits at a fixed word. The caller reaches `data` through the offset word at byte 132, and the caller chooses that offset. This is the same flaw that rules out KyberSwap below. The ABI encoder writes `0xa0`, which puts the inner call at byte 196 and the Settler recipient word at byte 200. A caller can instead point the offset past a decoy that keeps the account address at byte 200. The real inner call then sits after the decoy and pays another recipient. A rule on byte 200 alone accepts that calldata, so the session also pins the offset word. The `exec` action carries these rules, all `EQUAL`:
+
+| Calldata byte | Rule `offset` | Field | Required value |
+| --- | --- | --- | --- |
+| 132 | 128 | Offset of `data` | `0xa0` |
+| 196 | 192 | Inner selector and the first 28 bytes of the recipient word | The `Settler.execute` selector, then those 28 bytes for the account address |
+| 200 | 196 | `slippage.recipient` | The account address |
+
+The `exec` token and amount sit at fixed words too, at bytes 36 and 68. On 2026-11-13 these positions were checked again with viem 2.57.13. Canonical calldata passes every rule. Calldata whose offset word is `0x100`, with a decoy before the real inner call, passes the byte-200 rule but ABI-decodes to another recipient, and the byte-132 rule refuses it.
+
+In KyberSwap's `swap` and `swapSimpleMode`, the description is a dynamic tuple reached through an offset that the caller chooses. A rule at a fixed position can be dodged with a non-canonical offset.
 
 So the `smart_account` level routes swaps through 0x only, plus plain transfers. Kyber, LI.FI, and other routers are refused at this level. The app policy and the self-hosted signer, which decode offsets properly, keep them.
 
@@ -51,7 +61,11 @@ So the `smart_account` level routes swaps through 0x only, plus plain transfers.
 2. Confirm which 7579 account and WebAuthn validator are in the registry with audits, and their deployed addresses on each chain Whale enables.
 3. Confirm RIP-7212 availability on each enabled chain, or the gas cost of the fallback verifier.
 4. Pick between 24-hour sessions and a periodic spending-limit module.
-5. Write a fork test with a session key that tries to pay a swap to another recipient, exceed the token cap, and call a non-0x router. Each must revert on-chain.
+5. Write a fork test with a session key that tries each of these. Each must revert on-chain:
+   - pay a swap to another recipient;
+   - send `exec` calldata whose `data` offset points past a decoy that keeps the account address at byte 200;
+   - exceed the token cap;
+   - call a non-0x router.
 
 ## Consequences
 
