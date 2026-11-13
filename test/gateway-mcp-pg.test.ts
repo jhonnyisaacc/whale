@@ -254,8 +254,9 @@ test("sends above the threshold wait for a passkey approval of that exact comman
     assert.equal(planned.isError, false);
     assert.equal(JSON.parse(planned.content[0].text).status, "would_swap");
     assert.equal(sent.length, before + 1);
-    const reused = JSON.parse((await call("swap", swap)).content[0].text);
-    assert.equal(reused.status, "approval_required", "an approval is spent once; the same key asks again");
+    const reused = await call("swap", swap);
+    assert.equal(reused.isError, true, "an approval is spent once");
+    assert.match(reused.content[0].text, /already used/);
 
     const tooBig = await call("swap", { ...swap, sellAmount: "25000000", idempotencyKey: "swap-big-2" });
     assert.match(tooBig.content[0].text, /above this agent's 20\.00 USD per-transaction cap/);

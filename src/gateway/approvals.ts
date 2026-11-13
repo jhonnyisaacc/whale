@@ -57,23 +57,20 @@ export async function requestApproval(
   });
 }
 
-// An approval is spent once, by the agent that asked, for the command it asked about.
-export async function consumeApproval(pool: pg.Pool, agent: AgentContext, idempotencyKey: string, command: HostedCommand, now = Date.now()): Promise<"used" | "pending" | "denied" | "expired" | "missing" | "conflict"> {
-  return inTransaction(pool, async (client) => {
-    const found = await client.query<{ id: string; status: Approval["status"]; expires_at: Date; command: unknown }>(
-      "SELECT id, status, expires_at, command FROM approvals WHERE agent_id = $1 AND idempotency_key = $2 FOR UPDATE",
-      [agent.agentId, idempotencyKey],
-    );
-    const row = found.rows[0];
-    if (!row) return "missing";
-    if (bindingOf(row.command) !== bindingOf(command)) return "conflict";
-    const status = statusAt(row, now);
-    if (status === "approved") {
-      await client.query("UPDATE approvals SET status = 'used' WHERE id = $1", [row.id]);
-      return "used";
-    }
-    return status === "used" ? "missing" : status;
-  });
+export async function approvalFor(pool: pg.Pool, agent: AgentContext, idempotencyKey: string, command: HostedCommand, now = Date.now()): Promise<Approval["status"] | "missing" | "conflict"> {
+  const found = await pool.query<{ status: Approval["status"]; expires_at: Date; command: unknown }>("SELECT status, expires_at, command FROM approvals WHERE agent_id = $1 AND idempotency_key = $2", [
+    agent.agentId,
+    idempotencyKey,
+  ]);
+  const row = found.rows[0];
+  if (!row) return "missing";
+  if (bindingOf(row.command) !== bindingOf(command)) return "conflict";
+  return statusAt(row, now);
+}
+
+export async function spendApproval(client: pg.ClientBase, agent: AgentContext, idempotencyKey: string, now = Date.now()): Promise<boolean> {
+  const spent = await client.query("UPDATE approvals SET status = 'used' WHERE agent_id = $1 AND idempotency_key = $2 AND status = 'approved' AND expires_at > $3", [agent.agentId, idempotencyKey, new Date(now)]);
+  return (spent.rowCount ?? 0) === 1;
 }
 
 export async function decideApproval(

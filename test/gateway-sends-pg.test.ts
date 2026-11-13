@@ -98,3 +98,26 @@ test("an approved send that waited past its hour is refused, not spent", { skip:
     await drop();
   }
 });
+
+test("an executor failure leaves the approval for the retry, and a spent approval says so instead of asking again", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, user, sent, failures, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    const asked = await swap("flaky-executor", 15);
+    assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
+    failures.push(new Error("executor answered 502"));
+    const failed = await swap("flaky-executor", 15);
+    assert.equal(failed.isError, true);
+    const retried = await swap("flaky-executor", 15);
+    assert.equal(retried.isError, false);
+    assert.equal(retried.body?.status, "would_swap");
+    assert.equal(sent.length, 1);
+    const replayed = await swap("flaky-executor", 15);
+    assert.equal(replayed.isError, true);
+    assert.match(replayed.text, /already used/);
+    const pending = (await app.inject({ method: "GET", url: "/api/approvals?status=pending", headers: user.headers })).json().approvals;
+    assert.deepEqual(pending, []);
+    assert.equal(sent.length, 1);
+  } finally {
+    await drop();
+  }
+});

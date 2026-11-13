@@ -158,7 +158,7 @@ A `transfer` asks for approval whenever the wallet has a threshold, because it h
 The owner sees pending approvals at `GET /api/approvals?status=pending`:
 - Approving needs a passkey step-up for `{ kind: "approval.approve", approvalId, command }`.
 - Denying needs none.
-- An approval lasts an hour and is spent by one retry of the exact command. The same `idempotencyKey` with a different command is refused.
+- An approval lasts an hour, approved or not. It is spent by one retry of the exact command, and only once the executor answers that retry. A retry after an executor error can still use it. A spent approval is refused, and the agent asks again with a new `idempotencyKey`. The same `idempotencyKey` with a different command is refused.
 
 `GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else.
 

@@ -1,9 +1,9 @@
 import type pg from "pg";
 import { QUOTE_ASSETS, quoteAssetOf } from "../chains.js";
 import type { HostedCommand } from "../hosted-commands.js";
-import { audit } from "./accounts.js";
+import { audit, inTransaction } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
-import { consumeApproval, requestApproval } from "./approvals.js";
+import { approvalFor, requestApproval, spendApproval } from "./approvals.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { effectiveLimits } from "./policy.js";
 
@@ -36,12 +36,13 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
     };
   };
 
-  const approval = await consumeApproval(pool, agent, command.idempotencyKey, command);
+  const approval = await approvalFor(pool, agent, command.idempotencyKey, command);
   if (approval === "conflict") return deny("this idempotencyKey was already used for a different command");
+  if (approval === "used") return deny("this approval was already used. Ask again with a new idempotencyKey");
   if (approval === "denied") return deny("the owner denied this operation");
   if (approval === "expired") return deny("the approval request expired. Ask again with a new idempotencyKey");
   if (approval === "pending") return { ok: true, value: { status: "approval_pending", reason: "the owner has not answered yet. Call again later with the same idempotencyKey" } };
-  const approved = approval === "used";
+  const approved = approval === "approved";
   const threshold = agent.policy.approvalAboveUsd;
   if (command.kind === "transfer" && !approved && threshold !== null) return ask(null, "transfers out need the owner's approval");
   if (command.kind === "swap") {
@@ -54,6 +55,10 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   }
 
   const value = await executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });
-  await audit(pool, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
-  return { ok: true, value };
+  const recorded = await inTransaction(pool, async (client) => {
+    if (approved && !(await spendApproval(client, agent, command.idempotencyKey))) return false;
+    await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
+    return true;
+  });
+  return recorded ? { ok: true, value } : deny("this approval was already used. Ask again with a new idempotencyKey");
 }
