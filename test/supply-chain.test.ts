@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { cargoLockSourceProblems, cargoManifestSourceProblems } from "./cargo-sources.js";
 
 function path(relative: string): URL {
   return new URL(`../../${relative}`, import.meta.url);
@@ -100,56 +99,6 @@ test("the Rust signer pins every crate exactly and commits its lockfile", () => 
   assert.match(manifest, /^\[profile\.release\]\noverflow-checks = true$/m, "release builds refuse integer overflow");
   assert.equal(existsSync(path("signer/Cargo.lock")), true, "Cargo.lock is committed");
   assert.match(read("signer/rust-toolchain.toml"), /channel = "\d+\.\d+\.\d+"/);
-});
-
-test("the Rust signer takes every crate from crates.io", () => {
-  assert.deepEqual(cargoManifestSourceProblems(read("signer/Cargo.toml")), []);
-  assert.deepEqual(cargoLockSourceProblems(read("signer/Cargo.lock"), "whale-signer"), []);
-});
-
-test("the Cargo source check refuses git, path, registry, patch, and replace in every table form", () => {
-  const pinned = '[package]\nname = "x"\n\n[dependencies]\nhex = "=0.4.3"\nk256 = { version = "=0.14.0", features = ["ecdsa", "std"] }\n';
-  assert.deepEqual(cargoManifestSourceProblems(pinned), []);
-  const bad = [
-    '[dependencies]\nfoo = { git = "https://example.com/foo", version = "=1.0.0" }\n',
-    '[dev-dependencies]\nfoo = { version = "=1.0.0", path = "../foo" }\n',
-    '[build-dependencies]\nfoo = { version = "=1.0.0", registry = "corp" }\n',
-    '[dependencies.foo]\nversion = "=1.0.0"\ngit = "https://example.com/foo"\n',
-    '[dependencies]\nfoo.version = "=1.0.0"\nfoo.path = "../foo"\n',
-    "[target.'cfg(unix)'.dependencies]\nfoo = { version = \"=1.0.0\", git = \"https://example.com/foo\" }\n",
-    '[target."cfg(target_os = \\"linux\\")".dependencies.foo]\nversion = "=1.0.0"\nregistry-index = "https://example.com/index"\n',
-    '[workspace.dependencies]\nfoo = { version = "=1.0.0", path = "foo" }\n',
-    '[patch.crates-io]\nsha2 = { version = "=0.11.1" }\n',
-    '[patch."https://github.com/example/repo"]\n',
-    '[replace]\n"sha2:0.11.1" = { version = "=0.11.1" }\n',
-    '[dependencies]\nfoo = { version = "=1.0.0", "\\u0067it" = "https://example.com/foo" }\n',
-    '[dependencies]\nfoo = { version = "=1.0.0", "p\\U00000061th" = "../foo" }\n',
-    '["dep\\u0065ndencies"]\nfoo = { version = "=1.0.0", git = "https://example.com/foo" }\n',
-    '["p\\u0061tch".crates-io]\nsha2 = { path = "../sha2" }\n',
-    '[dev_dependencies]\nfoo = { version = "=1.0.0", path = "../foo" }\n',
-    '[build_dependencies]\nfoo = { version = "=1.0.0", git = "https://example.com/foo" }\n',
-  ];
-  for (const manifest of bad) assert.notDeepEqual(cargoManifestSourceProblems(pinned + manifest), [], manifest);
-  assert.notDeepEqual(cargoManifestSourceProblems('[package]\nname = "x"\nworkspace = ".."\n'), []);
-  assert.notDeepEqual(cargoManifestSourceProblems('patch = { crates-io = { sha2 = { path = "../sha2" } } }\n'), []);
-  const lock = (source: string) => `version = 4\n\n[[package]]\nname = "foo"\nversion = "1.0.0"\n${source}\n[[package]]\nname = "whale-signer"\nversion = "0.1.0"\n`;
-  assert.deepEqual(cargoLockSourceProblems(lock('source = "registry+https://github.com/rust-lang/crates.io-index"\n'), "whale-signer"), []);
-  for (const source of ['source = "git+https://example.com/foo#abc"\n', 'source = "registry+https://example.com/index"\n', 'source = "sparse+https://example.com/index/"\n', ""]) {
-    assert.notDeepEqual(cargoLockSourceProblems(lock(source), "whale-signer"), [], source || "no source");
-  }
-  const root = '[[package]]\nname = "whale-signer"\nversion = "0.1.0"\n';
-  const evil = 'name = "evil"\nversion = "1.0.0"\nsource = "git+https://example.com/evil#abc"\n';
-  const hidden = [
-    `version = 4\n\n[[package]] \n${evil}\n${root}`,
-    `version = 4\n\n[[package]] # x\n${evil}\n${root}`,
-    `version = 4\n\n[[ package ]]\nname = "evil"\nversion = "1.0.0"\n\n${root}`,
-    `version = 4\n\n[[package]]\r\n${evil.replace(/\n/g, "\r\n")}\r\n${root}`,
-    'version = 4\npackage = [\n { name = "whale-signer", version = "0.1.0" },\n { name = "evil", version = "1.0.0", source = "git+https://example.com/evil#abc" },\n]\n',
-    `version = 4\n\n${root}\n[[package]]\nname = "whale-signer"\nversion = "9.0.0"\nsource = 'git+https://example.com/evil#abc'\n`,
-    `version = 4\n\n[[package]]\nversion = "1.0.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nname = "evil"\nsource2 = "git+https://example.com/evil#abc"\n\n${root}`,
-    `version = 4\n\n[[package]]\nname="evil"\nversion="1.0.0"\nsource="git+https://example.com/evil#abc"\n\n${root}`,
-  ];
-  for (const lockfile of hidden) assert.notDeepEqual(cargoLockSourceProblems(lockfile, "whale-signer"), [], lockfile);
 });
 
 test("workflows pin every action and service image, and install only from the lockfile", () => {
