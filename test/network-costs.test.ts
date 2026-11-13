@@ -77,6 +77,17 @@ test("costs are cached for thirty seconds per chain set", async () => {
   assert.equal(reads, 2);
 });
 
+test("concurrent callers share one read, and two chain sets keep their own cache entries", async () => {
+  let reads = 0;
+  const counting = readers({ nativeUsd: async () => (reads++, await new Promise((resolve) => setTimeout(resolve, 20)), new Map([["ETH", 3_000]])) });
+  const start = Date.now() + 20_000_000;
+  await Promise.all([cachedNetworkCosts(["optimism"], counting, start), cachedNetworkCosts(["optimism"], counting, start)]);
+  assert.equal(reads, 1);
+  await cachedNetworkCosts(["polygon"], counting, start + 1_000);
+  await cachedNetworkCosts(["optimism"], counting, start + 2_000);
+  assert.equal(reads, 2);
+});
+
 test("the executor answers a costs command on the hosted route without reaching run()", async () => {
   const app = await buildApp({ authTokens: ["executor-token-123456"], logger: false });
   const depsFor = async (): Promise<CommandDeps> => {

@@ -26,7 +26,13 @@ export function skippedNetworks(chainKeys: readonly string[]): SkippedNetwork[] 
 }
 
 function within<T>(work: Promise<T>): Promise<T | null> {
-  return Promise.race([work, new Promise<null>((resolve) => setTimeout(() => resolve(null), READ_TIMEOUT_MS).unref())]).catch(() => null);
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), READ_TIMEOUT_MS).unref();
+  });
+  return Promise.race([work, timeout])
+    .catch(() => null)
+    .finally(() => clearTimeout(timer));
 }
 
 function median(values: readonly number[]): number | null {
@@ -97,12 +103,18 @@ export async function networkCosts(chainKeys: readonly string[], readers: CostRe
   return costs.sort((left, right) => left.swapUsd - right.swapUsd || feeRankOf(left.chainKey) - feeRankOf(right.chainKey));
 }
 
-let cache: { key: string; at: number; value: NetworkCost[] } | null = null;
+const CACHE_ENTRIES = 64;
+const cache = new Map<string, { at: number; value: Promise<NetworkCost[]> }>();
 
-export async function cachedNetworkCosts(chainKeys: readonly string[], readers: CostReaders, now = Date.now()): Promise<NetworkCost[]> {
+export function cachedNetworkCosts(chainKeys: readonly string[], readers: CostReaders, now = Date.now()): Promise<NetworkCost[]> {
   const key = [...chainKeys].sort().join(",");
-  if (cache && cache.key === key && now - cache.at < CACHE_MS) return cache.value;
-  const value = await networkCosts(chainKeys, readers);
-  cache = { key, at: now, value };
+  const hit = cache.get(key);
+  if (hit && now - hit.at < CACHE_MS) return hit.value;
+  for (const [stale, entry] of cache) if (now - entry.at >= CACHE_MS || cache.size >= CACHE_ENTRIES) cache.delete(stale);
+  const value = networkCosts(chainKeys, readers);
+  cache.set(key, { at: now, value });
+  value.catch(() => {
+    if (cache.get(key)?.value === value) cache.delete(key);
+  });
   return value;
 }
