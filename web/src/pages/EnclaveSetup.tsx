@@ -108,12 +108,12 @@ export function EnclaveSetup({ wallet, onDone }: { wallet: Wallet; onDone: () =>
         setStatus("Approve the signing policy with your passkey…");
         await addPolicies(delegation);
       }
-      if (delegation.missingAuthenticators.length > 0) {
-        setStatus("Approve adding your backup passkeys to this enclave…");
-        await addOwnerPasskeys(delegation);
-      }
       setStatus("Checking Turnkey…");
       await api(`/api/wallets/${wallet.id}/enclave/confirm`, { method: "POST", body: {} });
+      if (delegation.missingAuthenticators.length > 0) {
+        setStatus("Approve adding your backup passkeys to this enclave…");
+        await addOwnerPasskeys(delegation).catch(() => undefined);
+      }
       onDone();
     });
 
