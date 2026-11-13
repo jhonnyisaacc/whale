@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, describe, type Wallet } from "../api.js";
+import { addBackupPasskey } from "../backup-passkey.js";
+import { stepUp } from "../stepup.js";
 import { addOwnerPasskey, type Delegation } from "../turnkey.js";
-import { createPasskey, type CreationOptions } from "../webauthn.js";
+import { createPasskey } from "../webauthn.js";
 
 type Passkey = { credentialId: string; label: string; createdAt: string; lastUsedAt: string | null };
 type Webhook = { id: string; url: string; format: string; events: string[]; failures: number; disabled: boolean; lastStatus: number | null; lastError: string | null };
@@ -33,15 +35,12 @@ export function Settings() {
   const addPasskey = async () => {
     setError(null);
     try {
-      setStatus("Create the new passkey…");
-      const options = await api<CreationOptions>("/api/passkeys/options", { method: "POST", body: {} });
-      const credential = await createPasskey(options);
-      await api("/api/passkeys", { method: "POST", body: { credential, label } });
+      const { challenge, credential } = await addBackupPasskey({ api, createPasskey, stepUp }, label, setStatus);
       const wallets = (await api<{ wallets: Wallet[] }>("/api/wallets")).wallets.filter((wallet) => wallet.level === "enclave" && wallet.addresses.length > 0);
       for (const wallet of wallets) {
         setStatus(`Approve adding it to ${wallet.label} with your current passkey…`);
         const delegation = await api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`);
-        await addOwnerPasskey(delegation, { name: label, challenge: options.challenge, credential });
+        await addOwnerPasskey(delegation, { name: label, challenge, credential });
       }
       setStatus(wallets.length > 0 ? "The backup passkey can now open your account and your enclaves." : "Added.");
     } catch (caught) {

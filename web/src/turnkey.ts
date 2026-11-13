@@ -67,7 +67,7 @@ const TRANSPORTS: Record<string, string> = {
 // enclave's owner, so losing either device later still leaves a way in.
 export function addOwnerPasskey(
   delegation: Delegation,
-  passkey: { name: string; challenge: string; credential: { id: string; response: { clientDataJSON: string; attestationObject: string; transports: string[] } } },
+  passkey: { name: string; challenge: string; credential: { id: string; response: { clientDataJSON: string; attestationObject: string; transports?: string[] } } },
 ): Promise<unknown> {
   const authenticator = {
     authenticatorName: passkey.name,
@@ -76,7 +76,7 @@ export function addOwnerPasskey(
       credentialId: passkey.credential.id,
       clientDataJson: passkey.credential.response.clientDataJSON,
       attestationObject: passkey.credential.response.attestationObject,
-      transports: passkey.credential.response.transports.map((entry) => TRANSPORTS[entry]).filter((entry): entry is string => entry !== undefined),
+      transports: (passkey.credential.response.transports ?? []).map((entry) => TRANSPORTS[entry]).filter((entry): entry is string => entry !== undefined),
     },
   };
   return submit("/public/v1/submit/create_authenticators", "ACTIVITY_TYPE_CREATE_AUTHENTICATORS_V2", delegation.subOrganizationId, { userId: delegation.ownerUserId, authenticators: [authenticator] }, delegation.rootCredentialId);
