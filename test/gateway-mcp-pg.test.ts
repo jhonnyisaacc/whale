@@ -82,7 +82,7 @@ test("MCP over HTTP authenticates the agent, negotiates the version, and refuses
     }
     assert.equal((await rpc({ jsonrpc: "2.0", id: 2, method: "resources/list" })).json().error.code, -32601);
     const tools = (await rpc({ jsonrpc: "2.0", id: 3, method: "tools/list" })).json().result.tools.map((tool: { name: string }) => tool.name);
-    assert.deepEqual(tools, ["wallet_status", "deposit_address", "balance", "quote", "swap", "transfer"]);
+    assert.deepEqual(tools, ["wallet_status", "deposit_address", "balance", "quote", "swap", "transfer", "network_costs", "x402_quote"]);
     assert.equal((await app.inject({ method: "GET", url: "/mcp" })).statusCode, 405);
   } finally {
     await drop();

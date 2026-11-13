@@ -23,7 +23,11 @@ function sellUsd(command: Extract<HostedCommand, { kind: "swap" }>): number | nu
   return Number(BigInt(command.sellAmount)) / 10 ** asset.decimals;
 }
 
-type Priced = { usd: number; day: string };
+export type Priced = { usd: number; day: string };
+
+export function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 const KEY_REUSED = "this idempotencyKey was already used for a different command";
 
@@ -34,7 +38,7 @@ async function recordedSpend(client: pg.Pool | pg.ClientBase, agent: AgentContex
   return row.binding === bindingOf(command) ? "same" : "conflict";
 }
 
-async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, priced: Priced): Promise<string | null> {
+export async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, priced: Priced, what = "the swap"): Promise<string | null> {
   const totals = await client.query<{ agent: number; wallet: number }>(
     `SELECT COALESCE(SUM(usd) FILTER (WHERE agent_id = $2), 0)::float8 AS agent, COALESCE(SUM(usd), 0)::float8 AS wallet
      FROM agent_spends WHERE wallet_id = $1 AND day = $3::date`,
@@ -42,9 +46,18 @@ async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext
   );
   const spent = totals.rows[0] ?? { agent: 0, wallet: 0 };
   const agentCap = effectiveLimits(agent.limits, agent.policy).dailyUsd;
-  if (spent.agent + priced.usd > agentCap) return `the swap would take today's total to about ${usd(spent.agent + priced.usd)}, above this agent's ${usd(agentCap)} daily cap`;
-  if (spent.wallet + priced.usd > agent.policy.dailyUsd) return `the swap would take today's total to about ${usd(spent.wallet + priced.usd)}, above the wallet's ${usd(agent.policy.dailyUsd)} daily cap`;
+  if (spent.agent + priced.usd > agentCap) return `${what} would take today's total to about ${usd(spent.agent + priced.usd)}, above this agent's ${usd(agentCap)} daily cap`;
+  if (spent.wallet + priced.usd > agent.policy.dailyUsd) return `${what} would take today's total to about ${usd(spent.wallet + priced.usd)}, above the wallet's ${usd(agent.policy.dailyUsd)} daily cap`;
   return null;
+}
+
+export function perTxRefusal(agent: AgentContext, estimate: number, lead: string): string | null {
+  const cap = effectiveLimits(agent.limits, agent.policy).maxTxUsd;
+  return estimate > cap ? `${lead} ${usd(estimate)}, above this agent's ${usd(cap)} per-transaction cap` : null;
+}
+
+export function transferApprovalReason(agent: AgentContext): string | null {
+  return agent.policy.approvalAboveUsd === null ? null : "transfers out need the owner's approval";
 }
 
 async function recordSpend(client: pg.ClientBase, agent: AgentContext, command: Send, priced: Priced): Promise<string | null> {
@@ -91,12 +104,13 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   const approved = approval === "approved";
   const threshold = agent.policy.approvalAboveUsd;
   let priced: Priced | null = null;
-  if (command.kind === "transfer" && !approved && threshold !== null) return ask(null, "transfers out need the owner's approval");
+  const transferApproval = command.kind === "transfer" && !approved ? transferApprovalReason(agent) : null;
+  if (transferApproval) return ask(null, transferApproval);
   if (command.kind === "swap") {
     const estimate = sellUsd(command);
-    const cap = effectiveLimits(agent.limits, agent.policy).maxTxUsd;
-    if (estimate !== null && estimate > cap) return deny(`the swap sells about ${usd(estimate)}, above this agent's ${usd(cap)} per-transaction cap`);
-    priced = estimate === null ? null : { usd: estimate, day: new Date().toISOString().slice(0, 10) };
+    const overCap = estimate === null ? null : perTxRefusal(agent, estimate, "the swap sells about");
+    if (overCap) return deny(overCap);
+    priced = estimate === null ? null : { usd: estimate, day: today() };
     const overDaily = priced && recorded === "none" ? await dailyRefusal(pool, agent, priced) : null;
     if (overDaily) return deny(overDaily);
     if (!approved && estimate === null) return ask(null, "the swap sells a token Whale cannot price");
