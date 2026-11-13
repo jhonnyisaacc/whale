@@ -115,13 +115,14 @@ export async function registerPasskey(
     } catch (error) {
       return error instanceof Error ? error.message : "the passkey did not verify";
     }
-    await client.query("INSERT INTO passkeys (credential_id, account_id, public_key, sign_count, label) VALUES ($1, $2, $3, $4, $5)", [
+    const inserted = await client.query("INSERT INTO passkeys (credential_id, account_id, public_key, sign_count, label) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (credential_id) DO NOTHING", [
       registration.credentialId,
       input.accountId,
       registration.publicKey,
       registration.signCount,
       input.label,
     ]);
+    if ((inserted.rowCount ?? 0) === 0) return "this passkey is already registered";
     await audit(client, { accountId: input.accountId, actor: "user", action: "passkey.added", detail: { label: input.label } });
     if (after) await after(client, { ...registration, challenge });
     return registration;

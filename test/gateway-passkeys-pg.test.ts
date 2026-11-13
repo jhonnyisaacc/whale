@@ -106,3 +106,23 @@ test("a second passkey needs a step-up from an existing passkey bound to the new
     await drop();
   }
 });
+
+test("a credential id that another account already holds is refused with 400", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, drop } = await harness();
+  try {
+    const authenticator = softAuthenticator(RP);
+    const add = async (headers: Record<string, string>) => {
+      const options = (await app.inject({ method: "POST", url: "/api/passkeys/options", headers, payload: {} })).json();
+      return app.inject({ method: "POST", url: "/api/passkeys", headers, payload: { credential: authenticator.register(options.challenge), label: "Shared" } });
+    };
+    assert.equal((await add(user.headers)).statusCode, 201);
+    const other = await signedInAccount(pool);
+    const taken = await add(other.headers);
+    assert.equal(taken.statusCode, 400);
+    assert.equal(taken.json().error, "passkey_rejected");
+    const owners = await pool.query("SELECT account_id FROM passkeys");
+    assert.deepEqual(owners.rows.map((row) => row.account_id), [user.accountId]);
+  } finally {
+    await drop();
+  }
+});
