@@ -147,6 +147,23 @@ Two routes freeze, with no passkey needed:
 
 The Turnkey policy of an enclave wallet stays as rendered at activation. A widening that adds an EVM chain changes the app policy only, and Turnkey keeps refusing that chain until the delegation is rendered again under the user's passkey.
 
+### Approvals and activity
+
+A hosted `swap` is priced by what it sells. A USDC, USDT, or USDB sell counts one dollar per token. Any other sell token cannot be priced yet. The quote's output is never used, because price impact or slippage can make it far smaller than what leaves the wallet.
+- Above the agent's effective per-transaction cap, it is refused, even if approved.
+- A priced swap that would take the agent's total for the UTC day above its effective daily cap is refused, even if approved. So is one that would take the wallet's total, across all its agents, above the wallet's daily cap. A swap counts once it is planned, and a retry with the same `idempotencyKey` does not count again.
+- Above the wallet's `approvalAboveUsd`, it returns `approval_required` with an approval id, and the agent calls again later with the same `idempotencyKey`.
+- When it cannot be priced, it returns `approval_required` even when the wallet has no `approvalAboveUsd`, because no cap can be checked. An approved unpriced swap counts toward no daily total.
+
+A `transfer` asks for approval whenever the wallet has a threshold, because it has no quote to price it.
+
+The owner sees pending approvals at `GET /api/approvals?status=pending`:
+- Approving needs a passkey step-up for `{ kind: "approval.approve", approvalId, command }`.
+- Denying needs none.
+- An approval lasts an hour, approved or not. It is spent by one retry of the exact command, and only once the executor answers that retry. A retry after an executor error can still use it. A spent approval is refused, and the agent asks again with a new `idempotencyKey`. The same `idempotencyKey` with a different command is refused.
+
+`GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.
