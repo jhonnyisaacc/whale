@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import crypto from "node:crypto";
+import { syncBuiltinESMExports } from "node:module";
+import test, { mock } from "node:test";
 import { authenticateApiKey } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
 import { createWallet } from "../src/gateway/wallets.js";
@@ -144,6 +146,34 @@ test("an agent cannot be created on a frozen wallet", { skip: !TEST_DATABASE_URL
     assert.deepEqual([refused.statusCode, refused.json().error], [409, "wallet_frozen"]);
     assert.equal((await pool.query("SELECT id FROM agents")).rowCount, 0);
   } finally {
+    await drop();
+  }
+});
+
+test("a key id that collides with an existing one is drawn again", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, drop } = await harness();
+  try {
+    const { headers } = await signedInAccount(pool);
+    const wallet = (await app.inject({ method: "POST", url: "/api/wallets", headers, payload: { label: "main", level: "enclave" } })).json();
+    const { agentId } = (await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/agents`, headers, payload: { name: "bot", limits: LIMITS } })).json();
+    const taken = (await pool.query<{ id: string }>("SELECT id FROM agent_credentials")).rows[0]?.id as string;
+    const original = crypto.randomBytes;
+    let collided = false;
+    mock.method(crypto, "randomBytes", (size: number) => {
+      if (size !== 6 || collided) return original(size);
+      collided = true;
+      return Buffer.from(taken, "hex");
+    });
+    syncBuiltinESMExports();
+    const rotated = await app.inject({ method: "POST", url: `/api/agents/${agentId}/rotate`, headers, payload: {} });
+    mock.restoreAll();
+    syncBuiltinESMExports();
+    assert.equal(collided, true);
+    assert.equal(rotated.statusCode, 200);
+    assert.equal((await authenticateApiKey(pool, rotated.json().apiKey))?.agentId, agentId);
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
     await drop();
   }
 });

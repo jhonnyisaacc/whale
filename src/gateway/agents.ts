@@ -5,6 +5,7 @@ import { storedLimitsSchema, storedPolicySchema, type AgentLimits, type WalletPo
 
 const API_KEY = /^whale_([0-9a-f]{12})_([A-Za-z0-9_-]{43})$/;
 const TOUCH_AFTER_MS = 60_000;
+const KEY_ID_ATTEMPTS = 3;
 
 export type AgentContext = {
   agentId: string;
@@ -27,9 +28,12 @@ export function newApiKey(): { id: string; secret: string; key: string } {
 }
 
 export async function issueApiKey(client: pg.ClientBase, agentId: string): Promise<string> {
-  const { id, secret, key } = newApiKey();
-  await client.query("INSERT INTO agent_credentials (id, agent_id, kind, secret_hash) VALUES ($1, $2, 'api_key', $3)", [id, agentId, secretHash(secret)]);
-  return key;
+  for (let attempt = 0; attempt < KEY_ID_ATTEMPTS; attempt += 1) {
+    const { id, secret, key } = newApiKey();
+    const inserted = await client.query("INSERT INTO agent_credentials (id, agent_id, kind, secret_hash) VALUES ($1, $2, 'api_key', $3) ON CONFLICT (id) DO NOTHING", [id, agentId, secretHash(secret)]);
+    if (inserted.rowCount === 1) return key;
+  }
+  throw new Error("no free API key id");
 }
 
 export async function createAgent(
