@@ -87,10 +87,11 @@ test("every package.json pins every dependency, the root pins the package manage
 
 test("the Rust signer pins every crate exactly and commits its lockfile", () => {
   const manifest = read("signer/Cargo.toml");
-  const dependencies = manifest.split("[dependencies]")[1] ?? "";
+  const dependencies = (manifest.split("[dependencies]")[1] ?? "").split(/^\[/m)[0] ?? "";
   const lines = dependencies.split("\n").filter((line) => /^[a-z0-9_-]+ = /.test(line));
   assert.ok(lines.length > 0);
   for (const line of lines) assert.match(line, /"=\d+\.\d+\.\d+"/, line);
+  assert.match(manifest, /^\[profile\.release\]\noverflow-checks = true$/m, "release builds refuse integer overflow");
   assert.equal(existsSync(path("signer/Cargo.lock")), true, "Cargo.lock is committed");
   assert.match(read("signer/rust-toolchain.toml"), /channel = "\d+\.\d+\.\d+"/);
 });
