@@ -118,7 +118,7 @@ export async function callHostedTool(env: ToolEnv, name: string, args: unknown):
     return { ok: false, error: denied };
   }
   if (!env.executor) return { ok: false, error: "quotes are not configured on this deployment" };
-  const value = await env.executor.run({ walletId: agent.walletId, agentId: agent.agentId, command });
+  const value = await env.executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command });
   if (command.kind === "swap" || command.kind === "transfer") await audit(env.pool, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey } });
   return { ok: true, value };
 }

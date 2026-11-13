@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { CommandDeps, WalletCommand, WalletResult } from "../commands.js";
 import { run } from "../commands.js";
-import { hostedRequestSchema, walletCommandOf } from "../hosted-commands.js";
-import { anyTokenMatches, bearerOf, perMinute } from "../http.js";
+import { hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
+import { anyTokenMatches, bearerOf } from "../http.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
 
@@ -30,10 +30,13 @@ async function defaultDeps(command: WalletCommand): Promise<CommandDeps> {
 // so nothing on this route can sign or post.
 export function registerHostedRoutes(app: FastifyInstance, options: { token: string; depsFor?: (command: WalletCommand) => Promise<CommandDeps> }): void {
   const depsFor = options.depsFor ?? defaultDeps;
-  app.post("/hosted/commands", { config: perMinute(600) }, async (request, reply) => {
+  const perAccount = app.createRateLimit({ max: 600, timeWindow: "1 minute", keyGenerator: (request) => (request.body as HostedRequest).accountId });
+  app.post("/hosted/commands", { config: { rateLimit: false } }, async (request, reply) => {
     if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });
     const parsed = hostedRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+    const limit = await perAccount(request);
+    if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate limit" });
     const command = walletCommandOf(parsed.data.command);
     const deps = await depsFor(command);
     const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });

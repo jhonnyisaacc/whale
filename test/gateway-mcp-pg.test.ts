@@ -30,7 +30,7 @@ async function harness() {
   const rpc = (body: unknown, headers: Record<string, string> = {}, remoteAddress = "127.0.0.1") =>
     app.inject({ method: "POST", url: "/mcp", remoteAddress, headers: { authorization: `Bearer ${apiKey}`, accept: "application/json, text/event-stream", ...headers }, payload: body as Record<string, unknown> });
   const call = async (name: string, args: Record<string, unknown>) => (await rpc({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } })).json().result;
-  return { app, pool, sent, rpc, call, agentId, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, sent, rpc, call, agentId, accountId, drop: async () => (await app.close(), await drop()) };
 }
 
 test("MCP over HTTP authenticates the agent, negotiates the version, and refuses foreign origins", { skip: !TEST_DATABASE_URL }, async () => {
@@ -60,7 +60,7 @@ test("MCP over HTTP authenticates the agent, negotiates the version, and refuses
 });
 
 test("hosted tools stay inside the agent's limits and the wallet policy before reaching the executor", { skip: !TEST_DATABASE_URL }, async () => {
-  const { pool, sent, call, rpc, app, agentId, drop } = await harness();
+  const { pool, sent, call, rpc, app, agentId, accountId, drop } = await harness();
   try {
     const status = JSON.parse((await call("wallet_status", {})).content[0].text);
     assert.equal(status.mode, "dry_run");
@@ -70,6 +70,7 @@ test("hosted tools stay inside the agent's limits and the wallet policy before r
     const swap = await call("swap", { chain: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000", idempotencyKey: "swap-0001" });
     assert.equal(swap.isError, false);
     assert.equal(sent[0]?.command.kind, "swap");
+    assert.equal(sent[0]?.accountId, accountId);
     assert.equal(sent[0]?.command.kind === "swap" && sent[0].command.taker, OWN);
     assert.equal(sent[0]?.command.kind === "swap" && sent[0].command.slippageBps, 50);
 
