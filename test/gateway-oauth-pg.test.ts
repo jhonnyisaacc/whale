@@ -231,6 +231,29 @@ test("two refreshes at once both succeed, and reuse after the grace window still
   }
 });
 
+test("expired OAuth requests, codes, and tokens are deleted a day after they expire", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { app, pool, form, authorize, connect, drop } = await harness({}, () => clock);
+  const count = async (table: string) => (await pool.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n as number;
+  try {
+    const clientId = await register(form, app);
+    const { code, verifier } = await connect(clientId);
+    await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier });
+    await authorize(clientId);
+    assert.deepEqual([await count("oauth_requests"), await count("oauth_codes"), await count("agent_credentials")], [2, 1, 2]);
+
+    clock += 30 * 24 * 60 * 60 * 1000;
+    await authorize(clientId);
+    assert.deepEqual([await count("oauth_requests"), await count("oauth_codes"), await count("agent_credentials")], [1, 0, 1]);
+
+    clock += 24 * 60 * 60 * 1000 + 1;
+    await authorize(clientId);
+    assert.deepEqual([await count("oauth_requests"), await count("oauth_codes"), await count("agent_credentials")], [2, 0, 0]);
+  } finally {
+    await drop();
+  }
+});
+
 test("a metadata-document client must name itself by its own URL, and a denial goes back to the client", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, authorize, drop } = await harness({
     [CIMD]: { client_id: CIMD, client_name: "Cursor", redirect_uris: [REDIRECT] },

@@ -9,6 +9,7 @@ export const CODE_TTL_MS = 5 * 60 * 1000;
 export const ACCESS_TTL_MS = 60 * 60 * 1000;
 export const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const REFRESH_GRACE_MS = 10 * 1000;
+export const EXPIRED_RETENTION_MS = 24 * 60 * 60 * 1000;
 const REFRESH_TOKEN = /^wrt_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 const ACCESS_TOKEN = /^wat_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 
@@ -26,7 +27,15 @@ export function withParams(redirectUri: string, params: Record<string, string | 
   return url.toString();
 }
 
+async function deleteExpired(pool: pg.Pool, now: number): Promise<void> {
+  const cutoff = new Date(now - EXPIRED_RETENTION_MS);
+  await pool.query("DELETE FROM oauth_codes WHERE expires_at < $1", [cutoff]);
+  await pool.query("DELETE FROM oauth_requests r WHERE expires_at < $1 AND NOT EXISTS (SELECT 1 FROM oauth_codes c WHERE c.request_id = r.id)", [cutoff]);
+  await pool.query("DELETE FROM agent_credentials WHERE kind <> 'api_key' AND expires_at < $1", [cutoff]);
+}
+
 export async function createRequest(pool: pg.Pool, input: Omit<PendingRequest, "id" | "clientName">, now = Date.now()): Promise<string> {
+  await deleteExpired(pool, now);
   const id = random();
   await pool.query(
     "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
