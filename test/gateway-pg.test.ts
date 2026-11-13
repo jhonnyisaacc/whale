@@ -207,3 +207,41 @@ test("sign-in started in two tabs finishes in both", { skip: !TEST_DATABASE_URL 
     await drop();
   }
 });
+
+test("a return_to that is not printable ASCII falls back to / and percent-encoded paths survive", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, drop, start } = await gatewayWithGoogle();
+  const finish = async (returnTo: string) => {
+    const { location, login } = await start(returnTo);
+    return app.inject({ method: "GET", url: `/auth/google/callback?code=c1&state=${location.searchParams.get("state")}`, headers: { cookie: `__Host-whale_login=${login}` } });
+  };
+  try {
+    const unicode = await finish("/ああ");
+    assert.equal(unicode.statusCode, 302);
+    assert.equal(unicode.headers.location, "/");
+    const encoded = await finish("/%E3%81%82");
+    assert.equal(encoded.statusCode, 302);
+    assert.equal(encoded.headers.location, "/%E3%81%82");
+  } finally {
+    await app.close();
+    await drop();
+  }
+});
+
+test("three pending sign-ins with the longest return_to fit in one cookie", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, drop } = await gatewayWithGoogle();
+  const startTab = async (returnTo: string, jar: string | null) => {
+    const reply = await app.inject({ method: "GET", url: `/auth/google/start?return_to=${encodeURIComponent(returnTo)}`, headers: jar ? { cookie: `__Host-whale_login=${jar}` } : {} });
+    return cookieValue(reply.headers, "__Host-whale_login") as string;
+  };
+  try {
+    for (const char of ["a", '"', "あ"]) {
+      const longest = `/${char.repeat(511)}`;
+      let jar: string | null = null;
+      for (let i = 0; i < 3; i += 1) jar = await startTab(longest, jar);
+      assert.ok(Buffer.byteLength(`__Host-whale_login=${jar}`) < 4096, JSON.stringify(char));
+    }
+  } finally {
+    await app.close();
+    await drop();
+  }
+});
