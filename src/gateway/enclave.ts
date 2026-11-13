@@ -4,13 +4,13 @@ import { z } from "zod";
 import { audit, inTransaction } from "./accounts.js";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
-import { registerPasskey, registrationOptions, registrationPayload } from "./passkeys.js";
+import { addPasskey, assertionPayload, REFUSED_STATUS, registrationOptions, registrationPayload } from "./passkeys.js";
 import { walletPolicySchema } from "./policy.js";
 import { DELEGATE_USER_NAME, expectedPolicies, turnkeyTransports, verifyDelegation, type CreatedSubOrg, type DelegationConfig, type TurnkeyParent } from "./turnkey.js";
 import type { Registration } from "./webauthn.js";
 
 const walletParam = z.object({ id: z.uuid() });
-const createBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64) }).strict();
+const createBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64), assertion: assertionPayload.optional() }).strict();
 
 class EnclaveClaimed extends Error {}
 
@@ -67,9 +67,9 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     if (wallet.turnkey_sub_org_id || wallet.root_credential_id) return reply.code(409).send({ error: "enclave_exists" });
     const { credential } = body.data;
     let root: (Registration & { challenge: string }) | undefined;
-    let result: Registration | string;
+    let result: Awaited<ReturnType<typeof addPasskey>>;
     try {
-      result = await registerPasskey(pool, config, { accountId: session.accountId, payload: credential, label: body.data.label, binding: binding(wallet.id) }, async (client, registration) => {
+      result = await addPasskey(pool, config, { accountId: session.accountId, payload: credential, label: body.data.label, assertion: body.data.assertion ?? null, binding: binding(wallet.id) }, async (client, registration) => {
         const claimed = await client.query("UPDATE wallets SET root_credential_id = $2 WHERE id = $1 AND root_credential_id IS NULL AND turnkey_sub_org_id IS NULL", [wallet.id, registration.credentialId]);
         if (claimed.rowCount !== 1) throw new EnclaveClaimed();
         root = registration;
@@ -78,7 +78,8 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
       if (error instanceof EnclaveClaimed) return reply.code(409).send({ error: "enclave_exists" });
       throw error;
     }
-    if (typeof result === "string" || !root) return reply.code(400).send({ error: "passkey_rejected", detail: result });
+    if ("refused" in result) return reply.code(REFUSED_STATUS[result.refused]).send({ error: result.refused, detail: result.detail });
+    if (!root) throw new Error(`passkey ${result.credentialId} registered without claiming wallet ${wallet.id}`);
     let created: CreatedSubOrg;
     try {
       created = await turnkey.createSubOrganization({
