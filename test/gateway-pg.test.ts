@@ -2,22 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildGateway } from "../src/gateway/app.js";
-import type { GatewayConfig } from "../src/gateway/config.js";
-import { CLIENT_ID, goodClaims, rsaKeys, signIdToken } from "./google-fixtures.js";
+import { gatewayConfig as config, ORIGIN } from "./gateway-fixtures.js";
+import { goodClaims, rsaKeys, signIdToken } from "./google-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
-
-const ORIGIN = "https://whale.example";
-
-function config(): GatewayConfig {
-  return {
-    publicUrl: new URL(ORIGIN),
-    port: 0,
-    databaseUrl: "unused",
-    google: { clientId: CLIENT_ID, clientSecret: "google-secret" },
-    secret: Buffer.alloc(32, 3),
-    trustProxyHops: 0,
-  };
-}
 
 function setCookies(headers: Record<string, unknown>): string[] {
   const raw = headers["set-cookie"];

@@ -117,6 +117,8 @@ The dashboard is a Vite and React single-page app in a `web/` pnpm workspace pac
 
 ## Consequences
 
+- Every stored credential is a 256-bit random token hashed with SHA-256: sessions, API keys, OAuth codes and tokens. None is a human password, so SHA-256 is the right hash. The CodeQL slow-hash query stays on, so a real password hash is still flagged. Each alert it raises on a random token is dismissed in code scanning with this reason. A human password would need its own record first.
+
 - A gateway compromise can read account data and act as any agent, inside each wallet's policy and the level's guarantee above. It cannot read a key.
 - An executor compromise holds Whale's delegated Turnkey key. That reaches every `enclave` wallet's per-transaction policy and Whale's `smart_account` session keys, inside the limits the chain enforces. It reaches no `self_hosted` key and no `smart_account` owner key.
 - Turnkey policies count against a per-organization limit (5 on the non-enterprise plans). Policies are therefore written per sub-organization, not in the parent.

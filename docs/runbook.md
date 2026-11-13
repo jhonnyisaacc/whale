@@ -48,6 +48,12 @@ Boot refuses `TURNKEY_API_PRIVATE_KEY`, `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `W
 
 Sessions are a `__Host-` cookie that is `HttpOnly`, `Secure`, and `SameSite=Lax`. Postgres keeps only the SHA-256 of the token. A session ends after 12 hours idle or 7 days. A `POST` to `/api/` or `/auth/` from another origin gets 403.
 
+### Wallets and agents
+
+`POST /api/wallets` with `{ "label", "level" }` creates a wallet in `pending` with the default policy: Base, Arbitrum, and Solana, swaps only, USD 50 per transaction, USD 100 a day, approval above USD 25, 100 bps slippage. Only `enclave` is offered. `self_hosted` and `smart_account` answer `level_unavailable` until their signers land. An account holds ten wallets.
+
+`POST /api/wallets/:id/agents` with `{ "name", "limits" }` creates an agent and returns its API key once, as `whale_<id>_<secret>`. Postgres keeps the SHA-256 of the secret. The limits must sit inside the wallet policy. The limit that applies at send time is the intersection, because the policy can narrow later. `POST /api/agents/:id/rotate` replaces the key. `POST /api/agents/:id/revoke` stops the agent and every credential it holds.
+
 ## Start the executor
 
 `EXECUTOR_AUTH_TOKEN` is required and must be at least 16 characters.
