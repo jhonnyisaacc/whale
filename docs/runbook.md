@@ -42,7 +42,7 @@ The gateway is the public process from ADR 0003. `pnpm run start:gateway` applie
 | `DATABASE_URL` | Required. The role needs DDL rights while migrations run at boot. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | A Google OAuth web client. Register the callback URL above as its only redirect URI. |
 | `GATEWAY_SECRET` | At least 32 random bytes, base64url. It seals the short-lived login state. Rotating it cancels logins in flight, not sessions. |
-| `GATEWAY_TRUST_PROXY_HOPS` | 0 to 3. Set 1 behind one proxy so rate limits see the client address. |
+| `GATEWAY_TRUST_PROXY_HOPS` | 0 to 3. Required when `GATEWAY_PUBLIC_URL` is not `localhost`, `127.0.0.1`, or `[::1]`. Set 1 behind one proxy, such as Railway, so rate limits see the client address. With 0 behind a proxy, every client shares one rate-limit bucket. Defaults to 0 on localhost. |
 
 Boot refuses `TURNKEY_API_PRIVATE_KEY`, `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `WHALE_BROADCAST`, and `EXECUTOR_AUTH_TOKEN`, because the gateway holds no signing credential. `HOSTED_LIVE` throws until ADR 0003 is accepted.
 
@@ -67,18 +67,18 @@ To enable quotes, set `HOSTED_EXECUTOR_URL` (the executor's private address) and
 A client that only knows the URL `https://<gateway>/mcp` gets the 401 challenge, reads `/.well-known/oauth-protected-resource/mcp`, then `/.well-known/oauth-authorization-server`. The issuer is the bare origin.
 
 A client registers in one of two ways:
-- By its metadata document URL as `client_id`. The gateway fetches it over https only, from a host that resolves only to public addresses, with no redirects, 64 KiB at most, and caches it for an hour. The document's `client_id` must equal its URL.
+- By its metadata document URL as `client_id`. The gateway fetches it over https only, from a host that resolves only to public addresses, with no redirects, 64 KiB at most, and a five-second total deadline, and caches it for an hour. A document that fails to load or validate is not fetched again for a minute. The document's `client_id` must equal its URL.
 - Through `POST /oauth/register`, which the MCP spec now marks deprecated.
 
-Redirect URIs must be https, a loopback `http` address, or an app scheme such as `cursor://`.
+Redirect URIs must be https, a loopback `http` address, or an app scheme such as `cursor://`. A redirect must match a registered URI exactly, except that a loopback redirect may use any port (OAuth 2.1 8.4.2).
 
-`GET /oauth/authorize` checks the client and the exact redirect URI before anything can go back to the client. It requires PKCE `S256` and the `resource` `https://<gateway>/mcp`. It then sends the browser to `/connect?request=<id>`. That page reads `GET /oauth/requests/:id`, shows the client name and the redirect host, warns on localhost, and signs the user in with Google if needed. The user picks a wallet and the agent limits and calls `POST /api/oauth/requests/:id/approve`, which creates the agent and a five-minute single-use code. The redirect carries `code`, `state`, and `iss`.
+`GET /oauth/authorize` checks the client and the redirect URI before anything can go back to the client. It requires PKCE `S256` and the `resource` `https://<gateway>/mcp`. Every client registers itself, so an error at this step renders on the gateway and never redirects. It then sends the browser to `/connect?request=<id>`. That page reads `GET /oauth/requests/:id`, shows the client name and the redirect host, warns on localhost, and signs the user in with Google if needed. The user picks a wallet and the agent limits and calls `POST /api/oauth/requests/:id/approve`, which creates the agent and a five-minute single-use code. The redirect carries `code`, `state`, and `iss`.
 
 `POST /oauth/token` with form fields covers two grants:
 - The authorization code grant returns a one-hour access token `wat_...`, bound to the MCP resource, and a 30-day refresh token `wrt_...`.
 - A refresh rotates both tokens.
 
-A replayed code, or a refresh token presented after rotation, revokes every OAuth token of that agent. `POST /oauth/revoke` revokes one token. The tokens are stored as SHA-256 only.
+A replayed code, or a refresh token presented more than ten seconds after rotation, revokes every OAuth token of that agent. Within those ten seconds a rotated refresh token still gets a new pair while the agent has a live refresh token, so a client that refreshes twice at once keeps its grant. `POST /oauth/revoke` on an access token revokes that token. On a refresh token it revokes every OAuth token of that agent, because the agent is the grant (RFC 7009 2.1). The tokens are stored as SHA-256 only. Each new authorization request deletes OAuth requests, codes, and tokens that expired more than a day ago. The day keeps replay detection working for a late replay.
 
 ### Passkeys
 

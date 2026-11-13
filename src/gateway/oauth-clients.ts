@@ -10,6 +10,8 @@ const BLOCKED_SCHEMES = new Set(["javascript:", "data:", "file:", "vbscript:", "
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const METADATA_TTL_MS = 60 * 60 * 1000;
 const METADATA_MAX_BYTES = 64 * 1024;
+const METADATA_DEADLINE_MS = 5_000;
+const METADATA_FAILURE_TTL_MS = 60 * 1000;
 
 // Redirects go to https, to a loopback port for native apps, or to an app's own private scheme (cursor://, vscode://).
 export function redirectUriAllowed(raw: string): boolean {
@@ -29,6 +31,18 @@ export function redirectUriAllowed(raw: string): boolean {
 export function isLoopbackRedirect(raw: string): boolean {
   const url = new URL(raw);
   return url.protocol === "http:" && LOOPBACK.has(url.hostname);
+}
+
+export function redirectMatches(registered: string[], presented: string): boolean {
+  if (registered.includes(presented)) return true;
+  if (!redirectUriAllowed(presented) || !isLoopbackRedirect(presented)) return false;
+  const withoutPort = (raw: string) => {
+    const url = new URL(raw);
+    url.port = "";
+    return url.toString();
+  };
+  const wanted = withoutPort(presented);
+  return registered.some((uri) => isLoopbackRedirect(uri) && withoutPort(uri) === wanted);
 }
 
 export const registrationSchema = z
@@ -76,15 +90,23 @@ export type MetadataFetch = (url: string) => Promise<string>;
 
 // The connection uses the address this lookup checked, so a DNS answer that flips to a private address after the
 // check (rebinding) never reaches the socket. No redirects, a size cap, and a short timeout.
-export const fetchMetadataDocument: MetadataFetch = (raw) =>
-  new Promise((resolve, reject) => {
+export const fetchMetadataDocument = (raw: string, { deadlineMs = METADATA_DEADLINE_MS, send = request }: { deadlineMs?: number; send?: typeof request } = {}): Promise<string> =>
+  new Promise((done, fail) => {
+    const deadline = setTimeout(() => req.destroy(new Error("client metadata timed out")), deadlineMs);
+    const resolve = (body: string) => {
+      clearTimeout(deadline);
+      done(body);
+    };
+    const reject = (error: Error) => {
+      clearTimeout(deadline);
+      fail(error);
+    };
     const url = new URL(raw);
-    const req = request(
+    const req = send(
       url,
       {
         method: "GET",
         headers: { accept: "application/json" },
-        timeout: 5_000,
         // Node asks for every address when it races IPv4 and IPv6, and for one address otherwise.
         lookup: (hostname, options, callback) => {
           lookup(hostname, { all: true })
@@ -118,7 +140,6 @@ export const fetchMetadataDocument: MetadataFetch = (raw) =>
         response.on("error", reject);
       },
     );
-    req.on("timeout", () => req.destroy(new Error("client metadata timed out")));
     req.on("error", reject);
     req.end();
   });
@@ -139,9 +160,21 @@ async function storedClient(pool: pg.Pool, id: string): Promise<(OAuthClient & {
   return row ? { id: row.id, kind: row.kind, name: row.name, redirectUris: row.redirect_uris, fetchedAt: row.fetched_at } : null;
 }
 
+export function clientResolver(pool: pg.Pool, fetchDocument: MetadataFetch): (clientId: string, now: number) => Promise<OAuthClient | null> {
+  const failedUntil = new Map<string, number>();
+  return async (clientId, now) => {
+    if ((failedUntil.get(clientId) ?? 0) > now) return null;
+    const client = await resolveClient(pool, clientId, fetchDocument, now);
+    if (client) return client;
+    if (failedUntil.size >= 1_000) for (const [id, until] of failedUntil) if (until <= now) failedUntil.delete(id);
+    failedUntil.set(clientId, now + METADATA_FAILURE_TTL_MS);
+    return null;
+  };
+}
+
 // A URL client_id is a Client ID Metadata Document. Its client_id must equal the URL exactly, and its redirect URIs
 // pass the same rules as a registered client's.
-export async function resolveClient(pool: pg.Pool, clientId: string, fetchDocument: MetadataFetch, now = Date.now()): Promise<OAuthClient | null> {
+async function resolveClient(pool: pg.Pool, clientId: string, fetchDocument: MetadataFetch, now = Date.now()): Promise<OAuthClient | null> {
   const stored = await storedClient(pool, clientId);
   if (stored && (stored.kind === "registered" || (stored.fetchedAt && now - stored.fetchedAt.getTime() < METADATA_TTL_MS))) return stored;
   if (!metadataUrlAllowed(clientId)) return null;

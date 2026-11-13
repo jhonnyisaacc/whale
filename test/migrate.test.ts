@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { loadMigrations, MIGRATIONS_DIR, pendingMigrations } from "../src/db/migrate.js";
 
 function dirWith(files: Record<string, string>): string {
@@ -29,4 +30,14 @@ test("an applied migration that changed or vanished refuses to run", () => {
   assert.deepEqual(pendingMigrations(local, [{ version: 1, checksum: first.checksum }]).map((migration) => migration.name), ["b"]);
   assert.throws(() => pendingMigrations(local, [{ version: 1, checksum: "0".repeat(64) }]), /changed after it was applied/);
   assert.throws(() => pendingMigrations(local, [{ version: 3, checksum: first.checksum }]), /does not ship/);
+});
+
+test("the runtime image ships the migrations where the compiled runner looks for them", () => {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const runtime = readFileSync(path.join(root, "Dockerfile"), "utf8").split(/^FROM /m).at(-1) ?? "";
+  const workdir = /^WORKDIR (\S+)$/m.exec(runtime)?.[1] ?? "/";
+  const copies = [...runtime.matchAll(/^COPY (?:--from=\S+ )?(\S+) (\S+)$/gm)].map(([, from, to]) => ({ from, to: path.posix.resolve(workdir, to as string) }));
+  assert.ok(copies.some(({ from, to }) => from?.endsWith("/dist") && to === path.posix.join(workdir, "dist")));
+  const shipped = path.relative(root, MIGRATIONS_DIR).split(path.sep).join("/");
+  assert.ok(copies.some(({ from, to }) => from === shipped && to === path.posix.join(workdir, shipped)), `the runtime stage must copy ${shipped} to ${path.posix.join(workdir, shipped)}`);
 });
