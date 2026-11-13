@@ -14,6 +14,18 @@ function unreachable(error: unknown): Error {
   return new Error(`the Whale gateway is unreachable: ${error instanceof Error ? error.message : String(error)}${cause}`, { cause: error });
 }
 
+async function refusal(response: Response): Promise<{ code: number; message: string }> {
+  const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+  const error = body?.error;
+  if (typeof error === "object" && error !== null && typeof (error as { message?: unknown }).message === "string") {
+    const { code, message } = error as { code?: unknown; message: string };
+    return { code: typeof code === "number" ? code : -32000, message };
+  }
+  const reason = /error="([^"]*)"/.exec(response.headers.get("www-authenticate") ?? "")?.[1] ?? (typeof error === "string" ? error : null);
+  const what = response.status === 401 ? "the Whale gateway refused this API key" : `the Whale gateway answered ${response.status}`;
+  return { code: -32000, message: reason ? `${what}: ${reason}` : what };
+}
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export function mcpEndpoint(gatewayUrl: string): string {
@@ -39,8 +51,7 @@ export function createHostedClient(options: HostedClientOptions) {
     }).catch((error: unknown) => {
       throw unreachable(error);
     });
-    if (response.status === 401) throw new Error("the gateway refused this API key");
-    if (!response.ok) throw new Error(`the gateway answered ${response.status}`);
+    if (!response.ok) throw new Error((await refusal(response)).message);
     const body = (await response.json()) as { result?: unknown; error?: { message?: string } };
     if (body.error) throw new Error(body.error.message ?? "the gateway returned an error");
     return body.result;
@@ -82,7 +93,7 @@ export function createBridge(options: HostedClientOptions) {
         signal: AbortSignal.timeout(options.timeoutMs ?? 20_000),
       });
       if (response.status === 202 || message.id === undefined) return null;
-      if (!response.ok) return { jsonrpc: "2.0", id: message.id ?? null, error: { code: -32000, message: `the Whale gateway answered ${response.status}` } };
+      if (!response.ok) return { jsonrpc: "2.0", id: message.id ?? null, error: await refusal(response) };
       return (await response.json()) as unknown;
     } catch (error) {
       return message.id === undefined ? null : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: unreachable(error).message } };

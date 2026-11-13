@@ -15,7 +15,7 @@ const WETH = "0x4200000000000000000000000000000000000006";
 function viaInject(app: FastifyInstance): typeof fetch {
   return (async (url: string | URL | Request, init?: RequestInit) => {
     const reply = await app.inject({ method: "POST", url: new URL(String(url)).pathname, headers: init?.headers as Record<string, string>, payload: String(init?.body ?? "") });
-    return new Response(reply.statusCode === 202 || reply.statusCode === 204 ? null : reply.body, { status: reply.statusCode, headers: { "content-type": "application/json" } });
+    return new Response(reply.statusCode === 202 || reply.statusCode === 204 ? null : reply.body, { status: reply.statusCode, headers: Object.entries(reply.headers).map(([name, value]): [string, string] => [name, String(value)]) });
   }) as typeof fetch;
 }
 
@@ -42,7 +42,7 @@ test("the hosted client and the stdio bridge reach the same tools under the same
     assert.equal((await client.walletStatus()).mode, "dry_run");
     assert.deepEqual(await client.quote({ chain: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000" }), { kind: "quote", status: "quoted" });
     await assert.rejects(client.quote({ chain: "arbitrum", sellToken: USDC, buyToken: WETH, sellAmount: "1" }), (error: unknown) => error instanceof WhaleToolError && /outside this agent's chains/.test(error.message));
-    await assert.rejects(createHostedClient({ gatewayUrl: "https://whale.example", apiKey: "whale_000000000000_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", fetchImpl: viaInject(app) }).walletStatus(), /refused this API key/);
+    await assert.rejects(createHostedClient({ gatewayUrl: "https://whale.example", apiKey: "whale_000000000000_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", fetchImpl: viaInject(app) }).walletStatus(), /refused this API key: invalid_token/);
 
     const bridge = createBridge({ gatewayUrl: "https://whale.example", apiKey, fetchImpl: viaInject(app) });
     const listed = (await bridge({ jsonrpc: "2.0", id: 1, method: "tools/list" } as { id: number })) as { result: { tools: unknown[] } };
