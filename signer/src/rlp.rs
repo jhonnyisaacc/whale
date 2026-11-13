@@ -1,5 +1,3 @@
-// Recursive Length Prefix encoding, enough for EIP-1559 transactions: byte strings, unsigned integers, and lists.
-
 pub enum Item {
     Bytes(Vec<u8>),
     List(Vec<Item>),

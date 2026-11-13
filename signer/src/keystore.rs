@@ -1,5 +1,3 @@
-// The keys never leave this process in clear. On disk they sit under scrypt and ChaCha20-Poly1305; in memory the
-// seed buffers are zeroized as soon as the signing keys exist.
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use serde_json::{Value, json};
@@ -121,7 +119,6 @@ pub fn evm_address_bytes(key: &k256::ecdsa::SigningKey) -> [u8; 20] {
     out
 }
 
-// EIP-55 mixed-case checksum.
 pub fn checksum(address: &[u8; 20]) -> String {
     let lower = hex::encode(address);
     let hash = Keccak256::digest(lower.as_bytes());

@@ -1,5 +1,3 @@
-// EIP-1559 transactions: parse the job, classify what the call does, and sign. The signer builds the bytes it signs
-// from the fields it checked, so a caller cannot smuggle a different payload past the policy.
 use crate::abi;
 use crate::rlp::{self, Item};
 use serde_json::Value;

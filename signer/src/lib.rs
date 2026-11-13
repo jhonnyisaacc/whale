@@ -10,7 +10,6 @@ use base64::Engine;
 use serde_json::{Value, json};
 use std::path::Path;
 
-// One job in, one decision out. The ledger moves only after a signature exists, so a refusal or an error spends nothing.
 pub fn run_job(
     job: &Value,
     policy: &policy::Policy,

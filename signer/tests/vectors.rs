@@ -1,5 +1,3 @@
-// The vectors come from viem and node:crypto (vectors/generate.mjs), so these checks compare the signer with encoders
-// it shares no code with: the same decision, and for signed cases the exact same bytes.
 use serde_json::Value;
 use std::path::PathBuf;
 use whale_signer::{keystore, policy::Policy, run_job};

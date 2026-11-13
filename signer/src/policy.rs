@@ -1,5 +1,3 @@
-// The local policy is the user's file, not Whale's. Every rule is default-deny: a call the signer cannot read, a chain
-// or program it was not told about, or a spend with no daily limit is refused.
 use crate::evm::{self, Call};
 use crate::solana::{self, Message};
 use serde_json::Value;
@@ -34,7 +32,6 @@ const COMPUTE_BUDGET: &str = "ComputeBudget111111111111111111111111111111";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ASSOCIATED_TOKEN: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
-// The eight Jito tip accounts, as the app signing policy lists them.
 const JITO_TIPS: [&str; 8] = [
     "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
     "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
@@ -91,7 +88,6 @@ impl Policy {
         for section in [&evm, &sol] {
             if let Some(map) = section.get("dailyLimits").and_then(Value::as_object) {
                 for (key, limit) in map {
-                    // EVM addresses are case-insensitive hex; Solana keys are case-sensitive base58 and stay as written.
                     let normalized = if key.contains(":0x") {
                         key.to_lowercase()
                     } else {

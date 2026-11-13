@@ -1,5 +1,3 @@
-// Daily totals live next to the keystore, owned by the user. Whale cannot reset them: a compromised gateway can ask,
-// and the ledger still says how much was signed today.
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 use std::fs;
@@ -11,7 +9,6 @@ pub struct Ledger {
     spent: BTreeMap<String, u128>,
 }
 
-// Howard Hinnant's days-to-civil algorithm, so the signer needs no date crate.
 pub fn utc_day(seconds: u64) -> String {
     let days = (seconds / 86_400) as i64 + 719_468;
     let era = days.div_euclid(146_097);
@@ -93,7 +90,6 @@ impl Ledger {
             .collect()
     }
 
-    // Written to a temporary file and renamed, so a crash never leaves half a ledger.
     pub fn commit(&mut self, path: &Path, spend: &[(String, u128)]) -> Result<(), String> {
         for (key, value) in spend {
             *self.spent.entry(key.clone()).or_insert(0) += value;

@@ -1,4 +1,3 @@
-// Solana messages, legacy and v0. The signer signs the exact message bytes it parsed, as the only required signer.
 pub struct Instruction {
     pub program: usize,
     pub accounts: Vec<usize>,
@@ -32,7 +31,6 @@ impl<'a> Reader<'a> {
         Ok(self.take(1)?[0])
     }
 
-    // compact-u16: up to three bytes, seven bits each.
     fn short(&mut self) -> Result<usize, String> {
         let mut value = 0usize;
         for shift in [0, 7, 14] {

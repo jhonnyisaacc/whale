@@ -1,5 +1,3 @@
-// Just enough ABI reading to find who receives a swap. Every read is bounds-checked and refuses values that do not fit,
-// so malformed calldata decodes to None and the policy refuses it.
 use sha3::{Digest, Keccak256};
 
 pub fn selector(signature: &str) -> [u8; 4] {
@@ -48,8 +46,6 @@ pub struct SwapTerms {
     pub sell: Option<([u8; 20], u128)>,
 }
 
-// Settler.execute((address recipient, address buyToken, uint256 minAmountOut), bytes[] actions, bytes32 zid): the slippage
-// tuple is static, so the recipient is the first argument word.
 fn settler(args: &[u8]) -> Option<[u8; 20]> {
     address(args, 0)
 }
@@ -58,7 +54,6 @@ const ZERO_EX_EXEC: &str = "exec(address,address,uint256,address,bytes)";
 const ZERO_EX_EXECUTE: &str = "execute((address,address,uint256),bytes[],bytes32)";
 const KYBER_DESC: &str = "(address,address,address[],uint256[],address[],uint256[],address,uint256,uint256,uint256,bytes)";
 
-// KyberSwap SwapDescriptionV2: srcToken at word 0, dstReceiver at word 6, amount at word 7.
 fn kyber_desc(data: &[u8], start: usize) -> Option<SwapTerms> {
     Some(SwapTerms {
         provider: "kyberswap",

@@ -1,5 +1,3 @@
-// Regenerates the signer test vectors with viem and node:crypto, so the Rust signer is checked against independent
-// encoders. Run from the repository root: node signer/vectors/generate.mjs
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import bs58 from "bs58";
