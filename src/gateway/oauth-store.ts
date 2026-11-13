@@ -8,6 +8,7 @@ export const REQUEST_TTL_MS = 15 * 60 * 1000;
 export const CODE_TTL_MS = 5 * 60 * 1000;
 export const ACCESS_TTL_MS = 60 * 60 * 1000;
 export const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const REFRESH_GRACE_MS = 10 * 1000;
 const REFRESH_TOKEN = /^wrt_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 const ACCESS_TOKEN = /^wat_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 
@@ -95,6 +96,11 @@ async function revokeOAuthCredentials(client: pg.Pool | pg.PoolClient, agentId: 
   await client.query("UPDATE agent_credentials SET revoked_at = now() WHERE agent_id = $1 AND kind <> 'api_key' AND revoked_at IS NULL", [agentId]);
 }
 
+async function liveRefresh(client: pg.PoolClient, agentId: string, now: number): Promise<boolean> {
+  const found = await client.query("SELECT 1 FROM agent_credentials WHERE agent_id = $1 AND kind = 'oauth_refresh' AND revoked_at IS NULL AND expires_at > $2 LIMIT 1", [agentId, new Date(now)]);
+  return found.rowCount !== 0;
+}
+
 function pkceMatches(verifier: string, challenge: string): boolean {
   if (!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) return false;
   const computed = Buffer.from(createHash("sha256").update(verifier).digest("base64url"));
@@ -131,25 +137,28 @@ export async function exchangeCode(
   });
 }
 
-// Refresh tokens rotate. Presenting one that was already rotated or revoked is treated as theft and ends the family.
+// Refresh tokens rotate. Presenting one that was already rotated or revoked is treated as theft and ends the family,
+// except that a client racing itself may present a just-rotated token again while the grant is still live.
 export async function refreshTokens(pool: pg.Pool, input: { refreshToken: string; clientId: string }, now = Date.now()): Promise<TokenPair | OAuthError> {
   const match = REFRESH_TOKEN.exec(input.refreshToken);
   if (!match) return { error: "invalid_grant" };
   const [, id, secret] = match as unknown as [string, string, string];
   return inTransaction(pool, async (client) => {
-    const found = await client.query<{ secret_hash: Buffer; agent_id: string; audience: string; expires_at: Date; revoked_at: Date | null; oauth_client_id: string | null; agent_revoked: Date | null }>(
-      `SELECT c.secret_hash, c.agent_id, c.audience, c.expires_at, c.revoked_at, a.oauth_client_id, a.revoked_at AS agent_revoked
+    const found = await client.query<{ secret_hash: Buffer; agent_id: string; audience: string; expires_at: Date; revoked_at: Date | null; rotated_at: Date | null; oauth_client_id: string | null; agent_revoked: Date | null }>(
+      `SELECT c.secret_hash, c.agent_id, c.audience, c.expires_at, c.revoked_at, c.rotated_at, a.oauth_client_id, a.revoked_at AS agent_revoked
        FROM agent_credentials c JOIN agents a ON a.id = c.agent_id WHERE c.id = $1 AND c.kind = 'oauth_refresh' FOR UPDATE OF c`,
       [id],
     );
     const row = found.rows[0];
     if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret)) || row.oauth_client_id !== input.clientId) return { error: "invalid_grant" as const };
     if (row.revoked_at) {
+      const racing = !row.agent_revoked && row.rotated_at && now - row.rotated_at.getTime() < REFRESH_GRACE_MS && (await liveRefresh(client, row.agent_id, now));
+      if (racing) return issuePair(client, row.agent_id, row.audience, now);
       await revokeOAuthCredentials(client, row.agent_id);
       return { error: "invalid_grant" as const };
     }
     if (row.expires_at.getTime() <= now || row.agent_revoked) return { error: "invalid_grant" as const };
-    await client.query("UPDATE agent_credentials SET revoked_at = $2 WHERE id = $1", [id, new Date(now)]);
+    await client.query("UPDATE agent_credentials SET revoked_at = $2, rotated_at = $2 WHERE id = $1", [id, new Date(now)]);
     return issuePair(client, row.agent_id, row.audience, now);
   });
 }

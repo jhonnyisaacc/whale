@@ -36,4 +36,5 @@ CREATE TABLE oauth_codes (
 
 ALTER TABLE agents ADD COLUMN oauth_client_id text REFERENCES oauth_clients (id);
 ALTER TABLE agent_credentials ADD COLUMN audience text;
+ALTER TABLE agent_credentials ADD COLUMN rotated_at timestamptz;
 ALTER TABLE agent_credentials ADD CONSTRAINT agent_credentials_oauth_audience CHECK (kind = 'api_key' OR audience IS NOT NULL);
