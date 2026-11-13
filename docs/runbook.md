@@ -96,6 +96,8 @@ An enclave wallet takes three steps. Each step reads or writes Turnkey, and none
    - One HD wallet holds an EVM account and a Solana account.
 
    The addresses are stored and the wallet stays `pending`.
+
+   If Turnkey refuses the request, the gateway deletes the new passkey and frees the wallet, so the user can try again. If the result is unknown (a timeout, a lost response, or a crash), the wallet stays claimed. The next options or create call looks up the sub-organization by its name, `whale-<walletId>`. If Turnkey has it, the gateway records it and answers 409 `enclave_exists`. If not, the gateway frees the wallet and continues. A claim from a request that is still running, or that crashed less than two minutes ago, answers 409 `enclave_in_progress`.
 2. The browser, signed with the user's passkey, adds the delegate user and the policies that `GET /api/wallets/:id/enclave/delegation` returns. The delegate holds the executor's API key (`TURNKEY_DELEGATE_API_PUBLIC_KEY`). The policies are `turnkeyPolicyDocument` scoped to that user, the sub-organization's wallet, and the EVM chains in the wallet policy.
 3. `POST /api/wallets/:id/enclave/confirm`. The gateway reads the sub-organization and activates the wallet only if all of these hold: the owner is the sole root and holds the registered passkey; exactly one user holds Whale's key, is not root, and holds nothing else; and the allow policies are exactly the rendered ones. Otherwise it answers `delegation_not_safe` with the problems, and writes an audit event.
 

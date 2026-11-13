@@ -14,10 +14,23 @@ export type SubOrgState = {
 
 export type TurnkeyParent = {
   createSubOrganization(input: { name: string; authenticator: RootAuthenticator }): Promise<CreatedSubOrg>;
+  findSubOrganization(name: string): Promise<CreatedSubOrg | null>;
   readSubOrganization(subOrganizationId: string): Promise<SubOrgState>;
 };
 
 export type DelegationConfig = { delegatePublicKey: string; routers: Readonly<Record<number, readonly string[]>>; maxValueWei: bigint };
+
+export class TurnkeyRefused extends Error {}
+
+const REFUSED_GRPC_CODES = new Set([3, 5, 7, 9, 16]);
+const REFUSED_ACTIVITY = new Set(["ACTIVITY_STATUS_FAILED", "ACTIVITY_STATUS_REJECTED"]);
+
+function asRefusal(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  const code = (error as { code?: unknown }).code;
+  const refused = (error.name === "TurnkeyRequestError" && typeof code === "number" && REFUSED_GRPC_CODES.has(code)) || /^(400|401|403|404|422|429) /.test(error.message);
+  return refused ? new TurnkeyRefused(error.message, { cause: error }) : error;
+}
 
 export const DELEGATE_USER_NAME = "whale-delegate";
 const TRANSPORTS: Record<string, string> = {
@@ -128,11 +141,29 @@ export function turnkeyParentFromEnv(env: NodeJS.ProcessEnv): TurnkeyParent | nu
         disableEmailAuth: true,
         disableSmsAuth: true,
         disableOtpEmailAuth: true,
+      }).catch((error: unknown) => {
+        throw asRefusal(error);
       });
+      if (REFUSED_ACTIVITY.has(result.activity.status)) throw new TurnkeyRefused(`turnkey ${result.activity.status} the sub-organization`);
       const [evm, solana] = result.wallet?.addresses ?? [];
       const ownerUserId = result.rootUserIds?.[0];
       if (!result.subOrganizationId || !result.wallet?.walletId || !evm || !solana || !ownerUserId) throw new Error("turnkey returned an incomplete sub-organization");
       return { subOrganizationId: result.subOrganizationId, walletId: result.wallet.walletId, ownerUserId, evm, solana };
+    },
+    async findSubOrganization(name) {
+      const api = await client();
+      const { organizationIds } = await api.getSubOrgIds({ filterType: "NAME", filterValue: name });
+      const [subOrganizationId, ...others] = organizationIds;
+      if (!subOrganizationId) return null;
+      if (others.length > 0) throw new Error(`turnkey holds ${organizationIds.length} sub-organizations named ${name}`);
+      const [{ wallets }, { configs }] = await Promise.all([api.getWallets({ organizationId: subOrganizationId }), api.getOrganizationConfigs({ organizationId: subOrganizationId })]);
+      const wallet = wallets.find((entry) => entry.walletName === "whale");
+      const ownerUserId = configs.quorum?.userIds?.[0];
+      const { accounts } = wallet ? await api.getWalletAccounts({ organizationId: subOrganizationId, walletId: wallet.walletId }) : { accounts: [] };
+      const evm = accounts.find((entry) => entry.addressFormat === "ADDRESS_FORMAT_ETHEREUM")?.address;
+      const solana = accounts.find((entry) => entry.addressFormat === "ADDRESS_FORMAT_SOLANA")?.address;
+      if (!wallet || !ownerUserId || !evm || !solana) throw new Error(`turnkey sub-organization ${subOrganizationId} named ${name} is incomplete`);
+      return { subOrganizationId, walletId: wallet.walletId, ownerUserId, evm, solana };
     },
     async readSubOrganization(subOrganizationId) {
       const api = await client();
