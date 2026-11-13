@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { metadataUrlAllowed, publicAddress, redirectUriAllowed } from "../src/gateway/oauth-clients.js";
+import { createServer, request } from "node:http";
+import type { AddressInfo } from "node:net";
+import { fetchMetadataDocument, metadataUrlAllowed, publicAddress, redirectUriAllowed } from "../src/gateway/oauth-clients.js";
 import { withParams } from "../src/gateway/oauth-store.js";
 
 test("redirect URIs allow https, loopback http, and app schemes only", () => {
@@ -25,4 +27,26 @@ test("client metadata URLs must be https with a path on a named host, and resolv
 
 test("redirect parameters keep the client's own query", () => {
   assert.equal(withParams("http://127.0.0.1:1/cb?x=1", { code: "c", state: null, iss: "https://whale.example" }), "http://127.0.0.1:1/cb?x=1&code=c&iss=https%3A%2F%2Fwhale.example");
+});
+
+test("a metadata host that drips bytes is cut off at the total deadline", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    const drip = setInterval(() => response.write(" "), 20);
+    response.on("close", () => clearInterval(drip));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  const started = Date.now();
+  try {
+    const outcome = await Promise.race([
+      fetchMetadataDocument(`http://127.0.0.1:${port}/meta.json`, { deadlineMs: 300, send: request }).then(() => "resolved", (error: Error) => error.message),
+      new Promise((resolve) => setTimeout(() => resolve("still open after 2 s"), 2_000)),
+    ]);
+    assert.equal(outcome, "client metadata timed out");
+    assert.ok(Date.now() - started < 1_000, `took ${Date.now() - started} ms`);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
 });

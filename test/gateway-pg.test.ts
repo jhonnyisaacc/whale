@@ -33,7 +33,7 @@ async function gatewayWithGoogle(sub = "1100") {
     nonce = location.searchParams.get("nonce") ?? "";
     return { reply, location, login: cookieValue(reply.headers, "__Host-whale_login") as string };
   };
-  return { app, pool, drop, start, tokenBodies };
+  return { app, pool, drop, start, tokenBodies, useNonce: (value: string) => (nonce = value) };
 }
 
 async function signedIn(app: FastifyInstance, start: () => Promise<{ location: URL; login: string }>): Promise<string> {
@@ -126,6 +126,82 @@ test("a closed account cannot sign in and an idle session expires", { skip: !TES
       headers: { cookie: `__Host-whale_login=${login}` },
     });
     assert.equal(refused.headers.location, "/login?error=closed");
+  } finally {
+    await app.close();
+    await drop();
+  }
+});
+
+test("a cross-origin POST is refused however the cookie-route path is encoded", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, drop, start } = await gatewayWithGoogle();
+  let probed = 0;
+  app.post("/api/probe", async () => {
+    probed += 1;
+    return { ok: true };
+  });
+  try {
+    const session = await signedIn(app, start);
+    const paths = ["/auth/logout", "/api/probe"].flatMap((path) => {
+      const [, prefix, rest] = path.split("/") as [string, string, string];
+      return [
+        path,
+        `/%${prefix.charCodeAt(0).toString(16)}${prefix.slice(1)}/${rest}`,
+        `/${prefix}/%${rest.charCodeAt(0).toString(16)}${rest.slice(1)}`,
+        `/${prefix}%2F${rest}`,
+        `/${prefix}%2f${rest}`,
+        `//${prefix}/${rest}`,
+        `/${prefix}//${rest}`,
+        `/${prefix.toUpperCase()}/${rest}`,
+        `/${prefix[0]?.toUpperCase()}${prefix.slice(1)}/${rest}`,
+        `${path}?x=1`,
+        `${path}/`,
+      ];
+    });
+    for (const url of paths) {
+      const reply = await app.inject({ method: "POST", url, headers: { cookie: `__Host-whale_session=${session}`, origin: "https://evil.example" } });
+      assert.ok(reply.statusCode === 403 || reply.statusCode === 404, `${url} answered ${reply.statusCode}`);
+    }
+    assert.equal(probed, 0);
+    const me = await app.inject({ method: "GET", url: "/%61pi/me", headers: { cookie: `__Host-whale_session=${session}` } });
+    assert.equal(me.statusCode, 200);
+    assert.equal(me.headers["cache-control"], "no-store");
+  } finally {
+    await app.close();
+    await drop();
+  }
+});
+
+test("sign-in started in two tabs finishes in both", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, drop, useNonce } = await gatewayWithGoogle();
+  const startTab = async (returnTo: string, jar: string | null) => {
+    const reply = await app.inject({ method: "GET", url: `/auth/google/start?return_to=${returnTo}`, headers: jar ? { cookie: `__Host-whale_login=${jar}` } : {} });
+    return { location: new URL(String(reply.headers.location)), jar: cookieValue(reply.headers, "__Host-whale_login") as string };
+  };
+  const finish = async (location: URL, jar: string) => {
+    useNonce(location.searchParams.get("nonce") ?? "");
+    const reply = await app.inject({ method: "GET", url: `/auth/google/callback?code=c1&state=${location.searchParams.get("state")}`, headers: { cookie: `__Host-whale_login=${jar}` } });
+    return { location: reply.headers.location, session: cookieValue(reply.headers, "__Host-whale_session"), jar: cookieValue(reply.headers, "__Host-whale_login") as string };
+  };
+  try {
+    const first = await startTab("/one", null);
+    const second = await startTab("/two", first.jar);
+    const firstDone = await finish(first.location, second.jar);
+    assert.equal(firstDone.location, "/one");
+    assert.ok(firstDone.session);
+    const secondDone = await finish(second.location, firstDone.jar);
+    assert.equal(secondDone.location, "/two");
+    assert.ok(secondDone.session);
+    assert.equal(secondDone.jar, "");
+    const replayed = await finish(first.location, secondDone.jar);
+    assert.equal(replayed.location, "/login?error=expired");
+
+    const long = `/${"a".repeat(500)}`;
+    const tabs = [await startTab(long, null)];
+    for (let i = 0; i < 3; i += 1) tabs.push(await startTab(long, tabs.at(-1)?.jar ?? null));
+    const jar = tabs.at(-1)?.jar as string;
+    assert.ok(`__Host-whale_login=${jar}`.length < 4096);
+    assert.equal((await finish(tabs[0]?.location as URL, jar)).location, "/login?error=state");
+    assert.equal((await finish(tabs[1]?.location as URL, jar)).location, long);
   } finally {
     await app.close();
     await drop();

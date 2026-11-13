@@ -105,7 +105,9 @@ test("narrowing applies at once; widening needs a passkey for that exact documen
 test("freezing stops every agent at once, and unfreezing takes a passkey", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, pool, user, wallet, approve, drop } = await harness();
   try {
-    const { apiKey } = await createAgent(pool, { accountId: user.accountId, walletId: wallet.id, name: "bot", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 10, dailyUsd: 20 } });
+    const agent = await createAgent(pool, { accountId: user.accountId, walletId: wallet.id, name: "bot", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 10, dailyUsd: 20 } });
+    if ("refused" in agent) throw new Error(agent.refused);
+    const { apiKey } = agent;
     assert.ok(await authenticateApiKey(pool, apiKey));
     assert.deepEqual((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: user.headers, payload: {} })).json(), { status: "frozen" });
     assert.equal(await authenticateApiKey(pool, apiKey), null);

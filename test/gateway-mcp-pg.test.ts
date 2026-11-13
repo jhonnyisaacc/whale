@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { createAgent } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
@@ -25,15 +26,17 @@ async function harness() {
   const policy = await pool.query("SELECT document FROM policies WHERE wallet_id = $1", [walletId]);
   const document = { ...policy.rows[0].document, actions: ["swap", "transfer"], destinations: [{ family: "evm", address: COLD, label: "cold" }] };
   await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify(document)]);
-  const { apiKey, agentId } = await createAgent(pool, { accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap", "transfer"], maxTxUsd: 20, dailyUsd: 40 } });
-  const rpc = (body: unknown, headers: Record<string, string> = {}) =>
-    app.inject({ method: "POST", url: "/mcp", headers: { authorization: `Bearer ${apiKey}`, accept: "application/json, text/event-stream", ...headers }, payload: body as Record<string, unknown> });
+  const agent = await createAgent(pool, { accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap", "transfer"], maxTxUsd: 20, dailyUsd: 40 } });
+  if ("refused" in agent) throw new Error(agent.refused);
+  const { apiKey, agentId } = agent;
+  const rpc = (body: unknown, headers: Record<string, string> = {}, remoteAddress = "127.0.0.1") =>
+    app.inject({ method: "POST", url: "/mcp", remoteAddress, headers: { authorization: `Bearer ${apiKey}`, accept: "application/json, text/event-stream", ...headers }, payload: body as Record<string, unknown> });
   const call = async (name: string, args: Record<string, unknown>) => (await rpc({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } })).json().result;
-  return { app, pool, sent, rpc, call, agentId, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, sent, rpc, call, agentId, accountId, apiKey, drop: async () => (await app.close(), await drop()) };
 }
 
 test("MCP over HTTP authenticates the agent, negotiates the version, and refuses foreign origins", { skip: !TEST_DATABASE_URL }, async () => {
-  const { app, rpc, drop } = await harness();
+  const { app, rpc, apiKey, drop } = await harness();
   try {
     const anonymous = await app.inject({ method: "POST", url: "/mcp", payload: { jsonrpc: "2.0", id: 1, method: "ping" } });
     assert.equal(anonymous.statusCode, 401);
@@ -49,6 +52,11 @@ test("MCP over HTTP authenticates the agent, negotiates the version, and refuses
     assert.equal(unknown.json().result.protocolVersion, "2026-07-28");
     assert.equal((await rpc({ jsonrpc: "2.0", method: "notifications/initialized" })).statusCode, 202);
     assert.equal((await rpc([{ jsonrpc: "2.0", id: 1, method: "ping" }])).statusCode, 400);
+    for (const payload of ["{\"jsonrpc\": \"2.0\", \"id\": 1,", ""]) {
+      const garbled = await app.inject({ method: "POST", url: "/mcp", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, payload });
+      assert.equal(garbled.statusCode, 400);
+      assert.deepEqual(garbled.json(), { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } });
+    }
     assert.equal((await rpc({ jsonrpc: "2.0", id: 2, method: "resources/list" })).json().error.code, -32601);
     const tools = (await rpc({ jsonrpc: "2.0", id: 3, method: "tools/list" })).json().result.tools.map((tool: { name: string }) => tool.name);
     assert.deepEqual(tools, ["wallet_status", "deposit_address", "balance", "quote", "swap", "transfer"]);
@@ -59,7 +67,7 @@ test("MCP over HTTP authenticates the agent, negotiates the version, and refuses
 });
 
 test("hosted tools stay inside the agent's limits and the wallet policy before reaching the executor", { skip: !TEST_DATABASE_URL }, async () => {
-  const { pool, sent, call, rpc, app, agentId, drop } = await harness();
+  const { pool, sent, call, rpc, app, agentId, accountId, drop } = await harness();
   try {
     const status = JSON.parse((await call("wallet_status", {})).content[0].text);
     assert.equal(status.mode, "dry_run");
@@ -69,6 +77,7 @@ test("hosted tools stay inside the agent's limits and the wallet policy before r
     const swap = await call("swap", { chain: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000", idempotencyKey: "swap-0001" });
     assert.equal(swap.isError, false);
     assert.equal(sent[0]?.command.kind, "swap");
+    assert.equal(sent[0]?.accountId, accountId);
     assert.equal(sent[0]?.command.kind === "swap" && sent[0].command.taker, OWN);
     assert.equal(sent[0]?.command.kind === "swap" && sent[0].command.slippageBps, 50);
 
@@ -96,6 +105,28 @@ test("hosted tools stay inside the agent's limits and the wallet policy before r
     await pool.query("UPDATE agents SET revoked_at = now() WHERE id = $1", [agentId]);
     assert.equal((await rpc({ jsonrpc: "2.0", id: 9, method: "tools/list" })).statusCode, 401);
     void app;
+  } finally {
+    await drop();
+  }
+});
+
+test("/mcp throttles one IP that rotates random keys and one agent that rotates IPs", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, rpc, drop } = await harness();
+  try {
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+    const rotatingKeys: number[] = [];
+    for (let index = 0; index < 130; index += 1) {
+      const key = `whale_${randomBytes(6).toString("hex")}_${randomBytes(32).toString("base64url").slice(0, 43)}`;
+      const response = await app.inject({ method: "POST", url: "/mcp", remoteAddress: "203.0.113.7", headers: { authorization: `Bearer ${key}` }, payload: ping });
+      rotatingKeys.push(response.statusCode);
+    }
+    assert.deepEqual([...new Set(rotatingKeys.slice(0, 120))], [401]);
+    assert.deepEqual([...new Set(rotatingKeys.slice(120))], [429]);
+
+    const rotatingIps: number[] = [];
+    for (let index = 0; index < 121; index += 1) rotatingIps.push((await rpc(ping, {}, `198.51.100.${index}`)).statusCode);
+    assert.deepEqual([...new Set(rotatingIps.slice(0, 120))], [200]);
+    assert.equal(rotatingIps[120], 429);
   } finally {
     await drop();
   }

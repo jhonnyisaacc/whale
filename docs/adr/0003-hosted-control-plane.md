@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed on 2026-11-03. Hosted live signing stays closed until the owner accepts this record and a staging run passes. Every PR in the hosted stack keeps that gate.
+Proposed on 2026-11-03. Accepted by the owner on 2026-11-04. Hosted live signing stays closed until a staging run passes. Every PR in the hosted stack keeps that gate.
 
 ## Context
 
@@ -48,7 +48,7 @@ Whale's delegated credential is one P-256 API key per deployment. It lives only 
 
 #### `self_hosted`
 
-`whale-signer` is a single Rust binary. It holds the EVM and Solana keys in an encrypted file, or the OS keychain where one exists. It reads a policy file in the same JSON shape Whale stores. It connects out to the gateway over HTTPS and long-polls for signing jobs, so the user opens no inbound port. Each job carries the unsigned transaction and the context Whale used. The signer decodes the transaction itself, checks its own policy and daily totals, and signs or refuses. Whale never sees the key. Shared JSON test vectors keep the TypeScript and Rust policy decisions in step.
+`whale-signer` is a single Rust binary. It holds the EVM and Solana keys in an encrypted file, or the OS keychain where one exists. It reads a policy file in the same JSON shape Whale stores. It connects out to the gateway over HTTPS and long-polls for signing jobs, so the user opens no inbound port. Each job carries the unsigned transaction and the context Whale used. The signer decodes the transaction itself, checks its own policy and daily totals, and signs or refuses. Whale never sees the key. Shared JSON test vectors keep the app signing policy and the signer's decisions in step. `whale-signer` is the only local signer.
 
 #### `smart_account`
 
@@ -97,7 +97,7 @@ A wallet policy is data, parsed with Zod:
 
 Narrowing applies at once. Widening needs a passkey assertion, waits 24 hours, and notifies the user, who can cancel. A change that touches the Turnkey policy is signed in the browser under the user's passkey, because Whale cannot edit it.
 
-The existing order is kept for every hosted send: screening, simulation, the spend reservation, the app signing policy, then the signer. Spend reservations are keyed by wallet and day. Kill switches exist at deployment, account, wallet, and agent scope, and any one of them stops a send.
+The existing order is kept for every hosted send: screening, the spend reservation, simulation, the app signing policy, then the signer. Spend reservations are keyed by wallet and day. Kill switches exist at deployment, account, wallet, and agent scope, and any one of them stops a send.
 
 ### Data
 
@@ -117,10 +117,10 @@ The dashboard is a Vite and React single-page app in a `web/` pnpm workspace pac
 
 ## Consequences
 
-- Every stored credential is a 256-bit random token hashed with SHA-256: sessions, API keys, OAuth codes and tokens. None is a human password, so the CodeQL slow-hash query is excluded in `.github/codeql/codeql-config.yml`. A human password would need its own record first.
+- Every stored credential is a 256-bit random token hashed with SHA-256: sessions, API keys, OAuth codes and tokens. None is a human password, so SHA-256 is the right hash. The CodeQL slow-hash query stays on, so a real password hash is still flagged. Each alert it raises on a random token is dismissed in code scanning with this reason. A human password would need its own record first.
 
 - A gateway compromise can read account data and act as any agent, inside each wallet's policy and the level's guarantee above. It cannot read a key.
-- An executor compromise holds Whale's delegated Turnkey key. That reaches every `enclave` wallet's per-transaction policy, and no `self_hosted` or `smart_account` key.
+- An executor compromise holds Whale's delegated Turnkey key. That reaches every `enclave` wallet's per-transaction policy and Whale's `smart_account` session keys, inside the limits the chain enforces. It reaches no `self_hosted` key and no `smart_account` owner key.
 - Turnkey policies count against a per-organization limit (5 on the non-enterprise plans). Policies are therefore written per sub-organization, not in the parent.
 - The executor becomes multi-tenant. Its per-request context is the wallet, its signer, its policy, and its caps. Single-operator env config remains for the existing deployment.
 

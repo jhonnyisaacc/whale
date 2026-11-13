@@ -3,9 +3,9 @@ import type pg from "pg";
 import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
 import { perMinute, requireSession } from "./http.js";
-import { listPasskeys, registerPasskey, registrationOptions, registrationPayload, stepUpOptions } from "./passkeys.js";
+import { addPasskey, assertionPayload, listPasskeys, REFUSED_STATUS, registrationOptions, registrationPayload, stepUpOptions } from "./passkeys.js";
 
-const addBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64) }).strict();
+const addBody = z.object({ credential: registrationPayload, label: z.string().trim().min(1).max(64), assertion: assertionPayload.optional() }).strict();
 const stepUpBody = z.object({ action: z.record(z.string(), z.unknown()) }).strict();
 
 export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: GatewayConfig; pool: pg.Pool; now?: () => number }): void {
@@ -29,8 +29,8 @@ export function registerPasskeyRoutes(app: FastifyInstance, deps: { config: Gate
     if (!session) return reply;
     const body = addBody.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
-    const added = await registerPasskey(pool, config, { accountId: session.accountId, payload: body.data.credential, label: body.data.label }, undefined, now());
-    if (typeof added === "string") return reply.code(400).send({ error: "passkey_rejected", detail: added });
+    const added = await addPasskey(pool, config, { accountId: session.accountId, payload: body.data.credential, label: body.data.label, assertion: body.data.assertion ?? null }, undefined, now());
+    if ("refused" in added) return reply.code(REFUSED_STATUS[added.refused]).send({ error: added.refused, detail: added.detail });
     return reply.code(201).send({ credentialId: added.credentialId, label: body.data.label });
   });
 
