@@ -18,7 +18,7 @@ export const hostedCommandSchema = z.discriminatedUnion("kind", [
 ]);
 export type HostedCommand = z.infer<typeof hostedCommandSchema>;
 
-export const hostedRequestSchema = z.object({ walletId: z.uuid(), agentId: z.uuid(), command: hostedCommandSchema }).strict();
+export const hostedRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), command: hostedCommandSchema }).strict();
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
 
 function asset(key: string, tokenAddress: string): Asset {

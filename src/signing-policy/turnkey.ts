@@ -1,6 +1,8 @@
 import { PublicKey } from "@solana/web3.js";
 import { DEFAULT_MAX_VALUE_WEI, JITO_TIP_ACCOUNTS, SOLANA_BASE_PROGRAMS, evmChainIds, wrappedSolAccount } from "../signing-policy.js";
 
+export { DEFAULT_MAX_VALUE_WEI };
+
 export type TurnkeyPolicyInput = {
   userId: string;
   wallets: { evm: string; solana: string; hyperliquid: string | null };

@@ -57,7 +57,9 @@ export function registerWalletRoutes(app: FastifyInstance, pool: pg.Pool): void 
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
     const outside = limitsWithin(body.data.limits, wallet.policy);
     if (outside) return reply.code(400).send({ error: "limits_outside_policy", detail: outside });
-    const { agentId, apiKey } = await createAgent(pool, { accountId: session.accountId, walletId, name: body.data.name, limits: body.data.limits });
+    const created = await createAgent(pool, { accountId: session.accountId, walletId, name: body.data.name, limits: body.data.limits });
+    if ("refused" in created) return reply.code(409).send({ error: created.refused });
+    const { agentId, apiKey } = created;
     return reply.code(201).send({ agentId, apiKey, note: "This key is shown once. Whale stores only its hash." });
   });
 

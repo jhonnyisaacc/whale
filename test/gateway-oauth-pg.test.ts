@@ -10,13 +10,15 @@ const REDIRECT = "http://127.0.0.1:33418/callback";
 const LIMITS = { chains: ["base"], actions: ["swap"], maxTxUsd: 20, dailyUsd: 40 };
 const CIMD = "https://client.example/oauth/metadata.json";
 
-async function harness(documents: Record<string, unknown> = {}) {
+async function harness(documents: Record<string, unknown> = {}, now: () => number = Date.now) {
   const { pool, drop } = await migratedSchema();
+  const fetches: string[] = [];
   const fetchDocument = async (url: string) => {
+    fetches.push(url);
     if (!(url in documents)) throw new Error("no such document");
     return JSON.stringify(documents[url]);
   };
-  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, fetchDocument, executor: null });
+  const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, fetchDocument, executor: null, now });
   const user = await signedInAccount(pool);
   const created = await createWallet(pool, user.accountId, { label: "main", level: "enclave" });
   const walletId = "walletId" in created ? created.walletId : "";
@@ -36,7 +38,7 @@ async function harness(documents: Record<string, unknown> = {}) {
     return { request, code, verifier, approved };
   };
   const mcp = (token: string) => app.inject({ method: "POST", url: "/mcp", headers: { authorization: `Bearer ${token}` }, payload: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
-  return { app, pool, user, walletId, form, authorize, connect, mcp, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, user, walletId, form, authorize, connect, mcp, fetches, drop: async () => (await app.close(), await drop()) };
 }
 
 async function register(form: (url: string, fields: Record<string, string>) => Promise<unknown>, app: Awaited<ReturnType<typeof harness>>["app"]) {
@@ -65,7 +67,8 @@ test("discovery metadata names the MCP resource, a path-free issuer, PKCE S256, 
 });
 
 test("a registered client completes code + PKCE, uses the token on MCP, and replay or refresh reuse revokes the family", { skip: !TEST_DATABASE_URL }, async () => {
-  const { app, pool, form, authorize, connect, mcp, user, drop } = await harness();
+  let clock = Date.now();
+  const { app, pool, form, authorize, connect, mcp, user, drop } = await harness({}, () => clock);
   try {
     assert.equal((await app.inject({ method: "POST", url: "/oauth/register", payload: { redirect_uris: ["http://evil.example/cb"] } })).statusCode, 400);
     const clientId = await register(form, app);
@@ -73,10 +76,8 @@ test("a registered client completes code + PKCE, uses the token on MCP, and repl
     assert.equal((await authorize("dcr_unknown_client")).reply.statusCode, 400);
     const wrongRedirect = await authorize(clientId, { redirect_uri: "http://127.0.0.1:1/other" });
     assert.deepEqual([wrongRedirect.reply.statusCode, wrongRedirect.reply.headers.location], [400, undefined]);
-    const noPkce = new URL(String((await authorize(clientId, { code_challenge_method: "plain" })).reply.headers.location));
-    assert.deepEqual([noPkce.searchParams.get("error"), noPkce.searchParams.get("state"), noPkce.searchParams.get("iss")], ["invalid_request", "st-1", ORIGIN]);
-    const otherResource = new URL(String((await authorize(clientId, { resource: "https://other.example/mcp" })).reply.headers.location));
-    assert.equal(otherResource.searchParams.get("error"), "invalid_target");
+    assert.equal((await authorize(clientId, { code_challenge_method: "plain" })).reply.json().error, "invalid_request");
+    assert.equal((await authorize(clientId, { resource: "https://other.example/mcp" })).reply.json().error, "invalid_target");
 
     const pending = await authorize(clientId);
     assert.match(String(pending.reply.headers.location), /^\/connect\?request=[A-Za-z0-9_-]{43}$/);
@@ -111,6 +112,7 @@ test("a registered client completes code + PKCE, uses the token on MCP, and repl
     assert.match(rotated.access_token, /^wat_/);
     assert.equal((await mcp(rotated.access_token)).statusCode, 200);
     assert.equal((await form("/oauth/token", { grant_type: "refresh_token", refresh_token: rotated.refresh_token, client_id: "dcr_other" })).json().error, "invalid_grant");
+    clock += 11_000;
     const reused = await form("/oauth/token", { grant_type: "refresh_token", refresh_token: second.refresh_token, client_id: clientId });
     assert.equal(reused.json().error, "invalid_grant");
     assert.equal((await mcp(rotated.access_token)).statusCode, 401);
@@ -124,6 +126,129 @@ test("a registered client completes code + PKCE, uses the token on MCP, and repl
     assert.equal((await form("/oauth/revoke", { token: live.access_token })).statusCode, 200);
     assert.equal((await mcp(live.access_token)).statusCode, 401);
     assert.equal((await form("/oauth/token", { grant_type: "password", client_id: clientId })).json().error, "unsupported_grant_type");
+  } finally {
+    await drop();
+  }
+});
+
+test("an authorize error for a self-registered client renders here and never redirects to its URI", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, authorize, drop } = await harness();
+  try {
+    const phish = "https://phish.example/login";
+    const registered = await app.inject({ method: "POST", url: "/oauth/register", payload: { client_name: "Claude Code", redirect_uris: [phish] } });
+    const clientId = registered.json().client_id as string;
+    const broken: Record<string, string>[] = [{ code_challenge_method: "plain" }, { response_type: "token" }, { resource: "https://other.example/mcp" }];
+    for (const extra of broken) {
+      const { reply } = await authorize(clientId, { redirect_uri: phish, ...extra });
+      assert.deepEqual([reply.statusCode, reply.headers.location], [400, undefined], JSON.stringify(extra));
+    }
+    const { reply } = await authorize(clientId, { redirect_uri: phish, code_challenge_method: "plain" });
+    assert.equal(reply.json().error, "invalid_request");
+  } finally {
+    await drop();
+  }
+});
+
+test("a loopback redirect matches on any port, and nothing else about it may differ", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, authorize, form, user, walletId, drop } = await harness({
+    [CIMD]: { client_id: CIMD, client_name: "Cursor", redirect_uris: ["http://127.0.0.1/callback", "https://client.example/cb"] },
+  });
+  try {
+    for (const other of ["http://127.0.0.1:33418/other", "http://localhost:33418/callback", "https://client.example:8443/cb"]) {
+      assert.equal((await authorize(CIMD, { redirect_uri: other })).reply.statusCode, 400, other);
+    }
+    const { reply, verifier } = await authorize(CIMD);
+    assert.match(String(reply.headers.location), /^\/connect\?request=/);
+    const request = new URL(String(reply.headers.location), ORIGIN).searchParams.get("request") as string;
+    const approved = await app.inject({ method: "POST", url: `/api/oauth/requests/${request}/approve`, headers: user.headers, payload: { walletId, name: "Cursor", limits: LIMITS } });
+    const back = new URL(approved.json().redirect);
+    assert.equal(`${back.origin}${back.pathname}`, REDIRECT);
+    const tokens = await form("/oauth/token", { grant_type: "authorization_code", code: back.searchParams.get("code") as string, redirect_uri: REDIRECT, client_id: CIMD, code_verifier: verifier });
+    assert.equal(tokens.statusCode, 200);
+  } finally {
+    await drop();
+  }
+});
+
+test("revoking a refresh token also stops the access tokens of that grant", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, form, connect, mcp, drop } = await harness();
+  try {
+    const clientId = await register(form, app);
+    const { code, verifier } = await connect(clientId);
+    const pair = (await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier })).json();
+    assert.equal((await mcp(pair.access_token)).statusCode, 200);
+    assert.equal((await form("/oauth/revoke", { token: pair.refresh_token })).statusCode, 200);
+    assert.equal((await mcp(pair.access_token)).statusCode, 401);
+    assert.equal((await form("/oauth/token", { grant_type: "refresh_token", refresh_token: pair.refresh_token, client_id: clientId })).json().error, "invalid_grant");
+  } finally {
+    await drop();
+  }
+});
+
+test("a metadata document that fails to load is not fetched again for a minute", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { authorize, fetches, drop } = await harness({}, () => clock);
+  try {
+    assert.equal((await authorize(CIMD)).reply.statusCode, 400);
+    assert.equal((await authorize(CIMD)).reply.statusCode, 400);
+    assert.equal(fetches.length, 1);
+    clock += 61_000;
+    assert.equal((await authorize(CIMD)).reply.statusCode, 400);
+    assert.equal(fetches.length, 2);
+  } finally {
+    await drop();
+  }
+});
+
+test("two refreshes at once both succeed, and reuse after the grace window still ends the family", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { app, form, connect, mcp, drop } = await harness({}, () => clock);
+  try {
+    const clientId = await register(form, app);
+    const tokens = async () => {
+      const { code, verifier } = await connect(clientId);
+      return (await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier })).json();
+    };
+    const refresh = (token: string) => form("/oauth/token", { grant_type: "refresh_token", refresh_token: token, client_id: clientId });
+
+    const pair = await tokens();
+    const [first, second] = await Promise.all([refresh(pair.refresh_token), refresh(pair.refresh_token)]);
+    assert.deepEqual([first.statusCode, second.statusCode], [200, 200]);
+    assert.equal((await mcp(first.json().access_token)).statusCode, 200);
+    assert.equal((await mcp(second.json().access_token)).statusCode, 200);
+
+    clock += 11_000;
+    assert.equal((await refresh(pair.refresh_token)).json().error, "invalid_grant");
+    assert.equal((await mcp(first.json().access_token)).statusCode, 401);
+    assert.equal((await mcp(second.json().access_token)).statusCode, 401);
+
+    const other = await tokens();
+    const rotated = (await refresh(other.refresh_token)).json();
+    assert.equal((await form("/oauth/revoke", { token: rotated.refresh_token })).statusCode, 200);
+    assert.equal((await refresh(other.refresh_token)).json().error, "invalid_grant");
+  } finally {
+    await drop();
+  }
+});
+
+test("expired OAuth requests, codes, and tokens are deleted a day after they expire", { skip: !TEST_DATABASE_URL }, async () => {
+  let clock = Date.now();
+  const { app, pool, form, authorize, connect, drop } = await harness({}, () => clock);
+  const count = async (table: string) => (await pool.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n as number;
+  try {
+    const clientId = await register(form, app);
+    const { code, verifier } = await connect(clientId);
+    await form("/oauth/token", { grant_type: "authorization_code", code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: verifier });
+    await authorize(clientId);
+    assert.deepEqual([await count("oauth_requests"), await count("oauth_codes"), await count("agent_credentials")], [2, 1, 2]);
+
+    clock += 30 * 24 * 60 * 60 * 1000;
+    await authorize(clientId);
+    assert.deepEqual([await count("oauth_requests"), await count("oauth_codes"), await count("agent_credentials")], [1, 0, 1]);
+
+    clock += 24 * 60 * 60 * 1000 + 1;
+    await authorize(clientId);
+    assert.deepEqual([await count("oauth_requests"), await count("oauth_codes"), await count("agent_credentials")], [2, 0, 0]);
   } finally {
     await drop();
   }

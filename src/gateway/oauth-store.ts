@@ -8,6 +8,8 @@ export const REQUEST_TTL_MS = 15 * 60 * 1000;
 export const CODE_TTL_MS = 5 * 60 * 1000;
 export const ACCESS_TTL_MS = 60 * 60 * 1000;
 export const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_GRACE_MS = 10 * 1000;
+const EXPIRED_RETENTION_MS = 24 * 60 * 60 * 1000;
 const REFRESH_TOKEN = /^wrt_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 const ACCESS_TOKEN = /^wat_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 
@@ -25,7 +27,15 @@ export function withParams(redirectUri: string, params: Record<string, string | 
   return url.toString();
 }
 
+async function deleteExpired(pool: pg.Pool, now: number): Promise<void> {
+  const cutoff = new Date(now - EXPIRED_RETENTION_MS);
+  await pool.query("DELETE FROM oauth_codes WHERE expires_at < $1", [cutoff]);
+  await pool.query("DELETE FROM oauth_requests r WHERE expires_at < $1 AND NOT EXISTS (SELECT 1 FROM oauth_codes c WHERE c.request_id = r.id)", [cutoff]);
+  await pool.query("DELETE FROM agent_credentials WHERE kind <> 'api_key' AND expires_at < $1", [cutoff]);
+}
+
 export async function createRequest(pool: pg.Pool, input: Omit<PendingRequest, "id" | "clientName">, now = Date.now()): Promise<string> {
+  await deleteExpired(pool, now);
   const id = random();
   await pool.query(
     "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -91,8 +101,13 @@ async function issuePair(client: pg.PoolClient, agentId: string, audience: strin
   return { access_token: `wat_${accessId}_${accessSecret}`, token_type: "Bearer", expires_in: ACCESS_TTL_MS / 1000, refresh_token: `wrt_${refreshId}_${refreshSecret}`, scope: "wallet" };
 }
 
-async function revokeOAuthCredentials(client: pg.PoolClient, agentId: string): Promise<void> {
+async function revokeOAuthCredentials(client: pg.Pool | pg.PoolClient, agentId: string): Promise<void> {
   await client.query("UPDATE agent_credentials SET revoked_at = now() WHERE agent_id = $1 AND kind <> 'api_key' AND revoked_at IS NULL", [agentId]);
+}
+
+async function liveRefresh(client: pg.PoolClient, agentId: string, now: number): Promise<boolean> {
+  const found = await client.query("SELECT 1 FROM agent_credentials WHERE agent_id = $1 AND kind = 'oauth_refresh' AND revoked_at IS NULL AND expires_at > $2 LIMIT 1", [agentId, new Date(now)]);
+  return found.rowCount !== 0;
 }
 
 function pkceMatches(verifier: string, challenge: string): boolean {
@@ -131,25 +146,26 @@ export async function exchangeCode(
   });
 }
 
-// Refresh tokens rotate. Presenting one that was already rotated or revoked is treated as theft and ends the family.
 export async function refreshTokens(pool: pg.Pool, input: { refreshToken: string; clientId: string }, now = Date.now()): Promise<TokenPair | OAuthError> {
   const match = REFRESH_TOKEN.exec(input.refreshToken);
   if (!match) return { error: "invalid_grant" };
   const [, id, secret] = match as unknown as [string, string, string];
   return inTransaction(pool, async (client) => {
-    const found = await client.query<{ secret_hash: Buffer; agent_id: string; audience: string; expires_at: Date; revoked_at: Date | null; oauth_client_id: string | null; agent_revoked: Date | null }>(
-      `SELECT c.secret_hash, c.agent_id, c.audience, c.expires_at, c.revoked_at, a.oauth_client_id, a.revoked_at AS agent_revoked
+    const found = await client.query<{ secret_hash: Buffer; agent_id: string; audience: string; expires_at: Date; revoked_at: Date | null; rotated_at: Date | null; oauth_client_id: string | null; agent_revoked: Date | null }>(
+      `SELECT c.secret_hash, c.agent_id, c.audience, c.expires_at, c.revoked_at, c.rotated_at, a.oauth_client_id, a.revoked_at AS agent_revoked
        FROM agent_credentials c JOIN agents a ON a.id = c.agent_id WHERE c.id = $1 AND c.kind = 'oauth_refresh' FOR UPDATE OF c`,
       [id],
     );
     const row = found.rows[0];
     if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret)) || row.oauth_client_id !== input.clientId) return { error: "invalid_grant" as const };
     if (row.revoked_at) {
+      const racing = !row.agent_revoked && row.rotated_at && now - row.rotated_at.getTime() < REFRESH_GRACE_MS && (await liveRefresh(client, row.agent_id, now));
+      if (racing) return issuePair(client, row.agent_id, row.audience, now);
       await revokeOAuthCredentials(client, row.agent_id);
       return { error: "invalid_grant" as const };
     }
     if (row.expires_at.getTime() <= now || row.agent_revoked) return { error: "invalid_grant" as const };
-    await client.query("UPDATE agent_credentials SET revoked_at = $2 WHERE id = $1", [id, new Date(now)]);
+    await client.query("UPDATE agent_credentials SET revoked_at = $2, rotated_at = $2 WHERE id = $1", [id, new Date(now)]);
     return issuePair(client, row.agent_id, row.audience, now);
   });
 }
@@ -158,7 +174,9 @@ export async function revokeToken(pool: pg.Pool, token: string): Promise<void> {
   const match = REFRESH_TOKEN.exec(token) ?? ACCESS_TOKEN.exec(token);
   if (!match) return;
   const [, id, secret] = match as unknown as [string, string, string];
-  const found = await pool.query<{ secret_hash: Buffer }>("SELECT secret_hash FROM agent_credentials WHERE id = $1 AND kind <> 'api_key'", [id]);
+  const found = await pool.query<{ secret_hash: Buffer; kind: string; agent_id: string }>("SELECT secret_hash, kind, agent_id FROM agent_credentials WHERE id = $1 AND kind <> 'api_key'", [id]);
   const row = found.rows[0];
-  if (row && timingSafeEqual(row.secret_hash, secretHash(secret))) await pool.query("UPDATE agent_credentials SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [id]);
+  if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret))) return;
+  if (row.kind === "oauth_refresh") await revokeOAuthCredentials(pool, row.agent_id);
+  else await pool.query("UPDATE agent_credentials SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [id]);
 }

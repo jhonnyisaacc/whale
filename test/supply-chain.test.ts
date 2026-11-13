@@ -29,6 +29,22 @@ function workspacePackages(): string[] {
   return listSetting(read("pnpm-workspace.yaml"), "packages");
 }
 
+function registryImages(yaml: string): string[] {
+  const lines = yaml.split("\n");
+  const indent = (line: string) => line.length - line.trimStart().length;
+  return lines.filter((line, index) => {
+    if (!/^\s*image:/.test(line)) return false;
+    let depth = indent(line);
+    for (let above = index - 1; above >= 0; above -= 1) {
+      const candidate = lines[above];
+      if (candidate.trim() === "" || indent(candidate) >= depth) continue;
+      depth = indent(candidate);
+      if (/^\s*(services|container):/.test(candidate)) return true;
+    }
+    return false;
+  });
+}
+
 function workflows(): { name: string; text: string }[] {
   return readdirSync(path(".github/workflows"))
     .filter((name) => name.endsWith(".yml"))
@@ -72,6 +88,8 @@ test("every package.json pins every dependency, the root pins the package manage
 test("workflows pin every action and service image, and install only from the lockfile", () => {
   const found = workflows();
   assert.ok(found.length > 0);
+  assert.deepEqual(registryImages("jobs:\n  a:\n    container:\n      image: x:1\n    steps:\n      - with:\n          image: local:scan\n"), ["      image: x:1"]);
+  assert.ok(found.some(({ text }) => registryImages(text).length > 0), "the Postgres service image is checked");
   for (const { name, text } of found) {
     assert.match(text, /^permissions:/m, `${name} sets top-level permissions`);
     for (const line of text.split("\n").filter((entry) => /^\s*(- )?uses:/.test(entry))) {
@@ -80,7 +98,7 @@ test("workflows pin every action and service image, and install only from the lo
     for (const line of text.split("\n").filter((entry) => entry.includes("pnpm install"))) {
       assert.match(line, /--frozen-lockfile/, `${name}: ${line.trim()}`);
     }
-    for (const line of text.split("\n").filter((entry) => /^\s*image:/.test(entry))) {
+    for (const line of registryImages(text)) {
       assert.match(line, /image: [\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}$/, `${name}: ${line.trim()}`);
     }
     const checkouts = text.match(/uses: actions\/checkout@/g)?.length ?? 0;

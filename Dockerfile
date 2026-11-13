@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS build
+FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS build
 WORKDIR /app
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
@@ -12,7 +12,7 @@ RUN pnpm exec tsc -p tsconfig.json
 COPY web ./web
 RUN pnpm --filter @whale/web run build
 
-FROM node:22-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9
+FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
 WORKDIR /app
 ENV NODE_ENV=production COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable

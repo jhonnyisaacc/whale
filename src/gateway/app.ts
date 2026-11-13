@@ -37,7 +37,7 @@ export async function buildGateway(deps: GatewayDeps): Promise<FastifyInstance> 
   registerAuthRoutes(app, { config: deps.config, pool: deps.pool, fetchImpl, keys: deps.keys ?? googleKeys(fetchImpl, now), now });
   registerWalletRoutes(app, deps.pool);
   registerPasskeyRoutes(app, { config: deps.config, pool: deps.pool, now });
-  registerPolicyRoutes(app, { config: deps.config, pool: deps.pool, now });
+  registerPolicyRoutes(app, { config: deps.config, pool: deps.pool, now: deps.now });
   registerEnclaveRoutes(app, {
     config: deps.config,
     pool: deps.pool,

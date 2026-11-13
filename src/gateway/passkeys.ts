@@ -23,14 +23,18 @@ export function relyingParty(config: GatewayConfig): RelyingParty {
 }
 
 function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value)
+  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${Array.from(value, canonical).join(",")}]`;
+  const proto: unknown = typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
+  if (proto === Object.prototype || proto === null) {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
       .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
       .join(",")}}`;
   }
-  return JSON.stringify(value);
+  throw new TypeError("cannot bind a step-up to a value that is not plain JSON");
 }
 
 // A step-up signature approves one exact action. The challenge stores the hash of that action, so an assertion
@@ -45,6 +49,7 @@ function challengeHash(challenge: string): Buffer {
 
 export async function newChallenge(pool: pg.Pool, accountId: string, purpose: "register" | "step_up", binding: string, now = Date.now()): Promise<string> {
   const challenge = randomBytes(32).toString("base64url");
+  await pool.query("DELETE FROM webauthn_challenges WHERE expires_at <= $1", [new Date(now)]);
   await pool.query("INSERT INTO webauthn_challenges (challenge_hash, account_id, purpose, binding, expires_at) VALUES ($1, $2, $3, $4, $5)", [
     challengeHash(challenge),
     accountId,
@@ -66,8 +71,8 @@ function challengeIn(clientDataJSON: string): string | null {
 
 async function consume(client: pg.ClientBase, accountId: string, purpose: string, binding: string, challenge: string, now: number): Promise<boolean> {
   const used = await client.query(
-    "UPDATE webauthn_challenges SET used_at = $6 WHERE challenge_hash = $1 AND account_id = $2 AND purpose = $3 AND binding = $4 AND used_at IS NULL AND expires_at > $5 RETURNING 1",
-    [challengeHash(challenge), accountId, purpose, binding, new Date(now), new Date(now)],
+    "DELETE FROM webauthn_challenges WHERE challenge_hash = $1 AND account_id = $2 AND purpose = $3 AND binding = $4 AND expires_at > $5 RETURNING 1",
+    [challengeHash(challenge), accountId, purpose, binding, new Date(now)],
   );
   return (used.rowCount ?? 0) === 1;
 }
@@ -87,8 +92,6 @@ export async function registrationOptions(pool: pg.Pool, config: GatewayConfig, 
   };
 }
 
-// The caller decides what the new passkey is for. A plain passkey stores it here; an enclave wallet also hands the
-// same attestation to Turnkey, inside the same transaction, so both sides agree on the root credential.
 export async function registerPasskey(
   pool: pg.Pool,
   config: GatewayConfig,
@@ -111,17 +114,38 @@ export async function registerPasskey(
     } catch (error) {
       return error instanceof Error ? error.message : "the passkey did not verify";
     }
-    await client.query("INSERT INTO passkeys (credential_id, account_id, public_key, sign_count, label) VALUES ($1, $2, $3, $4, $5)", [
+    const inserted = await client.query("INSERT INTO passkeys (credential_id, account_id, public_key, sign_count, label) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (credential_id) DO NOTHING", [
       registration.credentialId,
       input.accountId,
       registration.publicKey,
       registration.signCount,
       input.label,
     ]);
+    if ((inserted.rowCount ?? 0) === 0) return "this passkey is already registered";
     await audit(client, { accountId: input.accountId, actor: "user", action: "passkey.added", detail: { label: input.label } });
     if (after) await after(client, { ...registration, challenge });
     return registration;
   });
+}
+
+export type PasskeyRefusal = { refused: "step_up_required" | "step_up_failed" | "passkey_rejected"; detail?: string };
+export const REFUSED_STATUS: Record<PasskeyRefusal["refused"], number> = { step_up_required: 428, step_up_failed: 403, passkey_rejected: 400 };
+
+export async function addPasskey(
+  pool: pg.Pool,
+  config: GatewayConfig,
+  input: { accountId: string; payload: RegistrationPayload; label: string; assertion: AssertionPayload | null; binding?: string },
+  after?: (client: pg.PoolClient, registration: Registration & { challenge: string }) => Promise<void>,
+  now = Date.now(),
+): Promise<Registration | PasskeyRefusal> {
+  const existing = await pool.query("SELECT 1 FROM passkeys WHERE account_id = $1 AND revoked_at IS NULL LIMIT 1", [input.accountId]);
+  if ((existing.rowCount ?? 0) > 0) {
+    if (!input.assertion) return { refused: "step_up_required" };
+    const approved = await verifyStepUp(pool, config, input.accountId, { kind: "passkey.add", credentialId: input.payload.id }, input.assertion, now);
+    if (approved !== true) return { refused: "step_up_failed", detail: approved };
+  }
+  const added = await registerPasskey(pool, config, { accountId: input.accountId, payload: input.payload, label: input.label, binding: input.binding }, after, now);
+  return typeof added === "string" ? { refused: "passkey_rejected", detail: added } : added;
 }
 
 export async function stepUpOptions(pool: pg.Pool, config: GatewayConfig, accountId: string, action: unknown, now = Date.now()) {

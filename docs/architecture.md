@@ -22,4 +22,4 @@ The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `tr
 
 ## Hosted product
 
-The hosted control plane is proposed in [ADR 0003](adr/0003-hosted-control-plane.md). A public gateway holds accounts, agents, and the MCP endpoint. The executor stays private. Each wallet picks a signing level: a Turnkey enclave owned by the user's passkey, a self-hosted Rust signer, or a smart account with a session key. Hosted live signing stays closed until that record is accepted.
+The hosted control plane is accepted in [ADR 0003](adr/0003-hosted-control-plane.md). A public gateway holds accounts, agents, and the MCP endpoint. The executor stays private. Each wallet picks a signing level: a Turnkey enclave owned by the user's passkey, a self-hosted Rust signer, or a smart account with a session key. Hosted live signing stays closed until a staging run passes.
