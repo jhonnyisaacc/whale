@@ -202,6 +202,8 @@ test("a frozen wallet refuses a widening, even one approved with a passkey", { s
   try {
     assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: user.headers, payload: {} })).statusCode, 200);
     const wider = { ...DEFAULT_POLICY, maxTxUsd: 80 };
+    const unprompted = await put({ baseVersion: 1, document: wider });
+    assert.deepEqual([unprompted.statusCode, unprompted.json().error], [409, "wallet_frozen"], unprompted.body);
     const refused = await put({ baseVersion: 1, document: wider, assertion: await approve(widenAction(wallet.id, 1, wider)) });
     assert.deepEqual([refused.statusCode, refused.json().error], [409, "wallet_frozen"], refused.body);
     assert.equal((await app.inject({ method: "GET", url: `/api/wallets/${wallet.id}/policy/pending`, headers: user.headers })).json().pending, null);
