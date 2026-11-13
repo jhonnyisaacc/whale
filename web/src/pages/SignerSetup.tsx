@@ -2,8 +2,6 @@ import { useState } from "react";
 import { api, describe, type Wallet } from "../api.js";
 import { stepUp } from "../stepup.js";
 
-// The signer runs on the user's machine and calls Whale; Whale never calls it. The passkey approves handing out a
-// one-time code, because whoever registers decides this wallet's deposit addresses.
 export function SignerSetup({ wallet }: { wallet: Wallet }) {
   const [command, setCommand] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);

@@ -1,5 +1,3 @@
--- Self-hosted signers. The signer proves it holds both keys when it registers, then pulls jobs over an outbound
--- long-poll. A job is the unsigned work; the signer's own policy decides, and Whale stores what it answered.
 CREATE TABLE signer_registrations (
   code_hash bytea PRIMARY KEY CHECK (length(code_hash) = 32),
   account_id uuid NOT NULL REFERENCES accounts (id),

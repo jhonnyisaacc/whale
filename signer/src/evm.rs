@@ -176,7 +176,6 @@ pub fn classify(tx: &Tx) -> Call {
     }
 }
 
-// EIP-191 personal_sign: what a wallet signs for a text message. The 65-byte signature ends with v = 27 or 28.
 pub fn personal_sign(message: &str, key: &k256::ecdsa::SigningKey) -> String {
     let prefixed = format!("\x19Ethereum Signed Message:\n{}{}", message.len(), message);
     let hash: [u8; 32] = Keccak256::digest(prefixed.as_bytes()).into();

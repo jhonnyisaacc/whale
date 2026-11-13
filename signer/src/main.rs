@@ -35,7 +35,6 @@ fn token_file(args: &[String], keystore_path: &std::path::Path) -> PathBuf {
     flag(args, "--token-file").unwrap_or_else(|| keystore_path.with_extension("token"))
 }
 
-// The token lets the gateway hand this signer work, so it gets the same care as the keystore: owner-only on Unix.
 fn write_private(path: &PathBuf, contents: &str) -> Result<(), String> {
     use std::io::Write;
     let mut options = std::fs::OpenOptions::new();

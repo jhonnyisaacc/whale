@@ -1,4 +1,3 @@
-// The signer only ever calls out: register once, then long-poll for jobs. It opens no port.
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -100,7 +99,6 @@ impl Gateway {
     }
 }
 
-// The gateway sends { id, kind, payload }; the signer checks { id, kind, ...payload }.
 pub fn job_for_signer(job: &Value) -> Value {
     let mut merged = job
         .get("payload")

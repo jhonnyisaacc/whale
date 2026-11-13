@@ -11,8 +11,6 @@ export const LEASE_MS = 60 * 1000;
 const SIGNER_TOKEN = /^wsig_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
-// The text both keys sign at registration. It names the wallet and the one-time code, so a proof cannot be replayed
-// for another wallet or another registration.
 export function registrationMessage(walletId: string, code: string): string {
   return `Whale signer registration\nwallet:${walletId}\ncode:${code}`;
 }
@@ -121,8 +119,6 @@ export async function enqueueJob(pool: pg.Pool, input: { accountId: string; wall
   return created.rows[0]?.id as string;
 }
 
-// A lease that runs out puts the job back, so a signer that crashed mid-job does not strand it. A frozen wallet's
-// signer still polls but gets nothing.
 export async function leaseJob(pool: pg.Pool, signer: SignerContext, now = Date.now()): Promise<{ id: string; kind: string; payload: unknown } | null> {
   const leased = await pool.query<{ id: string; kind: string; payload: unknown }>(
     `UPDATE signing_jobs SET status = 'leased', lease_expires_at = $3 WHERE id = (

@@ -37,7 +37,6 @@ export function registerSignerRoutes(app: FastifyInstance, deps: { config: Gatew
   const now = deps.now ?? Date.now;
   const pollMs = deps.pollMs ?? 1_000;
 
-  // A registered signer decides what the wallet's deposit addresses are, so issuing a code takes the owner's passkey.
   app.post("/api/wallets/:id/signer/code", { config: perMinute(10) }, async (request, reply) => {
     const session = await requireSession(pool, request, reply);
     if (!session) return reply;
