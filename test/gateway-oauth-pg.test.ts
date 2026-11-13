@@ -262,8 +262,30 @@ test("expired OAuth requests, codes, and tokens are deleted a day after they exp
   }
 });
 
+test("denying a request needs a same-origin session, and the old public deny path is gone", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, form, authorize, user, drop } = await harness();
+  try {
+    const clientId = await register(form, app);
+    const requestId = new URL(String((await authorize(clientId)).reply.headers.location), ORIGIN).searchParams.get("request");
+    const pending = async () => (await app.inject({ method: "GET", url: `/oauth/requests/${requestId}` })).statusCode;
+    const deny = (url: string, headers: Record<string, string>) => app.inject({ method: "POST", url, headers, payload: {} });
+
+    assert.equal((await deny(`/oauth/requests/${requestId}/deny`, {})).statusCode, 404);
+    assert.equal(await pending(), 200);
+    assert.equal((await deny(`/api/oauth/requests/${requestId}/deny`, { ...user.headers, origin: "https://evil.example" })).statusCode, 403);
+    assert.equal((await deny(`/api/oauth/requests/${requestId}/deny`, { origin: ORIGIN })).statusCode, 401);
+    assert.equal(await pending(), 200);
+
+    const denied = await deny(`/api/oauth/requests/${requestId}/deny`, user.headers);
+    assert.equal(new URL(denied.json().redirect).searchParams.get("error"), "access_denied");
+    assert.equal(await pending(), 404);
+  } finally {
+    await drop();
+  }
+});
+
 test("a metadata-document client must name itself by its own URL, and a denial goes back to the client", { skip: !TEST_DATABASE_URL }, async () => {
-  const { app, authorize, drop } = await harness({
+  const { app, authorize, user, drop } = await harness({
     [CIMD]: { client_id: CIMD, client_name: "Cursor", redirect_uris: [REDIRECT] },
     "https://liar.example/meta.json": { client_id: "https://other.example/meta.json", client_name: "Liar", redirect_uris: [REDIRECT] },
     "https://bad.example/meta.json": { client_id: "https://bad.example/meta.json", client_name: "Bad", redirect_uris: ["http://evil.example/cb"] },
@@ -275,7 +297,7 @@ test("a metadata-document client must name itself by its own URL, and a denial g
     const ok = await authorize(CIMD);
     const requestId = new URL(String(ok.reply.headers.location), ORIGIN).searchParams.get("request");
     assert.equal((await app.inject({ method: "GET", url: `/oauth/requests/${requestId}` })).json().client.name, "Cursor");
-    const denied = await app.inject({ method: "POST", url: `/oauth/requests/${requestId}/deny`, payload: {} });
+    const denied = await app.inject({ method: "POST", url: `/api/oauth/requests/${requestId}/deny`, headers: user.headers, payload: {} });
     const back = new URL(denied.json().redirect);
     assert.deepEqual([back.searchParams.get("error"), back.searchParams.get("state")], ["access_denied", "st-1"]);
     assert.equal((await app.inject({ method: "GET", url: `/oauth/requests/${requestId}` })).statusCode, 404);
