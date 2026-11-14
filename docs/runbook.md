@@ -236,4 +236,6 @@ Do this when you intend to broadcast. Do not paste keys into chat.
 4. Approve each router once with the root quorum, then set `APPROVAL_CACHE_JSON` to those allowances. Set `ZEROX_SETTLER_ALLOWLIST_JSON` before live mode. Read the current taker-submitted Settler from the 0x deployer `0x00000000000004533Fe15556B1E086BB1A72cEae` with `ownerOf(2)`, and keep the previous one from `prev(2)` during a rotation.
 5. Set `WHALE_BROADCAST` to the exact string `true` only after `DATABASE_URL` is set. Boot throws `live mode requires Turnkey` when the signer is missing. Boot throws `live mode requires DATABASE_URL so the daily cap survives restart` when the database URL is missing.
 
+`MAX_EVM_FEE_WEI` caps `gas × maxFeePerGas` before every EVM signature, including fee-bumping replacements; the default is `10000000000000000` wei (0.01 of the native token), and `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. This is an execution-fee cap, not a bound on OP Stack L1 data fees. Live boot currently refuses Optimism, Base, and Blast while those chains are enabled; keep them in `DISABLED_CHAINS` when broadcasting on another chain. Quotes and dry-runs remain available.
+
 `pnpm test` does not call an exchange and does not broadcast. For the kill switch and for revocation, read [Threat model](threat-model.md).

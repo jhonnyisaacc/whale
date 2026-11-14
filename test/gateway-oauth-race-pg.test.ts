@@ -61,16 +61,31 @@ async function setup() {
   const walletId = "walletId" in created ? created.walletId : "";
   const registered = await app.inject({ method: "POST", url: "/oauth/register", payload: { client_name: "Claude Code", redirect_uris: [REDIRECT] } });
   const clientId = registered.json().client_id as string;
+  const oauthClient = { id: clientId, kind: "registered" as const, name: "Claude Code", redirectUris: [REDIRECT] };
   const request = async () => {
     const verifier = randomToken(48);
-    const id = await createRequest(pool, { clientId, redirectUri: REDIRECT, codeChallenge: pkceChallenge(verifier), state: null, resource: RESOURCE });
+    const id = await createRequest(pool, { clientId, redirectUri: REDIRECT, codeChallenge: pkceChallenge(verifier), state: null, resource: RESOURCE }, oauthClient);
     return { id, verifier };
   };
   const approve = (target: pg.Pool, id: string) => approveRequest(target, { requestId: id, accountId: user.accountId, walletId, name: "Claude", limits: LIMITS, issuer: ORIGIN });
   const liveCredentials = async () =>
     (await pool.query<{ n: number }>("SELECT count(*)::int AS n FROM agent_credentials WHERE kind <> 'api_key' AND revoked_at IS NULL")).rows[0]?.n;
-  return { pool, clientId, request, approve, liveCredentials, drop: async () => (await app.close(), await drop()) };
+  return { pool, clientId, oauthClient, request, approve, liveCredentials, drop: async () => (await app.close(), await drop()) };
 }
+
+test("a client deleted between resolution and request insertion is restored atomically", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, clientId, oauthClient, request, drop } = await setup();
+  try {
+    await pool.query("UPDATE oauth_clients SET created_at = now() - interval '2 days' WHERE id = $1", [clientId]);
+    await pool.query("DELETE FROM oauth_clients WHERE id = $1", [clientId]);
+    const { id } = await request();
+    const pending = await pool.query("SELECT client_id FROM oauth_requests WHERE id = $1", [id]);
+    assert.deepEqual(pending.rows[0], { client_id: clientId });
+    assert.equal((await pool.query("SELECT 1 FROM oauth_clients WHERE id = $1", [clientId])).rowCount, 1);
+  } finally {
+    await drop();
+  }
+});
 
 test("a rotated refresh token replayed during a legitimate refresh leaves no credential of the family live", { skip: !TEST_DATABASE_URL }, async () => {
   const { pool, clientId, request, approve, liveCredentials, drop } = await setup();

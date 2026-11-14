@@ -41,6 +41,7 @@ function policyConfig(config: AppConfig) {
   return {
     withdrawAllowlist: config.withdrawAllowlist,
     maxValueWei: config.maxValueWei,
+    maxFeeWei: config.maxFeeWei,
     allowHotApproval: config.allowHotApproval,
     solanaPrograms: config.solanaProgramAllowlist,
     maxLeverage: config.maxLeverage,

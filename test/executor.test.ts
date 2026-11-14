@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { landedSend } from "./fixtures.js";
 import { spendDay } from "../src/spend.js";
-import { execute, resetExecutorState, spentToday, authorizeWithdraw, type ExecutorDeps } from "../src/executor.js";
+import { execute, resetExecutorState, spentToday, authorizeWithdraw, decideWithdraw, type ExecutorDeps } from "../src/executor.js";
 import type { SwapIntent } from "../src/domain.js";
 import { buildPairMap } from "../src/pairs.js";
 import type { LimitConfig } from "../src/limits.js";
@@ -117,4 +117,14 @@ test("the second hop sells the amount the first hop bought", async () => {
 test("withdraw only allows the configured address", () => {
   assert.equal(authorizeWithdraw("0xabc", ["0xAbC"]).ok, true);
   assert.equal(authorizeWithdraw("0xdef", ["0xabc"]).ok, false);
+});
+
+test("Solana recovery tokens keep Base58 case while EVM tokens remain case-insensitive", () => {
+  const canonical = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const base = { adminOk: true, enabled: true, amount: 1, cap: 5, destinationAllowed: true, live: false, killSwitch: false, signerReady: false, decimals: 6 } as const;
+  const solana = decideWithdraw({ ...base, mint: canonical.replace("EPj", "Epj"), recoveryAllowlist: [canonical], chainKey: "solana" });
+  assert.equal(solana.http, 403);
+  assert.match(solana.error ?? "", /recovery allowlist/);
+  const evm = decideWithdraw({ ...base, mint: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", recoveryAllowlist: ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"], chainKey: "ethereum" });
+  assert.deepEqual(evm, { http: 200, decision: "would_send" });
 });

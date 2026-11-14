@@ -173,6 +173,10 @@ function decodedMinOut(data: Hex, provider: "kyberswap" | "zeroex", owner: strin
   if (!terms || terms.provider !== provider) throw new BroadcastError("swap calldata is not decodable", false);
   if (terms.recipient.toLowerCase() !== owner.toLowerCase()) throw new BroadcastError("swap recipient is not the hot wallet", false);
   if (!sameToken(terms.buyToken, leg.buyAddress)) throw new BroadcastError("swap calldata buys a different token", false);
+  if (terms.provider === "kyberswap" && (!sameToken(terms.sellToken, leg.sellAddress) || terms.sellAmount !== BigInt(leg.sellAmount))) {
+    throw new BroadcastError("Kyber calldata does not spend the leg's sell token and amount", false);
+  }
+  if (terms.provider === "zeroex" && !terms.exec) throw new BroadcastError("direct Settler calls are not accepted without decodable actions", false);
   if (terms.provider === "zeroex" && terms.exec && (!sameToken(terms.exec.token, leg.sellAddress) || terms.exec.amount !== BigInt(leg.sellAmount))) {
     throw new BroadcastError("0x exec does not spend the leg's sell amount", false);
   }
@@ -206,7 +210,7 @@ export async function evmTransaction(ctx: EvmCtx, leg: RouteLeg, capPct: number,
     };
   }
   if (selected === "lifi") {
-    if (!config.lifiLive) throw new BroadcastError("LI.FI swaps are not signable without LIFI_LIVE=true", false);
+    if (!config.lifiLive) throw new BroadcastError("LI.FI swaps are quote-only until facet calldata can be verified", false);
     const quoted = stored ? { raw: stored.raw } : await firmLifi(config, hop, chainId, taker, reference, fetchImpl, slippageBps);
     if (quoted.raw === undefined) throw new BroadcastError("firm quote outside the slippage cap", false);
     const parsed = readLifi(quoted.raw as Parameters<typeof readLifi>[0], reference, chainId);
@@ -266,6 +270,10 @@ export async function prepareEvmLeg(ctx: EvmCtx, leg: RouteLeg, slippageBps: num
   const selected = selectedProvider(ctx.chainId, leg, provider);
   const { built, minOut } = await reuseOrFirm(reuse, async (stored) => {
     const built = await evmTransaction(ctx, leg, capBps / 100, slippageBps, selected, stored);
+    const nativeSell = NATIVE_SELL.has(leg.sellAddress.toLowerCase());
+    if ((nativeSell && built.value !== BigInt(leg.sellAmount)) || (!nativeSell && built.value !== 0n)) {
+      throw new BroadcastError("transaction value does not match the leg's native sell amount", false);
+    }
     return { built, minOut: assertMinOut(built.minOut, ourMinOut(leg, capBps)) };
   });
   rememberIfFunded(built.provider, built.raw, ctx.chainId, leg.sellAddress, ctx.owner, BigInt(leg.sellAmount), built.to);

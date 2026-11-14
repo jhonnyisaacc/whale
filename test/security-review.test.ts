@@ -17,7 +17,7 @@ import { decryptWallet, encryptWallet, createWalletMaterial } from "../src/keyst
 import { BODY_LIMIT, REQUEST_TIMEOUT_MS } from "../src/http.js";
 import { assertBoot, loadManagedSigner, type TransactionSigner } from "../src/managed-signer.js";
 import { redactError, Secret, trackSecret, zeroLoadedSecrets } from "../src/redact.js";
-import { assertEvmSigning, DEFAULT_MAX_VALUE_WEI, JUPITER_PROGRAM_ID, SOLANA_BASE_PROGRAMS } from "../src/signing-policy.js";
+import { assertEvmSigning, DEFAULT_MAX_FEE_WEI, DEFAULT_MAX_VALUE_WEI, JUPITER_PROGRAM_ID, SOLANA_BASE_PROGRAMS } from "../src/signing-policy.js";
 import { createMemoryJournal, spendDay } from "../src/spend.js";
 import { createMemoryWithdrawJournal } from "../src/withdraw-journal.js";
 import type { SwapIntent } from "../src/domain.js";
@@ -271,7 +271,7 @@ test("a router allowed on one chain is denied on another, and a token sell canno
 });
 
 test("live mode pins aggregator hosts and private service URLs", () => {
-  const live = { WHALE_BROADCAST: "true", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "listing-trader-test" };
+  const live = { WHALE_BROADCAST: "true", DISABLED_CHAINS: "base,optimism,blast", EXECUTOR_AUTH_TOKEN: tokenAuth, RESOLVER_AUTH_TOKEN: "resolver-token-123456", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "listing-trader-test" };
   assert.throws(() => assertBoot(loadConfig({ ...live, JUPITER_API_BASE: "https://evil.example/swap/v1" }), "executor"), /pins jupiterBase/);
   assert.throws(() => assertBoot(loadConfig({ ...live, RESOLVER_URL: "http://evil.example/alert" }), "executor"), /https or a railway.internal host/);
   assert.doesNotThrow(() => assertBoot(loadConfig({ ...live, RESOLVER_URL: "http://resolver.railway.internal:8080" }), "executor"));
@@ -400,6 +400,17 @@ test("jupiter quotes with the slippage left after impact and refuses a quote wit
 test("loadConfig throws when LISTING_TRADER_LIVE is set", () => {
   assert.throws(() => loadConfig({ LISTING_TRADER_LIVE: "true" }), /LISTING_TRADER_LIVE/);
   assert.throws(() => loadConfig({ LISTING_TRADER_LIVE: "false" }), /LISTING_TRADER_LIVE/);
+});
+
+test("the EVM fee cap has a bounded default and strict integer configuration", () => {
+  assert.equal(loadConfig({}).maxFeeWei, DEFAULT_MAX_FEE_WEI);
+  assert.equal(loadConfig({ MAX_EVM_FEE_WEI: "123456" }).maxFeeWei, 123_456n);
+  assert.throws(() => loadConfig({ MAX_EVM_FEE_WEI: "1.5" }), /MAX_EVM_FEE_WEI/);
+});
+
+test("LI.FI stays quote-only while facet calldata cannot be verified", () => {
+  assert.throws(() => loadConfig({ LIFI_LIVE: "true" }), /LIFI_LIVE is closed/);
+  assert.equal(loadConfig({ LIFI_LIVE: "false" }).lifiLive, false);
 });
 
 test("loadConfig throws when STRATEGY_CAPS_JSON is set", () => {

@@ -100,7 +100,7 @@ export function coingeckoLoader(config: AppConfig, holdings: readonly Holding[],
   return async () => {
     const prices = new Map<string, number>();
     const natives = new Map<string, string>();
-    const tokens: { key: string; platform: string; address: string }[] = [];
+    const tokens: { key: string; platform: string; chainKey: string; address: string }[] = [];
     for (const holding of holdings) {
       const key = priceKey(holding);
       if (key === null || !holding.chainKey) continue;
@@ -110,7 +110,7 @@ export function coingeckoLoader(config: AppConfig, holdings: readonly Holding[],
         continue;
       }
       const platform = coingeckoPlatform(holding.chainKey);
-      if (platform) tokens.push({ key, platform, address: holding.address });
+      if (platform) tokens.push({ key, platform, chainKey: holding.chainKey, address: holding.address });
     }
     const requests: Promise<void>[] = [];
     if (natives.size > 0) {
@@ -126,7 +126,7 @@ export function coingeckoLoader(config: AppConfig, holdings: readonly Holding[],
     for (const token of tokens) {
       requests.push(
         getPrices(`${base}/simple/token_price/${token.platform}?contract_addresses=${encodeURIComponent(token.address)}&vs_currencies=usd`).then((body) => {
-          const usd = (body[token.address] ?? body[token.address.toLowerCase()])?.usd;
+          const usd = (body[token.address] ?? body[addressKey(token.chainKey, token.address)])?.usd;
           if (usd !== undefined) prices.set(token.key, usd);
         }),
       );
