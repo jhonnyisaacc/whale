@@ -3,6 +3,7 @@ import type pg from "pg";
 import { audit, inTransaction } from "./accounts.js";
 import { secretHash } from "./agents.js";
 import type { AgentLimits } from "./policy.js";
+import type { OAuthClient } from "./oauth-clients.js";
 
 export const REQUEST_TTL_MS = 15 * 60 * 1000;
 export const CODE_TTL_MS = 5 * 60 * 1000;
@@ -27,7 +28,7 @@ export function withParams(redirectUri: string, params: Record<string, string | 
   return url.toString();
 }
 
-async function deleteExpired(pool: pg.Pool, now: number): Promise<void> {
+async function deleteExpired(pool: pg.ClientBase, now: number): Promise<void> {
   const cutoff = new Date(now - EXPIRED_RETENTION_MS);
   await pool.query("DELETE FROM oauth_codes WHERE expires_at < $1", [cutoff]);
   await pool.query("DELETE FROM oauth_requests r WHERE expires_at < $1 AND NOT EXISTS (SELECT 1 FROM oauth_codes c WHERE c.request_id = r.id)", [cutoff]);
@@ -43,14 +44,17 @@ async function deleteExpired(pool: pg.Pool, now: number): Promise<void> {
   });
 }
 
-export async function createRequest(pool: pg.Pool, input: Omit<PendingRequest, "id" | "clientName">, now = Date.now()): Promise<string> {
+export async function createRequest(pool: pg.Pool, input: Omit<PendingRequest, "id" | "clientName">, client: OAuthClient, now = Date.now()): Promise<string> {
   const id = random();
-  await pool.query(
-    "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-    [id, input.clientId, input.redirectUri, input.codeChallenge, input.state, input.resource, new Date(now + REQUEST_TTL_MS)],
-  );
-  await deleteExpired(pool, now);
-  return id;
+  return inTransaction(pool, async (transaction) => {
+    await transaction.query("INSERT INTO oauth_clients (id, kind, name, redirect_uris) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING", [client.id, client.kind, client.name, client.redirectUris]);
+    await transaction.query(
+      "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [id, client.id, input.redirectUri, input.codeChallenge, input.state, input.resource, new Date(now + REQUEST_TTL_MS)],
+    );
+    await deleteExpired(transaction, now);
+    return id;
+  });
 }
 
 export async function pendingRequest(client: pg.Pool | pg.PoolClient, id: string, now = Date.now(), lock = false): Promise<PendingRequest | null> {

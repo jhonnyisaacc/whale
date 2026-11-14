@@ -1,10 +1,11 @@
 import { createPublicClient, erc20Abi, http } from "viem";
+import { addressKey } from "./chains.js";
 import type { ChainRef, TokenRecord } from "./domain.js";
 
 const cache = new Map<string, number>();
 
 function cacheKey(chainKey: string, contract: string): string {
-  return `${chainKey}:${contract.toLowerCase()}`;
+  return `${chainKey}:${addressKey(chainKey, contract)}`;
 }
 
 export function resetTokenDecimals(): void {

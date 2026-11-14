@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { chainByKey } from "./chains.js";
+import { addressKey, chainByKey } from "./chains.js";
 import type { Holding } from "./domain.js";
 
 export type BalanceReader = (holding: Holding) => Promise<number | null>;
@@ -124,7 +124,7 @@ export function createBalanceCache(read: BalanceReader, ttlMs: number, now: () =
   const rows = new Map<string, { chainKey: string; amount: Promise<number | null>; atMs: number }>();
   return {
     read(holding) {
-      const key = `${holding.chainKey ?? ""}:${holding.native ? "native" : holding.address.toLowerCase()}`;
+      const key = `${holding.chainKey ?? ""}:${holding.native ? "native" : addressKey(holding.chainKey ?? "", holding.address)}`;
       const at = now();
       const hit = rows.get(key);
       if (hit && at - hit.atMs < ttlMs) return hit.amount;

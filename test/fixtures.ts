@@ -26,7 +26,7 @@ const kyberAbi = parseAbi([
   "function swap(SwapExecutionParams execution) payable returns (uint256 returnAmount, uint256 gasUsed)",
 ]);
 
-export type SwapFixture = { recipient: string; buyToken: string; minOut: bigint };
+export type SwapFixture = { recipient: string; buyToken: string; minOut: bigint; sellToken?: string; sellAmount?: bigint };
 
 // Real AllowanceHolder.exec -> Settler.execute calldata; `tag` rides as the only action so fakes can tell legs apart.
 export type ExecFixture = { token: string; amount: bigint; operator?: string; target?: string };
@@ -41,6 +41,14 @@ export function zeroExData(tag: Hex, terms: SwapFixture, exec: ExecFixture): Hex
   return encodeFunctionData({ abi: allowanceHolderAbi, functionName: "exec", args });
 }
 
+export function directSettlerData(tag: Hex, terms: SwapFixture): Hex {
+  return encodeFunctionData({
+    abi: settlerAbi,
+    functionName: "execute",
+    args: [{ recipient: terms.recipient as Hex, buyToken: terms.buyToken as Hex, minAmountOut: terms.minOut }, [tag], `0x${"00".repeat(32)}`],
+  });
+}
+
 export function kyberData(tag: Hex, terms: SwapFixture): Hex {
   return encodeFunctionData({
     abi: kyberAbi,
@@ -51,14 +59,14 @@ export function kyberData(tag: Hex, terms: SwapFixture): Hex {
         approveTarget: ZERO,
         targetData: tag,
         desc: {
-          srcToken: ZERO,
+          srcToken: (terms.sellToken ?? ZERO) as Hex,
           dstToken: terms.buyToken as Hex,
           srcReceivers: [],
           srcAmounts: [],
           feeReceivers: [],
           feeAmounts: [],
           dstReceiver: terms.recipient as Hex,
-          amount: 0n,
+          amount: terms.sellAmount ?? 0n,
           minReturnAmount: terms.minOut,
           flags: 0n,
           permit: "0x",

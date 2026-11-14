@@ -109,6 +109,23 @@ test("an empty bridge allowlist skips and the cheaper quote wins without a broad
   assert.equal(ranked.plan.broadcast, false);
 });
 
+test("an intent cannot authorize one chain key and sign on another chain", () => {
+  const valid = {
+    idempotencyKey: "chain-binding",
+    side: "buy" as const,
+    notionalUsd: 1,
+    slippageBps: 50,
+    token: { ...sell, pairMap: { pools: [], top: null } },
+    holdings: [],
+    hyperliquid: null,
+    receivedAtMs: 0,
+  };
+  assert.equal(intentSchema.safeParse(valid).success, true);
+  assert.equal(intentSchema.safeParse({ ...valid, token: { ...valid.token, chain: { kind: "evm", chainId: 1 } } }).success, false);
+  assert.equal(intentSchema.safeParse({ ...valid, token: { ...valid.token, chainKey: "solana" } }).success, false);
+  assert.equal(intentSchema.safeParse({ ...valid, alternates: [{ ...valid.token, chain: { kind: "evm", chainId: 1 } }] }).success, false);
+});
+
 test("a dry-run transfer would send and a live transfer is skipped", async () => {
   const dry = await run({ kind: "transfer", idempotencyKey: "t1", asset: sell, to: "0xabc", amount: "1", mode: "dry_run" });
   assert.equal(dry.kind, "transfer");
@@ -136,6 +153,24 @@ test("swap stays dry-run unless --live carries a positive notional", () => {
   const transfer = parseCommand(["transfer", "--idempotency-key", "t1", "--to", "0xabc", "--amount", "1", "--asset-chain", "base", "--asset-address", sell.address, "--asset-symbol", "USDC", "--asset-decimals", "6", "--live"]);
   assert.equal(transfer.kind, "transfer");
   if (transfer.kind === "transfer") assert.equal(transfer.mode, "dry_run");
+});
+
+test("balance filtering does not merge distinct Solana addresses that differ only by case", async () => {
+  const canonical = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const impersonator = canonical.replace("EPj", "Epj");
+  const result = await run(
+    { kind: "balance", chainKey: "solana", address: canonical },
+    {
+      readBalance: async () => ({
+        holdings: [
+          { symbol: "USDC", address: canonical, amount: 1, usd: 1, native: false, chainKey: "solana" },
+          { symbol: "FAKE", address: impersonator, amount: 2, usd: 2, native: false, chainKey: "solana" },
+        ],
+      }),
+    },
+  );
+  assert.equal(result.kind, "balance");
+  if (result.kind === "balance") assert.deepEqual(result.holdings.map((holding) => holding.address), [canonical]);
 });
 
 test("a quote with no provider key stays unwired and a missing rpc url names that variable", async () => {

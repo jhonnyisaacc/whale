@@ -1,4 +1,5 @@
 import type { ChainRef, ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
+import { addressKey } from "./chains.js";
 import { planRebalance, type BridgeQuote, type RebalancePlan } from "./rebalance.js";
 import { intentSchema } from "./schemas.js";
 
@@ -113,8 +114,8 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
   if (command.kind === "balance") {
     if (!deps.readBalance) return { kind: "balance", holdings: [] };
     const read = await deps.readBalance(command.chainKey, command.address);
-    const address = command.address.toLowerCase();
-    const holdings = read.holdings.filter((row) => row.chainKey === command.chainKey && row.address.toLowerCase() === address);
+    const address = addressKey(command.chainKey, command.address);
+    const holdings = read.holdings.filter((row) => row.chainKey === command.chainKey && addressKey(command.chainKey, row.address) === address);
     return read.reason ? { kind: "balance", holdings, reason: read.reason } : { kind: "balance", holdings };
   }
   // TODO: local keystore signing exists for dry-run. Live mode still refuses raw keys in loadManagedSigner, so a live transfer stays skipped.

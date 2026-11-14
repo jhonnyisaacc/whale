@@ -37,6 +37,13 @@ fn token_file(args: &[String], keystore_path: &std::path::Path) -> PathBuf {
 
 fn write_private(path: &PathBuf, contents: &str) -> Result<(), String> {
     use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    if std::fs::symlink_metadata(path)
+        .is_ok_and(|metadata| metadata.file_type().is_symlink() || !metadata.file_type().is_file())
+    {
+        return Err(format!("{} is not a regular token file", path.display()));
+    }
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -44,6 +51,9 @@ fn write_private(path: &PathBuf, contents: &str) -> Result<(), String> {
     let mut file = options
         .open(path)
         .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+    #[cfg(unix)]
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))
+        .map_err(|error| format!("cannot protect {}: {error}", path.display()))?;
     file.write_all(contents.as_bytes())
         .map_err(|error| format!("cannot write {}: {error}", path.display()))
 }
@@ -195,5 +205,46 @@ fn main() -> ExitCode {
             eprintln!("{error}");
             ExitCode::from(2)
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::write_private;
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    #[test]
+    fn an_existing_token_file_becomes_owner_only_and_symlinks_are_refused() {
+        let directory =
+            std::env::temp_dir().join(format!("whale-signer-token-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir(&directory).expect("temporary directory");
+        let token = directory.join("signer.token");
+        std::fs::write(&token, "old").expect("old token");
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o644))
+            .expect("permissions");
+        write_private(&token, "new-secret").expect("write token");
+        assert_eq!(
+            std::fs::read_to_string(&token).expect("token"),
+            "new-secret"
+        );
+        assert_eq!(
+            std::fs::metadata(&token)
+                .expect("metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        let target = directory.join("target");
+        std::fs::write(&target, "unchanged").expect("target");
+        let link = directory.join("link");
+        symlink(&target, &link).expect("symlink");
+        assert!(write_private(&link, "stolen").is_err());
+        assert_eq!(
+            std::fs::read_to_string(&target).expect("target"),
+            "unchanged"
+        );
+        let _ = std::fs::remove_dir_all(&directory);
     }
 }

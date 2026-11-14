@@ -33,7 +33,7 @@ An EVM key (secp256k1) and a Solana key (ed25519) are generated from the OS rand
 ## Jobs
 
 ```json
-{ "id": "...", "kind": "evm", "chainId": 8453, "tx": { "nonce": "7", "to": "0x...", "value": "0", "data": "0x...", "gas": "300000", "maxFeePerGas": "...", "maxPriorityFeePerGas": "..." } }
+{ "id": "...", "kind": "evm", "chainId": 1, "tx": { "nonce": "7", "to": "0x...", "value": "0", "data": "0x...", "gas": "300000", "maxFeePerGas": "...", "maxPriorityFeePerGas": "..." } }
 { "id": "...", "kind": "solana", "message": "<base64 message bytes>" }
 ```
 
@@ -48,8 +48,10 @@ Everything not listed is refused. See `vectors/policy.json` for a full example.
 | Native transfer | `to` is in `evm.destinations`, and the value fits the `<chainId>:native` daily limit |
 | ERC-20 `transfer` | Recipient in `evm.destinations`, no native value, and the amount fits the `<chainId>:<token>` daily limit |
 | ERC-20 `approve` | Spender is a router listed for the chain and is not a Settler in `evm.settlers`, no native value, and the amount counts against the `<chainId>:<token>` daily limit. An unlimited approval is refused. A swap that needs an approval first therefore counts twice |
-| KyberSwap `swap` / `swapSimpleMode`, 0x `AllowanceHolder.exec` into `Settler.execute`, direct `Settler.execute` | The router is listed. The decoded recipient is this wallet. For 0x, the call reaches a Settler listed in `evm.settlers` for the chain, and `exec`'s `operator` equals its `target`. For KyberSwap, the executor (`caller` or `callTarget`), a nonzero `approveTarget`, every `srcReceivers` entry, and every `feeReceivers` entry are listed in `evm.kyberExecutors` for the chain, and the `srcAmounts` add up to no more than `amount`. The sold token and amount count against the daily limit. Native value stays at or under `evm.maxValueWei` |
+| KyberSwap `swap` / `swapSimpleMode`, 0x `AllowanceHolder.exec` into `Settler.execute` | The router is listed. The decoded recipient is this wallet. For 0x, the call reaches a Settler listed in `evm.settlers` for the chain, and `exec`'s `operator` equals its `target`. For KyberSwap, the executor (`caller` or `callTarget`), a nonzero `approveTarget`, every `srcReceivers` entry, and every `feeReceivers` entry are listed in `evm.kyberExecutors` for the chain, and the `srcAmounts` add up to no more than `amount`. The sold token and amount count against the daily limit. Native value stays at or under `evm.maxValueWei` |
 | Anything else | Refused, unless `allowUndecodedRouterCalls` is true and the target is a listed router |
+
+Direct `Settler.execute` is refused while its `actions` are not decoded: a recipient field alone cannot prove which token or amount the call spends, especially when an allowance already exists.
 
 **The recipient rules do not bound loss. The daily limits do.** The swap rules stop a naive or buggy client from naming another recipient where the ABI puts it. A compromised Whale does not have to make that mistake:
 - The signer never reads 0x `Settler.execute` `actions`. `exec(Settler, USDC, amount, Settler, execute({recipient: this wallet, buyToken: 0, minAmountOut: 0}, [TRANSFER_FROM(attacker, ...)]))` passes every rule, and Settler sends the lent `amount` to the attacker.
@@ -57,7 +59,7 @@ Everything not listed is refused. See `vectors/policy.json` for a full example.
 
 So each swap can lose its whole sold amount. What a compromised Whale can move in a day is bounded by the daily limits, the fee caps, and `evm.maxValueWei`, not by who the calldata names. [ADR 0004](../docs/adr/0004-smart-account-level.md) reaches the same conclusion for the smart account level. Set each limit to what you accept losing in a day. `allowUndecodedRouterCalls` lifts this bound for tokens: an undecoded call to a listed router can spend an allowance approved on an earlier day without charging today, so keep it false unless you accept that.
 
-Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`.
+Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. OP Stack chains 10 (Optimism), 8453 (Base), and 81457 (Blast) are currently refused because their additional L1 data fee cannot be bounded from the transaction alone; charging only the L2 gas would understate the native spend.
 
 On Solana, every program must be one of these:
 - System, Compute Budget, Token, Token-2022, or Associated Token Account;
