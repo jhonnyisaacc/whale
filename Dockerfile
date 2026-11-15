@@ -19,7 +19,10 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/
 COPY patches ./patches
-RUN pnpm install --frozen-lockfile --prod --filter whale && rm -rf /root/.cache /root/.local/share/pnpm
+RUN pnpm install --frozen-lockfile --prod --filter whale && rm -rf /root/.cache /root/.local/share/pnpm \
+  && corepack disable \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+RUN apt-get update && apt-get install --yes --no-install-recommends --only-upgrade apt libapt-pkg6.0 && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/web/dist ./web/dist
 COPY migrations ./migrations
