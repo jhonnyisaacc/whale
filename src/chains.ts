@@ -274,7 +274,7 @@ export type QuoteAssets = Readonly<Record<string, readonly QuoteAsset[]>>;
 export type EvmFeeLimit = { maxGas: bigint; maxFeePerGas: bigint };
 const GWEI = 1_000_000_000n;
 export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
-  1: { maxGas: 1_000_000n, maxFeePerGas: 10n * GWEI },
+  1: { maxGas: 600_000n, maxFeePerGas: 3n * GWEI },
   56: { maxGas: 1_500_000n, maxFeePerGas: GWEI },
   137: { maxGas: 1_500_000n, maxFeePerGas: 3_000n * GWEI },
   143: { maxGas: 1_500_000n, maxFeePerGas: 1_000n * GWEI },
