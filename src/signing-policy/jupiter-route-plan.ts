@@ -61,8 +61,6 @@ function skip(reader: Reader, type: BorshType): void {
 
 export type RouteArguments = { inAmount: bigint; quotedOut: bigint; slippageBps: number; platformFeeBps: number };
 
-// Reads the arguments the way the program's Borsh decoder does, from the front. Trailing bytes are refused
-// because the program ignores them, so a checker reading anywhere else could be shown decoy values.
 export function routeArguments(data: Buffer, start: number): RouteArguments {
   const reader = new Reader(data, start);
   skip(reader, ["vec", { defined: "RoutePlanStep" }]);
