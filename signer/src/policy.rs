@@ -196,9 +196,9 @@ impl Policy {
                 .push(format!("chain {chain} is not in the policy"));
             return decision;
         }
-        if matches!(chain, 10 | 8453 | 81457) {
+        if matches!(chain, 10 | 8453 | 81457 | 534352) {
             decision.reasons.push(format!(
-                "chain {chain} has OP Stack L1 data fees that the signer cannot bound; it is refused"
+                "chain {chain} charges a separate L1 data fee that the signer cannot bound; it is refused"
             ));
             return decision;
         }

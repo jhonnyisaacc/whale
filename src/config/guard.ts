@@ -90,9 +90,9 @@ export function assertLiveEdges(config: AppConfig, env: NodeJS.ProcessEnv): void
     }
   }
   if (!config.live) return;
-  const unboundedL1Fees = new Set([10, 8453, 81457]);
-  const opStack = CHAINS.find((chain) => config.enabledChainKeys.has(chain.key) && chain.chain.kind === "evm" && unboundedL1Fees.has(chain.chain.chainId));
-  if (opStack) throw new Error(`live mode is closed on OP Stack chain ${opStack.key} until L1 data fees can be bounded`);
+  const unboundedL1Fees = new Set([10, 8453, 81457, 534352]);
+  const l1Fee = CHAINS.find((chain) => config.enabledChainKeys.has(chain.key) && chain.chain.kind === "evm" && unboundedL1Fees.has(chain.chain.chainId));
+  if (l1Fee) throw new Error(`live mode is closed on ${l1Fee.key} until its separate L1 data fee can be bounded`);
   const fields = ["zeroExBase", "jupiterBase", "lifiBase", "oneInchBase", "kyberBase", "veloraBase", "hyperliquidUrl", "coingeckoBase", "dexscreenerBase"] as const;
   for (const field of fields) {
     if (!sameBase(config[field], OFFICIAL_HTTP[field])) throw new Error(`live mode pins ${field} to ${OFFICIAL_HTTP[field]}`);

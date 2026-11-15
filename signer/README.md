@@ -59,7 +59,7 @@ Direct `Settler.execute` is refused while its `actions` are not decoded: a recip
 
 So each swap can lose its whole sold amount. What a compromised Whale can move in a day is bounded by the daily limits, the fee caps, and `evm.maxValueWei`, not by who the calldata names. [ADR 0004](../docs/adr/0004-smart-account-level.md) reaches the same conclusion for the smart account level. Set each limit to what you accept losing in a day. `allowUndecodedRouterCalls` lifts this bound for tokens: an undecoded call to a listed router can spend an allowance approved on an earlier day without charging today, so keep it false unless you accept that.
 
-Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. OP Stack chains 10 (Optimism), 8453 (Base), and 81457 (Blast) are currently refused because their additional L1 data fee cannot be bounded from the transaction alone; charging only the L2 gas would understate the native spend.
+Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. Chains 10 (Optimism), 8453 (Base), 81457 (Blast), and 534352 (Scroll) are currently refused because each charges a separate L1 data fee that cannot be bounded from the transaction alone; charging only the L2 gas would understate the native spend.
 
 On Solana, every program must be one of these:
 - System, Compute Budget, Token, Token-2022, or Associated Token Account;
