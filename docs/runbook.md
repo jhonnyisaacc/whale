@@ -177,12 +177,13 @@ What a delivery carries:
 A receiver of the `whale` format must check three things before it acts on a delivery. The signature alone does not stop a replay, because a captured request still carries a valid signature.
 1. Recompute the HMAC-SHA256 of `"<t>.<raw body>"` with the secret and compare it with `v1` in constant time. Use the raw body bytes, not re-serialized JSON.
 2. Refuse the delivery when `t` is more than 300 seconds from the receiver's clock. Each retry is signed with a new `t`, so a short tolerance does not drop retries.
-3. Store each `Whale-Event-Id` and ignore one already stored. A retry keeps the same id, so this also absorbs a delivery that arrived but whose 2xx was lost. Keep ids for at least 24 hours, because retries run for about 8.6 hours after the first attempt.
+3. Record each `Whale-Event-Id` once the delivery has been handled, and answer 2xx without acting again when a recorded id arrives. A retry keeps the same id, so this also absorbs a delivery that was handled but whose 2xx was lost. Do not record an id before the action succeeds: if the action fails and the receiver answers non-2xx, the retry must be handled, not dropped. Keep ids for at least 24 hours, because retries run for about 8.6 hours after the first attempt.
 
 ```js
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export function verifyWhaleWebhook({ secret, rawBody, signatureHeader, nowSeconds = Math.floor(Date.now() / 1000), toleranceSeconds = 300 }) {
+  if (typeof signatureHeader !== "string") return false;
   const parts = Object.fromEntries(signatureHeader.split(",").map((part) => part.split("=", 2)));
   const t = Number(parts.t);
   if (!Number.isInteger(t) || typeof parts.v1 !== "string") return false;
@@ -193,7 +194,7 @@ export function verifyWhaleWebhook({ secret, rawBody, signatureHeader, nowSecond
 }
 ```
 
-After `verifyWhaleWebhook` returns true, insert the `Whale-Event-Id` with a unique constraint and act only when the insert succeeds.
+After `verifyWhaleWebhook` returns true, handle the delivery and insert its `Whale-Event-Id` in the same database transaction, with a unique constraint on the id. If the id is already there, answer 2xx and do nothing. If the action fails, the transaction rolls back, the id is not recorded, and the retry is handled.
 
 A delivery is queued in the same statement that writes its audit event. Each gateway sends due deliveries every 15 s. A non-2xx answer retries after 1 minute, 5 minutes, 30 minutes, 2 hours, and 6 hours, then gives up. A webhook disables itself after 50 consecutive failures, and its queued deliveries give up with it. `POST /api/webhooks/:id/test` pings one endpoint.
 
