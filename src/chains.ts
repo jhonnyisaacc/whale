@@ -47,9 +47,19 @@ const evm = (
 });
 
 export const CHAINS: readonly ChainSpec[] = [
-  evm("ethereum", 1, "ETH", 0.002, "zeroex", "RPC_URL_1", null, "ethereum", [
-    "https://docs.0x.org/docs/introduction/supported-chains",
-  ]),
+  evm(
+    "ethereum",
+    1,
+    "ETH",
+    0.002,
+    "zeroex",
+    "RPC_URL_1",
+    null,
+    "ethereum",
+    ["https://docs.0x.org/docs/introduction/supported-chains"],
+    "Ethereum gas costs far more than the other EVM chains, so the chain stays off until ENABLED_CHAINS includes ethereum.",
+    false,
+  ),
   evm("optimism", 10, "ETH", 0.001, "zeroex", "RPC_URL_10", null, "optimism", [
     "https://docs.0x.org/docs/introduction/supported-chains",
   ]),
