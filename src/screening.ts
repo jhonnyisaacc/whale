@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { addressKey } from "./chains.js";
 import { withTimeout } from "./timeout.js";
 import type { AppConfig } from "./config.js";
 import type { ChainRef } from "./domain.js";
@@ -64,7 +65,7 @@ export async function screenToken(
 ): Promise<Verdict> {
   if (!config.screening) return "allow";
   const verdicts = cacheFor(config);
-  const key = `${token.chainKey}:${token.contract.toLowerCase()}`;
+  const key = `${token.chainKey}:${addressKey(token.chainKey, token.contract)}`;
   const now = config.now?.() ?? Date.now();
   const cached = verdicts.get(key);
   if (cached && now - cached.atMs < config.screenCacheMs) return cached.verdict;
@@ -85,7 +86,7 @@ async function screenUncached(config: AppConfig, token: { chainKey: string; chai
   if (!goplusUrl) return "deny";
   const blockaidChain = BLOCKAID_CHAIN[token.chainKey];
   const results = await Promise.all([
-    guarded(() => screenGoPlus(config, goplusUrl, token.contract, fetchImpl)),
+    guarded(() => screenGoPlus(config, goplusUrl, token.contract, token.chain.kind === "evm", fetchImpl)),
     config.keys.blockaid && blockaidChain ? guarded(() => screenBlockaid(config, blockaidChain, token.contract, fetchImpl)) : Promise.resolve<Outcome>("allow"),
   ]);
   if (results.includes("deny")) return "deny";
@@ -110,7 +111,7 @@ function goPlusUrl(token: { chain: ChainRef; contract: string }): string | null 
   return null;
 }
 
-async function screenGoPlus(config: AppConfig, url: string, contract: string, fetchImpl: typeof fetch): Promise<Outcome> {
+async function screenGoPlus(config: AppConfig, url: string, contract: string, evm: boolean, fetchImpl: typeof fetch): Promise<Outcome> {
   const headers: Record<string, string> = {};
   if (config.keys.goplus) headers.authorization = `Bearer ${config.keys.goplus}`;
   const body = await withTimeout(config.liveLookupTimeoutMs, async (signal) => {
@@ -120,7 +121,7 @@ async function screenGoPlus(config: AppConfig, url: string, contract: string, fe
   if (body === null) return "unavailable";
   const parsed = goplusSchema.safeParse(body);
   if (!parsed.success || String(parsed.data.code) !== "1" || !parsed.data.result) return "unavailable";
-  const row = parsed.data.result[contract] ?? parsed.data.result[contract.toLowerCase()];
+  const row = parsed.data.result[contract] ?? (evm ? parsed.data.result[contract.toLowerCase()] : undefined);
   if (!row) return "deny";
   if (row.is_honeypot === "1" || row.cannot_sell_all === "1") return "deny";
   if (config.live && (!row.buy_tax || !row.sell_tax)) return "deny";

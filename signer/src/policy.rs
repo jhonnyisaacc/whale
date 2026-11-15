@@ -196,6 +196,12 @@ impl Policy {
                 .push(format!("chain {chain} is not in the policy"));
             return decision;
         }
+        if matches!(chain, 10 | 8453 | 81457) {
+            decision.reasons.push(format!(
+                "chain {chain} has OP Stack L1 data fees that the signer cannot bound; it is refused"
+            ));
+            return decision;
+        }
         let routers = self.routers.get(&chain).cloned().unwrap_or_default();
         let key = |token: [u8; 20]| format!("{chain}:0x{}", hex::encode(token));
         let native = format!("{chain}:native");
@@ -311,10 +317,9 @@ impl Policy {
                         self.spend(&mut decision, key(token), amount)
                     }
                     Some(_) => {}
-                    None if tx.value == 0 => decision
+                    None => decision
                         .reasons
                         .push("the sold amount is not readable from this call".into()),
-                    None => {}
                 }
                 self.spend(&mut decision, native, tx.value);
             }

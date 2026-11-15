@@ -18,7 +18,7 @@ const SETTLER_ABI = parseAbi([
 export type ZeroExExec = { operator: string; token: string; amount: bigint; target: string };
 
 export type SwapTerms =
-  | { provider: "kyberswap"; recipient: string; buyToken: string; minOut: bigint }
+  | { provider: "kyberswap"; recipient: string; buyToken: string; minOut: bigint; sellToken: string; sellAmount: bigint }
   | { provider: "zeroex"; recipient: string; buyToken: string; minOut: bigint; exec: ZeroExExec | null };
 
 function decoded<T>(read: () => T): T | null {
@@ -34,7 +34,7 @@ export function swapTerms(data: Hex): SwapTerms | null {
   const kyber = decoded(() => decodeFunctionData({ abi: KYBER_ABI, data }));
   if (kyber) {
     const desc = kyber.functionName === "swap" ? kyber.args[0].desc : kyber.args[1];
-    return { provider: "kyberswap", recipient: desc.dstReceiver, buyToken: desc.dstToken, minOut: desc.minReturnAmount };
+    return { provider: "kyberswap", recipient: desc.dstReceiver, buyToken: desc.dstToken, minOut: desc.minReturnAmount, sellToken: desc.srcToken, sellAmount: desc.amount };
   }
   const exec = decoded(() => decodeFunctionData({ abi: ALLOWANCE_HOLDER_ABI, data }));
   const settler = decoded(() => decodeFunctionData({ abi: SETTLER_ABI, data: exec ? exec.args[4] : data }));

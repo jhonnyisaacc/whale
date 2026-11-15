@@ -186,7 +186,7 @@ fn approve_job(nonce: u64, spender: &str, amount: u128) -> Value {
     serde_json::json!({
         "id": format!("approve-{nonce}"),
         "kind": "evm",
-        "chainId": 8453,
+        "chainId": 1,
         "tx": {
             "nonce": nonce.to_string(),
             "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -204,7 +204,7 @@ fn approvals_never_name_a_settler_and_count_against_the_day() {
     let settler = "0x5555555555555555555555555555555555555555";
     let holder = "0x0000000000001fF3684f28c67538d4D072C22734";
     let mut file = load("policy.json");
-    file["evm"]["routers"]["8453"]
+    file["evm"]["routers"]["1"]
         .as_array_mut()
         .unwrap()
         .push(settler.into());

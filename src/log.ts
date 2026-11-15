@@ -1,5 +1,5 @@
 import pino from "pino";
-import { redactError } from "./redact.js";
+import { redactError, redactText } from "./redact.js";
 
 export const REDACT_PATHS = [
   "req.headers.authorization",
@@ -21,7 +21,7 @@ export function loggerOptions(secrets: readonly string[]) {
     redact: { paths: REDACT_PATHS, censor: "[redacted]" },
     serializers: {
       err(error: Error) {
-        return { type: error.name, message: redactError(error, secrets), stack: error.stack ?? "" };
+        return { type: error.name, message: redactError(error, secrets), stack: error.stack ? redactText(error.stack, secrets) : "" };
       },
     },
   };

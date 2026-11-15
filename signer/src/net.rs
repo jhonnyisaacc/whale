@@ -13,9 +13,24 @@ pub fn registration_message(wallet: &str, code: &str) -> String {
 impl Gateway {
     pub fn new(base: &str) -> Result<Gateway, String> {
         let trimmed = base.trim_end_matches('/');
-        let local =
-            trimmed.starts_with("http://localhost:") || trimmed.starts_with("http://127.0.0.1:");
-        if !trimmed.starts_with("https://") && !local {
+        let uri = trimmed
+            .parse::<ureq::http::Uri>()
+            .map_err(|_| "the gateway URL is not a valid URI")?;
+        if uri
+            .authority()
+            .is_some_and(|authority| authority.as_str().contains('@'))
+        {
+            return Err("the gateway URL must not contain userinfo".into());
+        }
+        let scheme = uri.scheme_str().unwrap_or_default();
+        let host = uri.host().unwrap_or_default();
+        if host.is_empty() {
+            return Err("the gateway URL must include a host".into());
+        }
+        let local = scheme == "http"
+            && matches!(host, "localhost" | "127.0.0.1")
+            && uri.port_u16().is_some();
+        if scheme != "https" && !local {
             return Err("the gateway URL must be https (http only for localhost)".into());
         }
         let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -108,4 +123,33 @@ pub fn job_for_signer(job: &Value) -> Value {
     merged["id"] = job["id"].clone();
     merged["kind"] = job["kind"].clone();
     merged
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Gateway;
+
+    #[test]
+    fn gateway_urls_require_a_real_https_or_loopback_authority() {
+        for accepted in [
+            "https://gateway.example",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+        ] {
+            assert!(Gateway::new(accepted).is_ok(), "accepted {accepted}");
+        }
+        for refused in [
+            "http://example.invalid",
+            "http://localhost:@example.invalid",
+            "http://localhost:80@example.invalid",
+            "http://127.0.0.1:@example.invalid",
+            "http://127.0.0.1:80@example.invalid",
+            "https://owner@example.invalid",
+            "https://",
+            "https:///path",
+            "http://localhost",
+        ] {
+            assert!(Gateway::new(refused).is_err(), "refused {refused}");
+        }
+    }
 }

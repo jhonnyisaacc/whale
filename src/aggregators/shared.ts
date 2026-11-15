@@ -246,7 +246,7 @@ export function lifiHeaders(config: AppConfig): Record<string, string> {
 }
 
 // LI.FI calldata targets its diamond with facet-specific encodings, so the signer cannot read the swap recipient.
-// It stays quote-only unless the operator opts in with LIFI_LIVE=true.
+// It stays quote-only while facet calldata is not verified.
 export function lifiQuote(config: AppConfig, body: unknown, reference: Reference | null, chainId: number): HopQuote {
   const parsed = readLifi(body as Parameters<typeof readLifi>[0], reference, chainId);
   if (!parsed.sameChain) return empty();

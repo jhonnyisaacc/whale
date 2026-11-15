@@ -15,7 +15,7 @@ import { buildPairMap } from "../src/pairs.js";
 import { retryAfterAt } from "../src/provider-guard.js";
 import { evmReadClient } from "../src/rpc.js";
 import { screenToken } from "../src/screening.js";
-import { SETTLERS, kyberData, tagOf, zeroExData } from "./fixtures.js";
+import { SETTLER, SETTLERS, directSettlerData, kyberData, tagOf, zeroExData } from "./fixtures.js";
 
 const USDC = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const WETH = "0xcccccccccccccccccccccccccccccccccccccccc";
@@ -156,8 +156,9 @@ test("the Jupiter swap body asks for a capped veryHigh priority fee, or a Jito t
 });
 
 test("live boot requires a 0x key, a unique Kyber client id, and https on every RPC in a list", () => {
-  const live = { WHALE_BROADCAST: "true", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "rocket-trader" };
+  const live = { WHALE_BROADCAST: "true", DISABLED_CHAINS: "base,optimism,blast", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "rocket-trader" };
   assert.doesNotThrow(() => assertLiveEdges(loadConfig(live), {}));
+  assert.throws(() => assertLiveEdges(loadConfig({ ...live, DISABLED_CHAINS: "optimism,blast" }), {}), /OP Stack chain base/);
   assert.throws(() => assertLiveEdges(loadConfig({ ...live, ZEROX_API_KEY: "" }), {}), /ZEROX_API_KEY/);
   assert.throws(() => assertLiveEdges(loadConfig({ ...live, ZEROX_SETTLER_ALLOWLIST_JSON: "" }), {}), /ZEROX_SETTLER_ALLOWLIST_JSON/);
   assert.throws(() => loadConfig({ ...live, ZEROX_SETTLER_ALLOWLIST_JSON: JSON.stringify({ "8453": ["settler"] }) }), /ZEROX_SETTLER_ALLOWLIST_JSON is invalid/);
@@ -200,6 +201,26 @@ test("screening verdicts are cached per contract, denials included, but an outag
   assert.equal(calls, 5);
 });
 
+test("a Solana token cannot reuse a case-variant mint's cached screening verdict", async () => {
+  const config = loadConfig({ TOKEN_SCREENING: "true" });
+  const canonical = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const impersonator = canonical.replace("EPj", "Epj");
+  const clean = { is_honeypot: "0", cannot_sell_all: "0", buy_tax: "0", sell_tax: "0" };
+  let calls = 0;
+  const token = (contract: string) => ({ chainKey: "solana", chain: { kind: "solana" as const }, contract });
+  const benign: typeof fetch = async () => {
+    calls += 1;
+    return json({ code: 1, result: { [canonical]: clean } });
+  };
+  assert.equal(await screenToken(config, token(canonical), benign), "allow");
+  const malicious: typeof fetch = async () => {
+    calls += 1;
+    return json({ code: 1, result: { [impersonator]: { ...clean, is_honeypot: "1" } } });
+  };
+  assert.equal(await screenToken(config, token(impersonator), malicious), "deny");
+  assert.equal(calls, 2, "the second mint must be screened instead of inheriting the first mint's allow");
+});
+
 test("balance reads are cached briefly and a send from that chain drops the cache", async () => {
   let clock = 0;
   let reads = 0;
@@ -220,6 +241,24 @@ test("balance reads are cached briefly and a send from that chain drops the cach
   clock += 3_000;
   await cache.read(usdc);
   assert.equal(reads, 3);
+});
+
+test("the balance cache keeps case-variant Solana mints separate", async () => {
+  const canonical = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const impersonator = canonical.replace("EPj", "Epj");
+  const balances = new Map([
+    [canonical, 10],
+    [impersonator, 999],
+  ]);
+  let reads = 0;
+  const cache = createBalanceCache(async (holding) => {
+    reads += 1;
+    return balances.get(holding.address) ?? null;
+  }, 60_000);
+  const holding = (address: string): Holding => ({ symbol: "token", address, amount: 0, usd: 0, native: false, chainKey: "solana" });
+  assert.equal(await cache.read(holding(canonical)), 10);
+  assert.equal(await cache.read(holding(impersonator)), 999);
+  assert.equal(reads, 2);
 });
 
 function rpcServer(handler: (body: { id: number; method: string }) => { status: number; body: unknown }): Promise<{ server: Server; url: string; hits: () => number }> {
@@ -374,7 +413,7 @@ test("a fresh Kyber route summary goes straight to the build call", async () => 
     "aggregator-api.kyberswap.com": (url, init) => {
       if (!url.pathname.endsWith("/route/build")) return json({}, 500);
       builds.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      return json({ data: { data: kyberData("0x07", { recipient: OWNER, buyToken: TOKEN, minOut: 9_950_000n }), routerAddress: ROUTER, amountOut: "10000000" } });
+      return json({ data: { data: kyberData("0x07", { recipient: OWNER, buyToken: TOKEN, minOut: 9_950_000n, sellToken: USDC, sellAmount: 5_000_000n }), routerAddress: ROUTER, amountOut: "10000000" } });
     },
   });
   const routes = { data: { routeSummary: { amountOut: "10000000", routerAddress: ROUTER } } };
@@ -389,21 +428,25 @@ test("a fresh Kyber route summary goes straight to the build call", async () => 
   assert.equal(tagOf(signed[0]?.data), "0x07");
 });
 
-test("a Kyber build that pays someone else or lowers the minimum is refused before signing", async () => {
+test("a Kyber build that changes recipients, terms, input, or native value is refused before signing", async () => {
   const config: AppConfig = { ...loadConfig({ RPC_URL_8453: "http://fake.invalid" }), now: () => 1_000 };
   const routes = { data: { routeSummary: { amountOut: "10000000", routerAddress: ROUTER } } };
+  const honest = { recipient: OWNER, buyToken: TOKEN, minOut: 9_950_000n, sellToken: USDC, sellAmount: 5_000_000n };
   const cases = [
-    { terms: { recipient: "0x9999999999999999999999999999999999999999", buyToken: TOKEN, minOut: 9_950_000n }, error: /recipient is not the hot wallet/ },
-    { terms: { recipient: OWNER, buyToken: TOKEN, minOut: 1n }, error: /below ours/ },
-    { terms: { recipient: OWNER, buyToken: WETH, minOut: 9_950_000n }, error: /buys a different token/ },
-  ];
-  for (const { terms, error } of cases) {
+    { terms: { ...honest, recipient: "0x9999999999999999999999999999999999999999" }, error: /recipient is not the hot wallet/ },
+    { terms: { ...honest, minOut: 1n }, error: /below ours/ },
+    { terms: { ...honest, buyToken: WETH }, error: /buys a different token/ },
+    { terms: { ...honest, sellToken: WETH }, error: /sell token and amount/ },
+    { terms: { ...honest, sellAmount: 5_000_001n }, error: /sell token and amount/ },
+    { terms: honest, value: "1", error: /native sell amount/ },
+  ].map((testCase) => ({ value: "0", ...testCase }));
+  for (const { terms, error, value } of cases) {
     resetProviderGuards();
     resetApprovals();
     rememberApproval({ chainId: 8453, token: USDC, spender: ROUTER, owner: OWNER }, 10n ** 30n);
     const fetchImpl = byHost([], {
       "aggregator-api.kyberswap.com": (url) =>
-        url.pathname.endsWith("/route/build") ? json({ data: { data: kyberData("0x07", terms), routerAddress: ROUTER, amountOut: "10000000" } }) : json(routes),
+        url.pathname.endsWith("/route/build") ? json({ data: { data: kyberData("0x07", terms), routerAddress: ROUTER, transactionValue: value, amountOut: "10000000" } }) : json(routes),
     });
     const signed: EvmSignInput[] = [];
     await assert.rejects(
@@ -412,6 +455,21 @@ test("a Kyber build that pays someone else or lowers the minimum is refused befo
     );
     assert.equal(signed.length, 0);
   }
+});
+
+test("a native swap signs only when transaction value equals the leg input", async () => {
+  const config: AppConfig = { ...loadConfig({ RPC_URL_8453: "http://fake.invalid" }), now: () => 1_000 };
+  const native = "0x0000000000000000000000000000000000000000";
+  const routes = { data: { routeSummary: { amountOut: "10000000", routerAddress: ROUTER } } };
+  const leg = { ...storedLeg("kyberswap", routes, 900), sellAddress: native };
+  const data = kyberData("0x07", { recipient: OWNER, buyToken: TOKEN, minOut: 9_950_000n, sellToken: native, sellAmount: 5_000_000n });
+  const fetchImpl = byHost([], {
+    "aggregator-api.kyberswap.com": (url) => (url.pathname.endsWith("/route/build") ? json({ data: { data, routerAddress: ROUTER, transactionValue: "5000000", amountOut: "10000000" } }) : json(routes)),
+  });
+  const signed: EvmSignInput[] = [];
+  await broadcastRoute(config, signer(signed), request([leg], "kyberswap"), 1, fetchImpl, [], { io: io(() => fakeChain().rpc) });
+  assert.ok(signed.length > 0);
+  assert.ok(signed.every((input) => input.value === 5_000_000n));
 });
 
 test("a 0x exec that spends another token or amount than the leg is refused before signing", async () => {
@@ -431,6 +489,25 @@ test("a 0x exec that spends another token or amount than the leg is refused befo
     );
     assert.equal(signed.length, 0);
   }
+});
+
+test("a direct Settler call is refused while its actions and input are unreadable", async () => {
+  const config: AppConfig = { ...loadConfig({ RPC_URL_8453: "http://fake.invalid", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS }), now: () => 10_000 };
+  const raw = {
+    ...zeroExBody("0x0a"),
+    transaction: {
+      to: SETTLER,
+      data: directSettlerData("0x0a", { recipient: OWNER, buyToken: TOKEN, minOut: 9_950_000n }),
+      value: "0",
+      gas: "100000",
+    },
+  };
+  const signed: EvmSignInput[] = [];
+  await assert.rejects(
+    () => broadcastRoute(config, signer(signed), request([storedLeg("zeroex", raw, 9_000)]), 1, byHost([], { "api.0x.org": () => json(raw) }), [], { io: io(() => fakeChain().rpc) }),
+    /direct Settler calls are not accepted/,
+  );
+  assert.equal(signed.length, 0);
 });
 
 test("a 0x quote whose allowance issue is null counts as funded", async () => {

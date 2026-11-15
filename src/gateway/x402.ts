@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { QUOTE_ASSETS } from "../chains.js";
+import { QUOTE_ASSETS, quoteAssetOf } from "../chains.js";
 import { safeRequest, type SafeResponse } from "./safe-https.js";
 
 const NETWORKS: Record<string, string> = {
@@ -46,7 +46,7 @@ async function option(raw: z.infer<typeof requirementSchema>, judge: JudgePaymen
   const chain = NETWORKS[raw.network] ?? null;
   const stated = raw.maxAmountRequired ?? raw.amount;
   const amount = stated && BigInt(stated) > 0n ? stated : null;
-  const known = chain ? QUOTE_ASSETS[chain]?.find((entry) => entry.address.toLowerCase() === raw.asset.toLowerCase()) : undefined;
+  const known = chain ? quoteAssetOf(QUOTE_ASSETS, chain, raw.asset) : undefined;
   const stable = known && (known.symbol === "USDC" || known.symbol === "USDT") ? known : undefined;
   const usd = stable && amount ? Number(amount) / 10 ** stable.decimals : null;
   const reasons: string[] = [];

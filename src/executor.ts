@@ -1,6 +1,6 @@
 import { holdingsForTrade, type BalanceReader } from "./balances.js";
 import type { ChainRef, ExecutionReport, HyperliquidMarket, Latency, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
-import { chainByKey } from "./chains.js";
+import { addressKey, chainByKey } from "./chains.js";
 import { checkLimits, type LimitConfig } from "./limits.js";
 import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
@@ -106,7 +106,7 @@ export function resetExecutorState(state?: ExecutorState): void {
 }
 
 function tokenKey(chainKey: string, address: string): string {
-  return `${chainKey}:${address.toLowerCase()}`;
+  return `${chainKey}:${addressKey(chainKey, address)}`;
 }
 
 export function tokenFlagged(chainKey: string, address: string): boolean {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CHAINS } from "../chains.js";
+import { addressKey, CHAINS } from "../chains.js";
 
 // Hosted wallets sign EVM and Solana. HyperCore needs an approved agent key and zkSync has no live send.
 export const HOSTED_CHAINS: readonly string[] = CHAINS.filter((spec) => spec.chain.kind !== "hypercore" && spec.liveSend !== "disabled").map((spec) => spec.key);
@@ -96,7 +96,7 @@ function adds<T>(before: readonly T[], after: readonly T[], key: (item: T) => st
   return after.some((item) => !known.has(key(item)));
 }
 
-const tokenKey = (entry: { chain: string; address: string }) => `${entry.chain}:${entry.address.toLowerCase()}`;
+const tokenKey = (entry: { chain: string; address: string }) => `${entry.chain}:${addressKey(entry.chain, entry.address)}`;
 
 // Any single loosening makes the whole change a widening. Widening needs a passkey and a delay, narrowing applies at once.
 export function changeDirection(before: WalletPolicy, after: WalletPolicy): "same" | "narrow" | "widen" {

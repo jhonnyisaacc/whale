@@ -3,6 +3,7 @@ import { inspect } from "node:util";
 import test from "node:test";
 import { createServer } from "node:http";
 import { configSecrets, loadConfig } from "../src/config.js";
+import { loggerOptions } from "../src/log.js";
 import { redactError, redactText, Secret } from "../src/redact.js";
 import { evmReadClient, resetRpcClients } from "../src/rpc.js";
 
@@ -35,6 +36,14 @@ for (const { name, configured, printed } of [
 test("a shorter configured URL does not expose the key of a longer one", () => {
   const secrets = configSecrets(loadConfig({ RPC_URL_8453: "https://rpc.example", RPC_URLS_8453: `https://rpc.example,https://rpc.example/?apikey=${rpcKey}` }));
   assert.equal(redactText(`URL: https://rpc.example/?apikey=${rpcKey}`, secrets).includes(rpcKey), false);
+});
+
+test("the error serializer redacts secrets from the stack as well as the message", () => {
+  const error = new Error(`RPC failed at https://rpc.example/v2/${rpcKey}`);
+  const serialized = loggerOptions([rpcKey]).serializers.err(error);
+  assert.equal(serialized.message.includes(rpcKey), false);
+  assert.equal(serialized.stack.includes(rpcKey), false);
+  assert.match(serialized.stack, /\[redacted\]/);
 });
 
 test("a viem error from a failing RPC does not print the key", async () => {

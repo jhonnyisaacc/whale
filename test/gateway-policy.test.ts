@@ -51,6 +51,17 @@ test("any loosening is a widening, and only tightening is a narrowing", () => {
   for (const change of narrowed) assert.equal(changeDirection(base, { ...base, ...change }), "narrow", JSON.stringify(change));
   assert.equal(changeDirection(policy({ approvalAboveUsd: null }), policy({ approvalAboveUsd: 10 })), "narrow");
   assert.equal(changeDirection(policy({ tokenAllowlist: null }), policy({ tokenAllowlist: [] })), "narrow");
+  const lower = "Sa11111111111111111111111111111111111111112";
+  const upper = "SA11111111111111111111111111111111111111112";
+  assert.equal(
+    changeDirection(policy({ tokenAllowlist: [{ chain: "solana", address: lower }] }), policy({ tokenAllowlist: [{ chain: "solana", address: upper }] })),
+    "widen",
+    "a case-only Solana mint substitution changes the allowed asset",
+  );
+  assert.equal(
+    changeDirection(policy({ tokenAllowlist: [{ chain: "base", address: EVM }] }), policy({ tokenAllowlist: [{ chain: "base", address: EVM.toUpperCase().replace("0X", "0x") }] })),
+    "same",
+  );
 });
 
 test("agent limits must sit inside the wallet policy, and the effective limit is the intersection", () => {

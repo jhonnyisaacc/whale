@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { z } from "zod";
-import { chainByKey } from "../chains.js";
+import { addressKey, chainByKey } from "../chains.js";
 import type { HostedCommand } from "../hosted-commands.js";
 import { audit } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
@@ -45,7 +45,7 @@ function addressOf(wallet: WalletView, chainKey: string): string | null {
 }
 
 function sameAddress(chainKey: string, left: string, right: string): boolean {
-  return family(chainKey) === "evm" ? left.toLowerCase() === right.toLowerCase() : left === right;
+  return addressKey(chainKey, left) === addressKey(chainKey, right);
 }
 
 function tokenAllowed(policy: WalletPolicy, chainKey: string, address: string): boolean {

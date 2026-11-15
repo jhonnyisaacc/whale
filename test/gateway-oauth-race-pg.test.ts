@@ -61,16 +61,60 @@ async function setup() {
   const walletId = "walletId" in created ? created.walletId : "";
   const registered = await app.inject({ method: "POST", url: "/oauth/register", payload: { client_name: "Claude Code", redirect_uris: [REDIRECT] } });
   const clientId = registered.json().client_id as string;
+  const oauthClient = { id: clientId, kind: "registered" as const, name: "Claude Code", redirectUris: [REDIRECT] };
   const request = async () => {
     const verifier = randomToken(48);
-    const id = await createRequest(pool, { clientId, redirectUri: REDIRECT, codeChallenge: pkceChallenge(verifier), state: null, resource: RESOURCE });
+    const id = await createRequest(pool, { clientId, redirectUri: REDIRECT, codeChallenge: pkceChallenge(verifier), state: null, resource: RESOURCE }, oauthClient);
     return { id, verifier };
   };
   const approve = (target: pg.Pool, id: string) => approveRequest(target, { requestId: id, accountId: user.accountId, walletId, name: "Claude", limits: LIMITS, issuer: ORIGIN });
   const liveCredentials = async () =>
     (await pool.query<{ n: number }>("SELECT count(*)::int AS n FROM agent_credentials WHERE kind <> 'api_key' AND revoked_at IS NULL")).rows[0]?.n;
-  return { pool, clientId, request, approve, liveCredentials, drop: async () => (await app.close(), await drop()) };
+  return { pool, clientId, oauthClient, request, approve, liveCredentials, drop: async () => (await app.close(), await drop()) };
 }
+
+test("a client deleted between resolution and request insertion is restored atomically", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, clientId, oauthClient, request, drop } = await setup();
+  try {
+    await pool.query("UPDATE oauth_clients SET created_at = now() - interval '2 days' WHERE id = $1", [clientId]);
+    await pool.query("DELETE FROM oauth_clients WHERE id = $1", [clientId]);
+    const { id } = await request();
+    const pending = await pool.query("SELECT client_id FROM oauth_requests WHERE id = $1", [id]);
+    assert.deepEqual(pending.rows[0], { client_id: clientId });
+    assert.equal((await pool.query("SELECT 1 FROM oauth_clients WHERE id = $1", [clientId])).rowCount, 1);
+  } finally {
+    await drop();
+  }
+});
+
+test("a request created while another authorization claims a stale client survives the cleanup conflict", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, request, drop } = await setup();
+  const other = await pool.connect();
+  try {
+    const stale = "stale-client";
+    await pool.query("INSERT INTO oauth_clients (id, kind, name, redirect_uris, created_at) VALUES ($1, 'registered', 'Stale', $2, now() - interval '2 days')", [stale, [REDIRECT]]);
+    await other.query("BEGIN");
+    const holder = (await other.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
+    await other.query(
+      "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($1, $2, $3, $4, null, $5, now() + interval '15 minutes')",
+      [pkceChallenge(randomToken(48)), stale, REDIRECT, pkceChallenge(randomToken(48)), RESOURCE],
+    );
+    const creating = request();
+    for (let tries = 0; ; tries++) {
+      if ((await pool.query("SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))", [holder])).rowCount) break;
+      if (tries > 200) throw new Error("cleanup never waited on the other authorization");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await other.query("COMMIT");
+    const { id } = await creating;
+    assert.equal((await pool.query("SELECT 1 FROM oauth_requests WHERE id = $1", [id])).rowCount, 1);
+    assert.equal((await pool.query("SELECT 1 FROM oauth_clients WHERE id = $1", [stale])).rowCount, 1);
+  } finally {
+    await other.query("ROLLBACK").catch(() => undefined);
+    other.release();
+    await drop();
+  }
+});
 
 test("a rotated refresh token replayed during a legitimate refresh leaves no credential of the family live", { skip: !TEST_DATABASE_URL }, async () => {
   const { pool, clientId, request, approve, liveCredentials, drop } = await setup();

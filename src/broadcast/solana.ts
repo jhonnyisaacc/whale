@@ -5,6 +5,7 @@ import { firmJupiter, jupiterQuote, jupiterSwap } from "../aggregators.js";
 import { BroadcastError } from "../executor.js";
 import { isSolanaAddress } from "../signer.js";
 import { JUPITER_PROGRAM_ID, WSOL_MINT } from "../signing-policy.js";
+import { assertJupiterTransaction } from "../signing-policy/jupiter.js";
 import { z } from "zod";
 import type { TxOutcome } from "../domain.js";
 import { redactError } from "../redact.js";
@@ -105,6 +106,11 @@ export async function prepareSolanaLeg(ctx: SolanaCtx, leg: RouteLeg, slippageBp
   const built = await jupiterSwap(config, quoted.raw, ctx.owner, fetchImpl);
   if (!built) throw new BroadcastError("jupiter swap build failed", false);
   const tx = VersionedTransaction.deserialize(Buffer.from(built.swapTransaction, "base64"));
+  try {
+    assertJupiterTransaction(tx, { owner: ctx.owner, sellToken: leg.sellAddress, buyToken: leg.buyAddress, sellAmount: leg.sellAmount, minOut, quote: quoted.raw });
+  } catch (error) {
+    throw new BroadcastError(error instanceof Error ? error.message : "jupiter transaction does not match the authorized quote", false);
+  }
   const simulated = await ctx.rpc.simulate(tx).catch(() => "unavailable");
   if (simulated) throw new BroadcastError("simulation rejected the transaction", false);
   return {

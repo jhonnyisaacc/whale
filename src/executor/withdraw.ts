@@ -1,3 +1,5 @@
+import { addressKey } from "../chains.js";
+
 export function decideWithdraw(input: {
   adminOk: boolean;
   enabled: boolean;
@@ -17,7 +19,10 @@ export function decideWithdraw(input: {
   if (input.amount !== undefined && !(input.amount > 0 && input.amount <= input.cap)) return { http: 403, error: "withdraw exceeds the per-call cap" };
   if (!input.destinationAllowed) return { http: 403, error: "destination is not allowlisted" };
   if (input.mint) {
-    const allowed = input.recoveryAllowlist.some((item) => item.toLowerCase() === input.mint?.toLowerCase());
+    // The legacy dry-run form had no chain and was EVM-only; live recovery always supplies one.
+    const chainKey = input.chainKey ?? "ethereum";
+    const mint = addressKey(chainKey, input.mint);
+    const allowed = input.recoveryAllowlist.some((item) => addressKey(chainKey, item) === mint);
     if (!allowed) return { http: 403, error: "token is not in the recovery allowlist" };
     if (input.decimals === undefined) return { http: 409, error: "token withdraw needs decimals" };
   }

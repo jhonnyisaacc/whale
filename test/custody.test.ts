@@ -170,6 +170,32 @@ test("swap calldata must pay the hot wallet unless opaque swaps are opted in", (
   assert.throws(() => assertEvmSigning({ ...base, data: kyberData("0x01", terms("0x9999999999999999999999999999999999999999")), allowOpaqueSwap: true }), /recipient/);
 });
 
+test("the EVM fee policy caps total gas and rejects priority above max fee", () => {
+  const owner = "0x2222222222222222222222222222222222222222";
+  const router = "0x1111111111111111111111111111111111111111";
+  const base = {
+    chainId: 8453,
+    to: router,
+    value: 0n,
+    purpose: "swap" as const,
+    routers: [router],
+    settlers: [SETTLER],
+    withdrawAllowlist: [],
+    maxValueWei: DEFAULT_MAX_VALUE_WEI,
+    allowHotApproval: false,
+    owner,
+    allowOpaqueSwap: false,
+    data: kyberData("0x01", { recipient: owner, buyToken: "0x3333333333333333333333333333333333333333", minOut: 1n }),
+    maxFeeWei: 100n,
+    gas: 10n,
+    maxFeePerGas: 10n,
+    maxPriorityFeePerGas: 0n,
+  };
+  assert.doesNotThrow(() => assertEvmSigning(base));
+  assert.throws(() => assertEvmSigning({ ...base, gas: 11n }), /gas fee exceeds/);
+  assert.throws(() => assertEvmSigning({ ...base, maxPriorityFeePerGas: 11n }), /priority fee exceeds/);
+});
+
 test("a 0x exec must lend the allowance to a pinned Settler and call it", () => {
   const owner = "0x2222222222222222222222222222222222222222";
   const holder = "0x1111111111111111111111111111111111111111";

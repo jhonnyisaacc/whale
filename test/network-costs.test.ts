@@ -149,6 +149,27 @@ test("an x402 challenge becomes a plan: the cheapest option that fits, and nothi
   assert.equal((await x402Quote("https://down.example", fits, async () => Promise.reject(new Error("host resolves to a private address")))).status, "unreadable");
 });
 
+test("an x402 option cannot impersonate a Solana stablecoin by changing address case", async () => {
+  const canonical = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const impersonator = canonical.replace("EPj", "Epj");
+  let judged = false;
+  const quote = await x402Quote(
+    "https://paid.example/data",
+    async () => {
+      judged = true;
+      return { verdict: "fits", reasons: [] };
+    },
+    async () => ({ status: 402, body: JSON.stringify({ x402Version: 1, accepts: [{ scheme: "exact", network: "solana", maxAmountRequired: "1000000", asset: impersonator, payTo: "SomeDestination11111111111111111111111111111" }] }), truncated: false }),
+  );
+  assert.equal(quote.status, "plan");
+  if (quote.status !== "plan") return;
+  assert.equal(quote.options[0]?.verdict, "refused");
+  assert.match(quote.options[0]?.reasons.join("; ") ?? "", /not a known stablecoin/);
+  assert.equal(quote.options[0]?.symbol, null);
+  assert.equal(judged, false);
+  assert.notEqual(canonical, impersonator);
+});
+
 test("an x402 option that names no amount is refused, never planned as a free payment", async () => {
   const challenge = {
     x402Version: 1,

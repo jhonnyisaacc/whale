@@ -9,6 +9,7 @@ import { coingeckoLoader, createPriceCache } from "../src/prices.js";
 import { planRoutes } from "../src/routing.js";
 import { screenToken } from "../src/screening.js";
 import { spendDay } from "../src/spend.js";
+import { cachedTokenDecimals, rememberTokenDecimals, resetTokenDecimals } from "../src/token-decimals.js";
 import { landedSend } from "./fixtures.js";
 
 const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -33,6 +34,16 @@ function basePool(quoteSymbol: string, quoteAddress: string, liquidityUsd: numbe
 }
 
 const usdcHolding: Holding = { symbol: "USDC", address: BASE_USDC, amount: 20, usd: 20, native: false, decimals: 6, chainKey: "base" };
+
+test("token decimal caches preserve Solana mint case and fold EVM hex case", () => {
+  resetTokenDecimals();
+  const canonical = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  rememberTokenDecimals("solana", canonical, 6);
+  assert.equal(cachedTokenDecimals("solana", canonical.replace("EPj", "Epj")), null);
+  rememberTokenDecimals("base", BASE_USDC, 6);
+  assert.equal(cachedTokenDecimals("base", BASE_USDC.toLowerCase()), 6);
+  resetTokenDecimals();
+});
 
 const counterfeit = basePool("USDC", FAKE_USDC, 50_000_000);
 const real = basePool("WETH", BASE_WETH.toLowerCase(), 120_000);

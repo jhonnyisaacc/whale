@@ -1,6 +1,6 @@
 import { CHAINS, QUOTE_ASSETS, chainByKey, type QuoteAsset, type QuoteAssets } from "../chains.js";
 import { kyberSupports } from "../aggregators.js";
-import { DEFAULT_MAX_VALUE_WEI, SOLANA_BASE_PROGRAMS } from "../signing-policy.js";
+import { DEFAULT_MAX_FEE_WEI, DEFAULT_MAX_VALUE_WEI, SOLANA_BASE_PROGRAMS } from "../signing-policy.js";
 import { chainAddressMap, reorgDepths, routerAllowlist, spendTimezone, splitList } from "./guard.js";
 import { isSolanaAddress } from "../signer.js";
 import { DEFAULT_KYBER_CLIENT_ID, type AppConfig, type ApprovalSeed } from "./types.js";
@@ -80,6 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (env.LISTING_TRADER_LIVE !== undefined) throw new Error("LISTING_TRADER_LIVE is closed");
   if (env.STRATEGY_CAPS_JSON !== undefined) throw new Error("STRATEGY_CAPS_JSON is closed");
   if (env.WITHDRAW_ENABLED !== undefined) throw new Error("WITHDRAW_ENABLED is closed");
+  if (env.LIFI_LIVE === "true") throw new Error("LIFI_LIVE is closed until facet calldata can be verified");
   const live = env.WHALE_BROADCAST === "true";
   const maxSlippageBps = intEnv(env, "MAX_SLIPPAGE_BPS", 100);
   const slippageHardMaxBps = intEnv(env, "SLIPPAGE_HARD_MAX_BPS", 300);
@@ -120,7 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     zeroExBase: env.ZEROX_API_BASE ?? "https://api.0x.org",
     jupiterBase: env.JUPITER_API_BASE ?? "https://api.jup.ag/swap/v1",
     lifiBase: env.LIFI_API_BASE ?? "https://li.quest/v1",
-    lifiLive: env.LIFI_LIVE === "true",
+    lifiLive: false,
     hyperliquidUrl: env.HYPERLIQUID_API_URL ?? "https://api.hyperliquid.xyz",
     jupiterImpactUnit: env.JUPITER_IMPACT_UNIT === "percent" ? "percent" : "fraction",
     liveLookupTimeoutMs: intEnv(env, "LIVE_LOOKUP_TIMEOUT_MS", 400),
@@ -187,6 +188,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     supportByChain: supportByChain(CHAINS.map((chain) => chain.key), env.SUPPORT_TIERS),
     solanaProgramAllowlist: [...new Set([...SOLANA_BASE_PROGRAMS, ...splitList(env.SOLANA_PROGRAM_ALLOWLIST), ...(manifest?.solanaPrograms ?? [])])],
     maxValueWei: manifest ? BigInt(manifest.maxValueWei) : weiEnv(env.MAX_NATIVE_VALUE_WEI),
+    maxFeeWei: weiEnv(env.MAX_EVM_FEE_WEI, DEFAULT_MAX_FEE_WEI, "MAX_EVM_FEE_WEI"),
     mevRpcByChainId: mevRpcs(env),
     jitoUrl: env.JITO_ENABLED === "true" ? (env.JITO_BLOCK_ENGINE_URL ?? "https://mainnet.block-engine.jito.wtf/api/v1/transactions") : null,
     oneInchBase: env.ONEINCH_API_BASE ?? "https://api.1inch.com",
@@ -255,9 +257,9 @@ function approvalSeed(env: NodeJS.ProcessEnv): ApprovalSeed[] {
 
 // Worst case for one send: two legs, each waiting up to 3x CONFIRM_TIMEOUT_MS (the Solana bound; EVM is 2x),
 // plus the firm build and a few RPC round trips per leg.
-function weiEnv(raw: string | undefined): bigint {
-  if (raw === undefined || raw === "") return DEFAULT_MAX_VALUE_WEI;
-  if (!/^\d+$/.test(raw)) throw new Error("invalid MAX_NATIVE_VALUE_WEI");
+function weiEnv(raw: string | undefined, fallback = DEFAULT_MAX_VALUE_WEI, name = "MAX_NATIVE_VALUE_WEI"): bigint {
+  if (raw === undefined || raw === "") return fallback;
+  if (!/^\d+$/.test(raw)) throw new Error(`invalid ${name}`);
   return BigInt(raw);
 }
 

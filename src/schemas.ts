@@ -35,14 +35,29 @@ const hyperliquidSchema = z.object({
   maxLeverage: z.number(),
 });
 
-const intentTokenSchema = z.object({
-  symbol: z.string().min(1),
-  address: z.string().min(1),
-  decimals: z.number().int().nullable(),
-  chain: chainSchema,
-  chainKey: z.string().min(1),
-  pairMap: pairMapSchema,
-});
+const intentTokenSchema = z
+  .object({
+    symbol: z.string().min(1),
+    address: z.string().min(1),
+    decimals: z.number().int().nullable(),
+    chain: chainSchema,
+    chainKey: z.string().min(1),
+    pairMap: pairMapSchema,
+  })
+  .superRefine((token, ctx) => {
+    const expected = chainByKey(token.chainKey)?.chain;
+    if (!expected) {
+      ctx.addIssue({ code: "custom", message: "unknown chain" });
+      return;
+    }
+    const matches =
+      expected.kind === "evm" && token.chain.kind === "evm"
+        ? expected.chainId === token.chain.chainId
+        : expected.kind === "hypercore" && token.chain.kind === "hypercore"
+          ? expected.market === token.chain.market
+          : expected.kind === "solana" && token.chain.kind === "solana";
+    if (!matches) ctx.addIssue({ code: "custom", message: "chainKey does not match chain" });
+  });
 
 const holdingSchema = z.object({
   symbol: z.string(),

@@ -81,7 +81,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
     if (query.data.response_type !== "code") return reply.code(400).send({ error: "unsupported_response_type" });
     if (query.data.code_challenge_method !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(query.data.code_challenge ?? "")) return reply.code(400).send({ error: "invalid_request" });
     if ((query.data.resource ?? resource) !== resource) return reply.code(400).send({ error: "invalid_target" });
-    const id = await createRequest(pool, { clientId: client.id, redirectUri: query.data.redirect_uri, codeChallenge: query.data.code_challenge as string, state: query.data.state ?? null, resource }, now());
+    const id = await createRequest(pool, { clientId: client.id, redirectUri: query.data.redirect_uri, codeChallenge: query.data.code_challenge as string, state: query.data.state ?? null, resource }, client, now());
     return reply.redirect(`/connect?request=${id}`, 302);
   });
 

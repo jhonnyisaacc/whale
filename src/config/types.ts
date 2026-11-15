@@ -84,6 +84,7 @@ export type AppConfig = LimitConfig & {
   supportByChain: Record<string, SupportTier>;
   solanaProgramAllowlist: string[];
   maxValueWei: bigint;
+  maxFeeWei: bigint;
   mevRpcByChainId: Record<number, string>;
   jitoUrl: string | null;
   oneInchBase: string;
