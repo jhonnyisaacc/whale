@@ -32,6 +32,20 @@ jobs:
       - run: corepack enable
       - run: pnpm audit
 
+  cargo-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: signer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.98.1 --profile minimal
+      - run: cargo install --locked cargo-audit --version "=0.22.2"
+      - run: cargo audit --deny warnings
+
   codeql:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -70,7 +84,7 @@ jobs:
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           image: whale:scan
-          fail-build: "false"
+          fail-build: "true"
           severity-cutoff: high
           only-fixed: "true"
       - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3

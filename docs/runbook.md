@@ -174,6 +174,28 @@ What a delivery carries:
 - **`whale` format:** the audit event as JSON. `Whale-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">` and `Whale-Event-Id` are the headers.
 - **`slack` format:** `{ "text": ... }`.
 
+A receiver of the `whale` format must check three things before it acts on a delivery. The signature alone does not stop a replay, because a captured request still carries a valid signature.
+1. Recompute the HMAC-SHA256 of `"<t>.<raw body>"` with the secret and compare it with `v1` in constant time. Use the raw body bytes, not re-serialized JSON.
+2. Refuse the delivery when `t` is more than 300 seconds from the receiver's clock. Each retry is signed with a new `t`, so a short tolerance does not drop retries.
+3. Record each `Whale-Event-Id` once the delivery has been handled, and answer 2xx without acting again when a recorded id arrives. A retry keeps the same id, so this also absorbs a delivery that was handled but whose 2xx was lost. Do not record an id before the action succeeds: if the action fails and the receiver answers non-2xx, the retry must be handled, not dropped. Keep ids for at least 24 hours, because retries run for about 8.6 hours after the first attempt.
+
+```js
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyWhaleWebhook({ secret, rawBody, signatureHeader, nowSeconds = Math.floor(Date.now() / 1000), toleranceSeconds = 300 }) {
+  if (typeof signatureHeader !== "string") return false;
+  const parts = Object.fromEntries(signatureHeader.split(",").map((part) => part.split("=", 2)));
+  const t = Number(parts.t);
+  if (!Number.isInteger(t) || typeof parts.v1 !== "string") return false;
+  if (Math.abs(nowSeconds - t) > toleranceSeconds) return false;
+  const expected = createHmac("sha256", secret).update(`${t}.${rawBody}`).digest();
+  const given = Buffer.from(parts.v1, "hex");
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+```
+
+After `verifyWhaleWebhook` returns true, handle the delivery and insert its `Whale-Event-Id` in the same database transaction, with a unique constraint on the id. If the id is already there, answer 2xx and do nothing. If the action fails, the transaction rolls back, the id is not recorded, and the retry is handled.
+
 A delivery is queued in the same statement that writes its audit event. Each gateway sends due deliveries every 15 s. A non-2xx answer retries after 1 minute, 5 minutes, 30 minutes, 2 hours, and 6 hours, then gives up. A webhook disables itself after 50 consecutive failures, and its queued deliveries give up with it. `POST /api/webhooks/:id/test` pings one endpoint.
 
 Settings adds a backup passkey on Whale, approved by an existing passkey. Whale keeps the backup's attestation, so each enclave whose Turnkey owner lacks a backup can add it later through `CREATE_AUTHENTICATORS_V2`. Any passkey the owner holds approves that request. Settings has a button that adds the missing backups to every enclave, and enclave setup adds them to a new enclave before it confirms.
@@ -237,5 +259,7 @@ Do this when you intend to broadcast. Do not paste keys into chat.
 5. Set `WHALE_BROADCAST` to the exact string `true` only after `DATABASE_URL` is set. Boot throws `live mode requires Turnkey` when the signer is missing. Boot throws `live mode requires DATABASE_URL so the daily cap survives restart` when the database URL is missing.
 
 `MAX_EVM_FEE_WEI` caps `gas × maxFeePerGas` before every EVM signature, including fee-bumping replacements; the default is `10000000000000000` wei (0.01 of the native token), and `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. This is an execution-fee cap, not a bound on OP Stack L1 data fees. Live boot currently refuses Optimism, Base, and Blast while those chains are enabled; keep them in `DISABLED_CHAINS` when broadcasting on another chain. Quotes and dry-runs remain available.
+
+Ethereum and Monad are off by default. Ethereum gas costs far more than the other EVM chains, so an agent trades on the cheaper chains unless the operator sets `ENABLED_CHAINS=ethereum`. `DISABLED_CHAINS` wins over `ENABLED_CHAINS`.
 
 `pnpm test` does not call an exchange and does not broadcast. For the kill switch and for revocation, read [Threat model](threat-model.md).

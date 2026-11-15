@@ -57,7 +57,7 @@ Keep small USDC and native balances on the chains you actually trade. The target
 
 Solana: `JITO_ENABLED=true` posts `sendTransaction` to `https://mainnet.block-engine.jito.wtf/api/v1/transactions` unless `JITO_BLOCK_ENGINE_URL` is set. The body is base64. `bundleOnly` is not set. Without Jito, the Jupiter `/swap` body asks for a `veryHigh` priority fee capped at `SOLANA_MAX_PRIORITY_LAMPORTS`. With Jito, it asks for `jitoTipLamports` (`JITO_TIP_LAMPORTS`, default 10000) instead, because Jupiter accepts one or the other. Jupiter picks the tip account. The signing policy allows a native transfer only to the hot wallet, its wrapped SOL account, or one of the eight Jito tip accounts it lists, so a tip to any other account is not signed. It also refuses tips above `JITO_TIP_LAMPORTS`, and a compute-unit price times limit that, with tips, exceeds `SOLANA_MAX_PRIORITY_LAMPORTS`.
 
-EVM: set `MEV_RPC_URL_1=https://rpc.flashbots.net` for Ethereum. Other chains use `MEV_RPC_URL_<chainId>`. Simulation stays on the normal RPC. The protect URL is the retail `eth_sendRawTransaction` path. Do not use a deprecated `?url=` parameter.
+EVM: set `MEV_RPC_URL_1=https://rpc.flashbots.net` for Ethereum, once `ENABLED_CHAINS` includes `ethereum`. Other chains use `MEV_RPC_URL_<chainId>`. Simulation stays on the normal RPC. The protect URL is the retail `eth_sendRawTransaction` path. Do not use a deprecated `?url=` parameter.
 
 ## Live network costs
 

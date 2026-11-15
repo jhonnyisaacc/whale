@@ -34,6 +34,13 @@ test("Robinhood Chain and HyperEVM use the published chain ids and RPCs", () => 
   assert.equal(providers.includes("lifi"), true);
 });
 
+test("Ethereum is off until ENABLED_CHAINS names it, and DISABLED_CHAINS still wins", () => {
+  assert.equal(loadConfig({} as NodeJS.ProcessEnv).enabledChainKeys.has("ethereum"), false);
+  assert.equal(loadConfig({ ENABLED_CHAINS: "ethereum" } as NodeJS.ProcessEnv).enabledChainKeys.has("ethereum"), true);
+  assert.equal(loadConfig({ ENABLED_CHAINS: "ethereum", DISABLED_CHAINS: "ethereum" } as NodeJS.ProcessEnv).enabledChainKeys.has("ethereum"), false);
+  assert.equal(loadConfig({} as NodeJS.ProcessEnv).enabledChainKeys.has("arbitrum"), true);
+});
+
 test("live mode is off unless the flag is the exact string true", () => {
   const dry = loadConfig({} as NodeJS.ProcessEnv);
   assert.equal(dry.live, false);
