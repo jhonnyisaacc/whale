@@ -84,7 +84,7 @@ jobs:
         uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           image: whale:scan
-          fail-build: "false"
+          fail-build: "true"
           severity-cutoff: high
           only-fixed: "true"
       - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
