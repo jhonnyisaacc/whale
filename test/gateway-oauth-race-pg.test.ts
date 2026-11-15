@@ -87,6 +87,35 @@ test("a client deleted between resolution and request insertion is restored atom
   }
 });
 
+test("a request created while another authorization claims a stale client survives the cleanup conflict", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, request, drop } = await setup();
+  const other = await pool.connect();
+  try {
+    const stale = "stale-client";
+    await pool.query("INSERT INTO oauth_clients (id, kind, name, redirect_uris, created_at) VALUES ($1, 'registered', 'Stale', $2, now() - interval '2 days')", [stale, [REDIRECT]]);
+    await other.query("BEGIN");
+    const holder = (await other.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
+    await other.query(
+      "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($1, $2, $3, $4, null, $5, now() + interval '15 minutes')",
+      [pkceChallenge(randomToken(48)), stale, REDIRECT, pkceChallenge(randomToken(48)), RESOURCE],
+    );
+    const creating = request();
+    for (let tries = 0; ; tries++) {
+      if ((await pool.query("SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))", [holder])).rowCount) break;
+      if (tries > 200) throw new Error("cleanup never waited on the other authorization");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await other.query("COMMIT");
+    const { id } = await creating;
+    assert.equal((await pool.query("SELECT 1 FROM oauth_requests WHERE id = $1", [id])).rowCount, 1);
+    assert.equal((await pool.query("SELECT 1 FROM oauth_clients WHERE id = $1", [stale])).rowCount, 1);
+  } finally {
+    await other.query("ROLLBACK").catch(() => undefined);
+    other.release();
+    await drop();
+  }
+});
+
 test("a rotated refresh token replayed during a legitimate refresh leaves no credential of the family live", { skip: !TEST_DATABASE_URL }, async () => {
   const { pool, clientId, request, approve, liveCredentials, drop } = await setup();
   try {
