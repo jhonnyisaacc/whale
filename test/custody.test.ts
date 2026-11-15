@@ -11,6 +11,7 @@ import { configSecrets, loadConfig } from "../src/config.js";
 import { readHiddenLine, writeKeystoreFile } from "../src/create-wallet.js";
 import { buildLeverage } from "../src/hyperliquid.js";
 import { SETTLER, kyberData, zeroExData } from "./fixtures.js";
+import { replacementFees } from "../src/broadcast/evm.js";
 import { loadManagedSigner, turnkeySigner, withPolicy, type TransactionSigner, type TurnkeyApi } from "../src/managed-signer.js";
 import { assertEvmFee, assertEvmSigning, associatedTokenAddress, DEFAULT_MAX_VALUE_WEI, JITO_TIP_ACCOUNTS, JUPITER_PROGRAM_ID, turnkeyPolicyDocument, wrappedSolAccount } from "../src/signing-policy.js";
 
@@ -375,4 +376,16 @@ test("the signing wrapper applies the chain's fee limit before the inner signer 
   await assert.rejects(policy.signEvm({ ...send, chainId: 8453 }), /no EVM fee limit/);
   await assert.rejects(policy.signEvm({ ...send, chainId: 1 }), /maxFeePerGas exceeds/);
   assert.deepEqual(signed, [137]);
+});
+
+test("a fee bump stops at the chain's fee limit when that still replaces the stuck transaction", () => {
+  const gwei = 10n ** 9n;
+  const limit = 3n * gwei;
+  const capped = replacementFees({ maxFeePerGas: 27n * gwei / 10n, maxPriorityFeePerGas: gwei }, null, limit);
+  assert.deepEqual(capped, { maxFeePerGas: limit, maxPriorityFeePerGas: 1_125_000_000n });
+  const uncapped = replacementFees({ maxFeePerGas: gwei, maxPriorityFeePerGas: gwei / 10n }, null, limit);
+  assert.deepEqual(uncapped, { maxFeePerGas: 1_125_000_000n, maxPriorityFeePerGas: 112_500_000n });
+  const tooClose = replacementFees({ maxFeePerGas: 275n * gwei / 100n, maxPriorityFeePerGas: gwei }, null, limit);
+  assert.equal(tooClose.maxFeePerGas > limit, true, "no replacement fits under the limit, so the bump is left for the policy to refuse");
+  assert.equal(replacementFees({ maxFeePerGas: 27n * gwei / 10n, maxPriorityFeePerGas: gwei }, null, undefined).maxFeePerGas, 3_037_500_000n);
 });

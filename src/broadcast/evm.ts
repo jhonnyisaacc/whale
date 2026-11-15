@@ -66,10 +66,25 @@ export async function pollReceipts(ctx: EvmCtx, hashes: readonly string[], deadl
   }
 }
 
+const largest = (values: bigint[]) => values.reduce((a, b) => (a > b ? a : b));
+
+export function replacementFees(
+  sent: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint },
+  current: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | null,
+  limit: bigint | undefined,
+): { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } {
+  const maxPriorityFeePerGas = largest([bumpFee(sent.maxPriorityFeePerGas), current?.maxPriorityFeePerGas ?? 0n]);
+  const maxFeePerGas = largest([bumpFee(sent.maxFeePerGas), current?.maxFeePerGas ?? 0n, maxPriorityFeePerGas]);
+  const replaceable = (fee: bigint, original: bigint) => fee * 10n >= original * 11n;
+  if (limit === undefined || maxFeePerGas <= limit || !replaceable(limit, sent.maxFeePerGas)) return { maxFeePerGas, maxPriorityFeePerGas };
+  const priority = maxPriorityFeePerGas > limit ? limit : maxPriorityFeePerGas;
+  if (!replaceable(priority, sent.maxPriorityFeePerGas)) return { maxFeePerGas, maxPriorityFeePerGas };
+  return { maxFeePerGas: limit, maxPriorityFeePerGas: priority };
+}
+
 export async function replaceEvm(ctx: EvmCtx, input: EvmSignInput): Promise<TxRecord | null> {
   const current = await ctx.read.fees().catch(() => null);
-  const maxPriorityFeePerGas = [bumpFee(input.maxPriorityFeePerGas), current?.maxPriorityFeePerGas ?? 0n].reduce((a, b) => (a > b ? a : b));
-  const maxFeePerGas = [bumpFee(input.maxFeePerGas), current?.maxFeePerGas ?? 0n, maxPriorityFeePerGas].reduce((a, b) => (a > b ? a : b));
+  const { maxFeePerGas, maxPriorityFeePerGas } = replacementFees(input, current, ctx.config.evmFeeLimits[ctx.chainId]?.maxFeePerGas);
   let signed: Hex;
   try {
     signed = await ctx.signer.signEvm({ ...input, maxFeePerGas, maxPriorityFeePerGas });
