@@ -1,17 +1,18 @@
+import { DEFAULT_EVM_FEE_LIMITS } from "../src/chains.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { ComputeBudgetProgram, Keypair, PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { encodeFunctionData, erc20Abi, maxUint256, parseAbi, parseSignature } from "viem";
+import { encodeFunctionData, erc20Abi, maxUint256, parseAbi, parseSignature, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { configSecrets, loadConfig } from "../src/config.js";
 import { readHiddenLine, writeKeystoreFile } from "../src/create-wallet.js";
 import { buildLeverage } from "../src/hyperliquid.js";
 import { SETTLER, kyberData, zeroExData } from "./fixtures.js";
 import { loadManagedSigner, turnkeySigner, withPolicy, type TransactionSigner, type TurnkeyApi } from "../src/managed-signer.js";
-import { assertEvmSigning, associatedTokenAddress, DEFAULT_MAX_VALUE_WEI, JITO_TIP_ACCOUNTS, JUPITER_PROGRAM_ID, turnkeyPolicyDocument, wrappedSolAccount } from "../src/signing-policy.js";
+import { assertEvmFee, assertEvmSigning, associatedTokenAddress, DEFAULT_MAX_VALUE_WEI, JITO_TIP_ACCOUNTS, JUPITER_PROGRAM_ID, turnkeyPolicyDocument, wrappedSolAccount } from "../src/signing-policy.js";
 
 const tokenAuth = "0123456789abcdef";
 const SYSTEM = SystemProgram.programId;
@@ -170,30 +171,15 @@ test("swap calldata must pay the hot wallet unless opaque swaps are opted in", (
   assert.throws(() => assertEvmSigning({ ...base, data: kyberData("0x01", terms("0x9999999999999999999999999999999999999999")), allowOpaqueSwap: true }), /recipient/);
 });
 
-test("the EVM fee policy caps total gas and rejects priority above max fee", () => {
-  const owner = "0x2222222222222222222222222222222222222222";
-  const router = "0x1111111111111111111111111111111111111111";
-  const base = {
-    chainId: 8453,
-    to: router,
-    value: 0n,
-    purpose: "swap" as const,
-    routers: [router],
-    settlers: [SETTLER],
-    withdrawAllowlist: [],
-    maxValueWei: DEFAULT_MAX_VALUE_WEI,
-    allowHotApproval: false,
-    owner,
-    allowOpaqueSwap: false,
-    data: kyberData("0x01", { recipient: owner, buyToken: "0x3333333333333333333333333333333333333333", minOut: 1n }),
-    maxFeeWei: 100n,
-    gas: 10n,
-    maxFeePerGas: 10n,
-    maxPriorityFeePerGas: 0n,
-  };
-  assert.doesNotThrow(() => assertEvmSigning(base));
-  assert.throws(() => assertEvmSigning({ ...base, gas: 11n }), /gas fee exceeds/);
-  assert.throws(() => assertEvmSigning({ ...base, maxPriorityFeePerGas: 11n }), /priority fee exceeds/);
+test("the EVM fee policy bounds gas and fee per gas on each chain and refuses a chain without limits", () => {
+  const polygon = DEFAULT_EVM_FEE_LIMITS[137];
+  const swap = { gas: 300_000n, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n };
+  assert.doesNotThrow(() => assertEvmFee(polygon, swap));
+  assert.doesNotThrow(() => assertEvmFee(polygon, { ...swap, gas: polygon!.maxGas, maxFeePerGas: polygon!.maxFeePerGas }));
+  assert.throws(() => assertEvmFee(polygon, { ...swap, gas: polygon!.maxGas + 1n }), /gas limit exceeds/);
+  assert.throws(() => assertEvmFee(polygon, { ...swap, maxFeePerGas: polygon!.maxFeePerGas + 1n }), /maxFeePerGas exceeds/);
+  assert.throws(() => assertEvmFee(polygon, { ...swap, maxPriorityFeePerGas: swap.maxFeePerGas + 1n }), /priority fee exceeds/);
+  for (const chainId of [10, 8453, 81457, 534352]) assert.throws(() => assertEvmFee(DEFAULT_EVM_FEE_LIMITS[chainId], swap), /no EVM fee limit/);
 });
 
 test("a 0x exec must lend the allowance to a pinned Settler and call it", () => {
@@ -364,3 +350,29 @@ test("the Turnkey policy is scoped to each wallet and uses the passed native cap
   assert.throws(() => turnkeyPolicyDocument({ userId: "6f1c2a9e-4b7d-4c1e-9a3f-2d8e5b7c1a40", wallets, solanaAddress, routers: {}, selectors: ["0x1234"], maxValueWei: 1n }), /selector/);
 });
 
+
+test("the signing wrapper applies the chain's fee limit before the inner signer runs", async () => {
+  const destination = "0x4444444444444444444444444444444444444444";
+  const signed: number[] = [];
+  const inner: TransactionSigner = {
+    backend: "keystore",
+    evmAddress: () => "0x2222222222222222222222222222222222222222",
+    solanaAddress: () => null,
+    async signEvm(input) {
+      signed.push(input.chainId);
+      return "0x";
+    },
+    async signSolana() {
+      return new Uint8Array();
+    },
+    async signHyperliquid() {
+      return { r: "0x01", s: "0x02", v: 27 };
+    },
+  };
+  const policy = withPolicy(inner, loadConfig({ OWNER_WITHDRAW_ADDRESSES: destination }));
+  const send = { to: destination as Hex, data: "0x" as Hex, value: 1n, gas: 21_000n, nonce: 0, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n, purpose: "withdraw" as const };
+  await policy.signEvm({ ...send, chainId: 137 });
+  await assert.rejects(policy.signEvm({ ...send, chainId: 8453 }), /no EVM fee limit/);
+  await assert.rejects(policy.signEvm({ ...send, chainId: 1 }), /maxFeePerGas exceeds/);
+  assert.deepEqual(signed, [137]);
+});

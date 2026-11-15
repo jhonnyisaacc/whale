@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { isAllowanceHolderExec, swapTerms, type SwapTerms } from "./signing-policy/swap-terms.js";
-import { CHAINS } from "./chains.js";
+import { CHAINS, type EvmFeeLimit } from "./chains.js";
 import { assertTradableAction, type HyperliquidAction } from "./hyperliquid.js";
 
 export * from "./signing-policy/swap-terms.js";
@@ -17,7 +17,6 @@ const ATA_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 export const SOLANA_BASE_PROGRAMS = [JUPITER_PROGRAM_ID, SYSTEM_PROGRAM, COMPUTE_BUDGET_PROGRAM, TOKEN_PROGRAM, TOKEN_2022_PROGRAM, ATA_PROGRAM] as const;
 
 export const DEFAULT_MAX_VALUE_WEI = 2_000_000_000_000_000n;
-export const DEFAULT_MAX_FEE_WEI = 10_000_000_000_000_000n;
 export const WSOL_MINT = "So11111111111111111111111111111111111111112";
 const SOLANA_QUOTE_MINTS = [WSOL_MINT, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"] as const;
 export const JITO_TIP_ACCOUNTS = [
@@ -65,10 +64,6 @@ type EvmSigningInput = {
   settlers: readonly string[];
   withdrawAllowlist: readonly string[];
   maxValueWei: bigint;
-  maxFeeWei?: bigint;
-  gas?: bigint;
-  maxFeePerGas?: bigint;
-  maxPriorityFeePerGas?: bigint;
   allowHotApproval: boolean;
   owner: string;
   allowOpaqueSwap: boolean;
@@ -77,15 +72,17 @@ type EvmSigningInput = {
   approval?: EvmApproval;
 };
 
+export function assertEvmFee(limit: EvmFeeLimit | undefined, tx: { gas: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }): void {
+  if (!limit) throw new Error("chain has no EVM fee limit in the signing policy");
+  if (tx.gas <= 0n || tx.maxPriorityFeePerGas < 0n) throw new Error("EVM fee fields are invalid");
+  if (tx.maxPriorityFeePerGas > tx.maxFeePerGas) throw new Error("priority fee exceeds maxFeePerGas");
+  if (tx.gas > limit.maxGas) throw new Error("EVM gas limit exceeds the signing policy");
+  if (tx.maxFeePerGas > limit.maxFeePerGas) throw new Error("EVM maxFeePerGas exceeds the signing policy");
+}
+
 export function assertEvmSigning(input: EvmSigningInput): void {
   if (!evmChainIds().includes(input.chainId)) throw new Error("chain is not in the signing policy");
   if (input.value < 0n || input.value > input.maxValueWei) throw new Error("native value exceeds the signing policy");
-  if (input.maxFeeWei !== undefined) {
-    if (input.gas === undefined || input.maxFeePerGas === undefined || input.maxPriorityFeePerGas === undefined) throw new Error("EVM fee fields are required by the fee policy");
-    if (input.gas <= 0n || input.maxFeePerGas < 0n || input.maxPriorityFeePerGas < 0n) throw new Error("EVM fee fields are invalid");
-    if (input.maxPriorityFeePerGas > input.maxFeePerGas) throw new Error("priority fee exceeds maxFeePerGas");
-    if (input.gas * input.maxFeePerGas > input.maxFeeWei) throw new Error("EVM gas fee exceeds the signing policy");
-  }
   const to = input.to.toLowerCase();
   const allowlisted = (address: string) => input.withdrawAllowlist.some((item) => item.toLowerCase() === address.toLowerCase());
   if (input.purpose === "withdraw") {

@@ -1,3 +1,4 @@
+import { DEFAULT_EVM_FEE_LIMITS } from "../src/chains.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -17,7 +18,7 @@ import { decryptWallet, encryptWallet, createWalletMaterial } from "../src/keyst
 import { BODY_LIMIT, REQUEST_TIMEOUT_MS } from "../src/http.js";
 import { assertBoot, loadManagedSigner, type TransactionSigner } from "../src/managed-signer.js";
 import { redactError, Secret, trackSecret, zeroLoadedSecrets } from "../src/redact.js";
-import { assertEvmSigning, DEFAULT_MAX_FEE_WEI, DEFAULT_MAX_VALUE_WEI, JUPITER_PROGRAM_ID, SOLANA_BASE_PROGRAMS } from "../src/signing-policy.js";
+import { assertEvmSigning, DEFAULT_MAX_VALUE_WEI, JUPITER_PROGRAM_ID, SOLANA_BASE_PROGRAMS } from "../src/signing-policy.js";
 import { createMemoryJournal, spendDay } from "../src/spend.js";
 import { createMemoryWithdrawJournal } from "../src/withdraw-journal.js";
 import type { SwapIntent } from "../src/domain.js";
@@ -402,10 +403,14 @@ test("loadConfig throws when LISTING_TRADER_LIVE is set", () => {
   assert.throws(() => loadConfig({ LISTING_TRADER_LIVE: "false" }), /LISTING_TRADER_LIVE/);
 });
 
-test("the EVM fee cap has a bounded default and strict integer configuration", () => {
-  assert.equal(loadConfig({}).maxFeeWei, DEFAULT_MAX_FEE_WEI);
-  assert.equal(loadConfig({ MAX_EVM_FEE_WEI: "123456" }).maxFeeWei, 123_456n);
-  assert.throws(() => loadConfig({ MAX_EVM_FEE_WEI: "1.5" }), /MAX_EVM_FEE_WEI/);
+test("EVM fee limits default per chain and accept only whole-number overrides for EVM chains", () => {
+  assert.deepEqual(loadConfig({}).evmFeeLimits, DEFAULT_EVM_FEE_LIMITS);
+  const tuned = loadConfig({ EVM_FEE_LIMITS_JSON: JSON.stringify({ "137": { maxGas: "2000000", maxFeePerGas: "2000000000000" } }) }).evmFeeLimits;
+  assert.deepEqual(tuned[137], { maxGas: 2_000_000n, maxFeePerGas: 2_000_000_000_000n });
+  assert.deepEqual(tuned[1], DEFAULT_EVM_FEE_LIMITS[1]);
+  for (const bad of [{ "137": { maxGas: "1.5", maxFeePerGas: "1" } }, { "137": { maxGas: "0", maxFeePerGas: "1" } }, { "137": { maxGas: 2000000, maxFeePerGas: "1" } }, { "7": { maxGas: "1", maxFeePerGas: "1" } }, []]) {
+    assert.throws(() => loadConfig({ EVM_FEE_LIMITS_JSON: JSON.stringify(bad) }), /EVM_FEE_LIMITS_JSON/);
+  }
 });
 
 test("LI.FI stays quote-only while facet calldata cannot be verified", () => {

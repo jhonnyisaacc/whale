@@ -1,4 +1,4 @@
-import { CHAINS } from "../chains.js";
+import { CHAINS, DEFAULT_EVM_FEE_LIMITS, type EvmFeeLimit } from "../chains.js";
 import { isSolanaAddress } from "../signer.js";
 import { kyberSupports } from "../aggregators.js";
 import { DEFAULT_KYBER_CLIENT_ID } from "./types.js";
@@ -62,6 +62,21 @@ export function reorgDepths(raw: string | undefined): Record<number, number> {
     map[Number(id)] = depth as number;
   }
   return map;
+}
+
+export function evmFeeLimits(raw: string | undefined): Record<number, EvmFeeLimit> {
+  const limits: Record<number, EvmFeeLimit> = { ...DEFAULT_EVM_FEE_LIMITS };
+  if (!raw) return limits;
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("EVM_FEE_LIMITS_JSON must be an object");
+  const evmIds = new Set(CHAINS.flatMap((chain) => (chain.chain.kind === "evm" ? [chain.chain.chainId] : [])));
+  for (const [id, entry] of Object.entries(parsed)) {
+    const { maxGas, maxFeePerGas } = (entry ?? {}) as Record<string, unknown>;
+    const digits = (value: unknown) => typeof value === "string" && /^[1-9]\d*$/.test(value);
+    if (!/^\d+$/.test(id) || !evmIds.has(Number(id)) || !digits(maxGas) || !digits(maxFeePerGas)) throw new Error("EVM_FEE_LIMITS_JSON is invalid");
+    limits[Number(id)] = { maxGas: BigInt(maxGas as string), maxFeePerGas: BigInt(maxFeePerGas as string) };
+  }
+  return limits;
 }
 
 export function routerAllowlist(env: NodeJS.ProcessEnv): Record<number, string[]> {

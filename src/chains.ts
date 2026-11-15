@@ -271,6 +271,19 @@ export type QuoteAsset = { address: string; symbol: string; decimals: number };
 
 export type QuoteAssets = Readonly<Record<string, readonly QuoteAsset[]>>;
 
+export type EvmFeeLimit = { maxGas: bigint; maxFeePerGas: bigint };
+const GWEI = 1_000_000_000n;
+export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
+  1: { maxGas: 1_000_000n, maxFeePerGas: 30n * GWEI },
+  56: { maxGas: 1_500_000n, maxFeePerGas: 10n * GWEI },
+  137: { maxGas: 1_500_000n, maxFeePerGas: 1_000n * GWEI },
+  143: { maxGas: 1_500_000n, maxFeePerGas: 1_000n * GWEI },
+  999: { maxGas: 1_500_000n, maxFeePerGas: 50n * GWEI },
+  4663: { maxGas: 5_000_000n, maxFeePerGas: GWEI },
+  42161: { maxGas: 5_000_000n, maxFeePerGas: GWEI },
+  59144: { maxGas: 1_500_000n, maxFeePerGas: 5n * GWEI },
+};
+
 export function addressKey(chainKey: string, address: string): string {
   return chainByKey(chainKey)?.chain.kind === "evm" ? address.toLowerCase() : address;
 }

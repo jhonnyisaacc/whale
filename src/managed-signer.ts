@@ -5,7 +5,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { AppConfig } from "./config.js";
 import { actionHash, signL1Action, type HyperliquidAction } from "./hyperliquid.js";
 import { loadSigner, signerSecrets, solanaSigner, type SignerMaterial } from "./signer.js";
-import { assertEvmSigning, assertHyperliquidSigning, assertSolanaSigning, routersForChain, type EvmApproval, type EvmPurpose, type SolanaMessage } from "./signing-policy.js";
+import { assertEvmFee, assertEvmSigning, assertHyperliquidSigning, assertSolanaSigning, routersForChain, type EvmApproval, type EvmPurpose, type SolanaMessage } from "./signing-policy.js";
 import { assertLiveEdges, drainTimeoutMs, serviceTokens } from "./config.js";
 
 export type EvmSignInput = {
@@ -41,7 +41,6 @@ function policyConfig(config: AppConfig) {
   return {
     withdrawAllowlist: config.withdrawAllowlist,
     maxValueWei: config.maxValueWei,
-    maxFeeWei: config.maxFeeWei,
     allowHotApproval: config.allowHotApproval,
     solanaPrograms: config.solanaProgramAllowlist,
     maxLeverage: config.maxLeverage,
@@ -57,6 +56,7 @@ export function withPolicy(inner: TransactionSigner, config: AppConfig): Transac
     evmAddress: () => inner.evmAddress(),
     solanaAddress: () => inner.solanaAddress(),
     async signEvm(input) {
+      assertEvmFee(config.evmFeeLimits[input.chainId], input);
       assertEvmSigning({
         ...input,
         ...policy,
