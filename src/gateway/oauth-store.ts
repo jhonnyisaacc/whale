@@ -47,7 +47,7 @@ async function deleteExpired(pool: pg.Pool, now: number): Promise<void> {
 export async function createRequest(pool: pg.Pool, input: Omit<PendingRequest, "id" | "clientName">, client: OAuthClient, now = Date.now()): Promise<string> {
   const id = random();
   await inTransaction(pool, async (transaction) => {
-    await transaction.query("INSERT INTO oauth_clients (id, kind, name, redirect_uris) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING", [client.id, client.kind, client.name, client.redirectUris]);
+    await transaction.query("INSERT INTO oauth_clients (id, kind, name, redirect_uris) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name = oauth_clients.name", [client.id, client.kind, client.name, client.redirectUris]);
     await transaction.query(
       "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, state, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
       [id, client.id, input.redirectUri, input.codeChallenge, input.state, input.resource, new Date(now + REQUEST_TTL_MS)],
