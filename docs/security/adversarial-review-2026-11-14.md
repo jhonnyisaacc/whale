@@ -180,7 +180,7 @@ Quotes and dry-runs remain available. Normal `AllowanceHolder.exec`, Kyber, and 
 
 **Exploit and preconditions.** A malicious RPC or provider could consume native balance through extreme fees outside the USD notional reserved for the trade, provided the transaction was included.
 
-**Solution.** Added `MAX_EVM_FEE_WEI`, defaulting to 0.01 native token. `assertEvmSigning` checks the total fee on every signature and rejects `maxPriorityFeePerGas > maxFeePerGas`. Because the check wraps the signer, replacements are covered too. This is an execution-fee cap, not an L1-data-fee bound; OP Stack is closed separately.
+**Solution.** Added `MAX_EVM_FEE_WEI`, defaulting to 0.01 native token. `assertEvmSigning` checks the total fee on every signature and rejects `maxPriorityFeePerGas > maxFeePerGas`. Because the check wraps the signer, replacements are covered too. This is an execution-fee cap, not an L1-data-fee bound; OP Stack is closed separately. Later replaced by per-chain gas and max-fee-per-gas limits (`DEFAULT_EVM_FEE_LIMITS`, `EVM_FEE_LIMITS_JSON`) in #69; `MAX_EVM_FEE_WEI` no longer exists.
 
 **Regression.** `test/custody.test.ts` covers the exact cap, one unit over, and priority above max fee. `test/security-review.test.ts` covers the default and strict integer configuration. Configuration is documented in `docs/runbook.md`.
 
