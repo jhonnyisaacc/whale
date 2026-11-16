@@ -1,4 +1,4 @@
-import { CHAINS, QUOTE_ASSETS, chainByKey, type QuoteAsset, type QuoteAssets } from "../chains.js";
+import { CHAINS, QUOTE_ASSETS, chainByKey, type EvmFeeLimit, type QuoteAsset, type QuoteAssets } from "../chains.js";
 import type { LimitConfig } from "../limits.js";
 import { kyberSupports } from "../aggregators.js";
 import { isSolanaAddress } from "../signer.js";
@@ -84,7 +84,7 @@ export type AppConfig = LimitConfig & {
   supportByChain: Record<string, SupportTier>;
   solanaProgramAllowlist: string[];
   maxValueWei: bigint;
-  maxFeeWei: bigint;
+  evmFeeLimits: Readonly<Record<number, EvmFeeLimit>>;
   mevRpcByChainId: Record<number, string>;
   jitoUrl: string | null;
   oneInchBase: string;
