@@ -1,10 +1,10 @@
-import { CHAINS, QUOTE_ASSETS, chainByKey, type QuoteAsset, type QuoteAssets } from "../chains.js";
+import { CHAINS, QUOTE_ASSETS, chainByKey, evmFeeLimits, type QuoteAsset, type QuoteAssets } from "../chains.js";
 import { kyberSupports } from "../aggregators.js";
 import { DEFAULT_MAX_VALUE_WEI, SOLANA_BASE_PROGRAMS } from "../signing-policy.js";
-import { chainAddressMap, evmFeeLimits, reorgDepths, routerAllowlist, spendTimezone, splitList } from "./guard.js";
+import { chainAddressMap, reorgDepths, routerAllowlist, spendTimezone, splitList } from "./guard.js";
 import { isSolanaAddress } from "../signer.js";
 import { DEFAULT_KYBER_CLIENT_ID, type AppConfig, type ApprovalSeed } from "./types.js";
-import { manifestRouters, parseDeploymentManifest } from "../deployment-manifest.js";
+import { manifestFeeLimits, manifestRouters, parseDeploymentManifest } from "../deployment-manifest.js";
 import { supportByChain } from "../support.js";
 export type { AppConfig, ApprovalSeed, StrategyCap } from "./types.js";
 
@@ -91,6 +91,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const legacyRouters = routerAllowlist(env);
   if (manifest && env.ROUTER_ALLOWLIST_JSON && JSON.stringify(manifestRouters(manifest)) !== JSON.stringify(legacyRouters)) {
     throw new Error("WALLET_DEPLOYMENT_MANIFEST_JSON and ROUTER_ALLOWLIST_JSON disagree on routers");
+  }
+  const feeLimits = manifest ? manifestFeeLimits(manifest) : evmFeeLimits(env.EVM_FEE_LIMITS_JSON);
+  const limitsKey = (limits: object) => JSON.stringify(limits, (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value));
+  if (manifest && env.EVM_FEE_LIMITS_JSON && limitsKey(evmFeeLimits(env.EVM_FEE_LIMITS_JSON)) !== limitsKey(feeLimits)) {
+    throw new Error("WALLET_DEPLOYMENT_MANIFEST_JSON and EVM_FEE_LIMITS_JSON disagree on EVM fee limits");
   }
   const maxWithdrawAmount = intEnv(env, "MAX_WITHDRAW_AMOUNT", 1);
   const rpcUrlsByChainKey = rpcLists(env);
@@ -188,7 +193,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     supportByChain: supportByChain(CHAINS.map((chain) => chain.key), env.SUPPORT_TIERS),
     solanaProgramAllowlist: [...new Set([...SOLANA_BASE_PROGRAMS, ...splitList(env.SOLANA_PROGRAM_ALLOWLIST), ...(manifest?.solanaPrograms ?? [])])],
     maxValueWei: manifest ? BigInt(manifest.maxValueWei) : weiEnv(env.MAX_NATIVE_VALUE_WEI),
-    evmFeeLimits: evmFeeLimits(env.EVM_FEE_LIMITS_JSON),
+    evmFeeLimits: feeLimits,
     mevRpcByChainId: mevRpcs(env),
     jitoUrl: env.JITO_ENABLED === "true" ? (env.JITO_BLOCK_ENGINE_URL ?? "https://mainnet.block-engine.jito.wtf/api/v1/transactions") : null,
     oneInchBase: env.ONEINCH_API_BASE ?? "https://api.1inch.com",

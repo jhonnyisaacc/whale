@@ -1,3 +1,4 @@
+import { DEFAULT_EVM_FEE_LIMITS } from "../src/chains.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -95,7 +96,7 @@ function fakeTurnkey() {
 test("a backup passkey reaches every enclave, survives a cancelled approval, and joins enclaves created later", { skip: !TEST_DATABASE_URL }, async () => {
   const { pool, drop } = await migratedSchema();
   const fake = fakeTurnkey();
-  const delegationConfig = { delegatePublicKey: `02${"ab".repeat(32)}`, routers: { 8453: ["0x0000000000001ff3684f28c67538d4d072c22734"] }, maxValueWei: 1n };
+  const delegationConfig = { delegatePublicKey: `02${"ab".repeat(32)}`, routers: { 8453: ["0x0000000000001ff3684f28c67538d4d072c22734"] }, maxValueWei: 1n, feeLimits: DEFAULT_EVM_FEE_LIMITS };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor: null, turnkey: fake.turnkey, delegation: delegationConfig });
   try {
     const user = await signedInAccount(pool);

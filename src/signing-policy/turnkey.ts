@@ -1,4 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
+import { DEFAULT_EVM_FEE_LIMITS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from "../chains.js";
 import { DEFAULT_MAX_VALUE_WEI, JITO_TIP_ACCOUNTS, SOLANA_BASE_PROGRAMS, evmChainIds, wrappedSolAccount } from "../signing-policy.js";
 
 export { DEFAULT_MAX_VALUE_WEI };
@@ -10,6 +11,7 @@ export type TurnkeyPolicyInput = {
   routers: Readonly<Record<number, readonly string[]>>;
   selectors?: readonly string[];
   maxValueWei: bigint;
+  feeLimits?: Readonly<Record<number, EvmFeeLimit>>;
   solanaPrograms?: readonly string[];
 };
 
@@ -47,6 +49,7 @@ export function turnkeyPolicyDocument(input: TurnkeyPolicyInput): unknown[] {
     routers,
     selectors,
     maxValueWei: input.maxValueWei,
+    feeLimits: input.feeLimits ?? DEFAULT_EVM_FEE_LIMITS,
     solanaPrograms,
   });
 }
@@ -60,6 +63,7 @@ export function turnkeyPolicyTemplate(): unknown[] {
     routers: {},
     selectors: [],
     maxValueWei: DEFAULT_MAX_VALUE_WEI,
+    feeLimits: DEFAULT_EVM_FEE_LIMITS,
   });
 }
 
@@ -71,9 +75,15 @@ function renderTurnkeyPolicy(input: {
   routers: Readonly<Record<number, readonly string[]>>;
   selectors: readonly string[];
   maxValueWei: bigint;
+  feeLimits: Readonly<Record<number, EvmFeeLimit>>;
   solanaPrograms?: readonly string[];
 }): unknown[] {
-  const clauses = Object.entries(input.routers).map(([id, list]) => `(eth.tx.chain_id == ${id} && (${list.map((item) => `eth.tx.to == '${item}'`).join(" || ")}))`);
+  const clauses = Object.entries(input.routers).flatMap(([id, list]) => {
+    const limit = input.feeLimits[Number(id)];
+    if (!limit || L1_DATA_FEE_CHAIN_IDS.has(Number(id))) return [];
+    const fee = `eth.tx.gas <= ${limit.maxGas} && eth.tx.max_fee_per_gas <= ${limit.maxFeePerGas} && eth.tx.gas_price <= ${limit.maxFeePerGas}`;
+    return [`(eth.tx.chain_id == ${id} && ${fee} && (${list.map((item) => `eth.tx.to == '${item}'`).join(" || ")}))`];
+  });
   const evmMatch = clauses.length === 0 ? "eth.tx.chain_id == 0" : clauses.join(" || ");
   const selector = input.selectors.length === 0 ? "" : ` && (${input.selectors.map((item) => `eth.tx.data[0..10] == '${item}'`).join(" || ")})`;
   const programs = [...new Set([...SOLANA_BASE_PROGRAMS, ...(input.solanaPrograms ?? [])])].map((id) => `p == '${id}'`).join(" || ");
@@ -82,7 +92,7 @@ function renderTurnkeyPolicy(input: {
   const policies = [
     {
       policyName: "EVM swaps on allowlisted chains and routers",
-      notes: `Scoped to the EVM wallet. Routers, selectors, and the ${input.maxValueWei} wei native cap come from turnkeyPolicyDocument. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.`,
+      notes: `Scoped to the EVM wallet. Routers, selectors, per-chain gas and fee-per-gas limits, and the ${input.maxValueWei} wei native cap come from turnkeyPolicyDocument. A chain without a fee limit matches nothing. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.`,
       effect: "EFFECT_ALLOW",
       consensus,
       condition: `activity.action == 'SIGN' && wallet.id == '${input.wallets.evm}' && (${evmMatch}) && eth.tx.value <= ${input.maxValueWei}${selector}`,

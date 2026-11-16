@@ -1,7 +1,7 @@
 [
   {
     "policyName": "EVM swaps on allowlisted chains and routers",
-    "notes": "Scoped to the EVM wallet. Routers, selectors, and the 2000000000000000 wei native cap come from turnkeyPolicyDocument. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.",
+    "notes": "Scoped to the EVM wallet. Routers, selectors, per-chain gas and fee-per-gas limits, and the 2000000000000000 wei native cap come from turnkeyPolicyDocument. A chain without a fee limit matches nothing. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.",
     "effect": "EFFECT_ALLOW",
     "consensus": "approvers.any(user, user.id == '<TURNKEY_API_USER_ID>')",
     "condition": "activity.action == 'SIGN' && wallet.id == '<TURNKEY_EVM_WALLET_ID>' && (eth.tx.chain_id == 0) && eth.tx.value <= 2000000000000000"
