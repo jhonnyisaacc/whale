@@ -68,9 +68,10 @@ const evmCases = [
   ["native transfer to anyone else", tx(ATTACKER, "0x", 1n), "refused", "listed destination"],
   ["an undecoded router call", tx(LIFI, "0x12345678"), "refused", "not one the signer can read"],
   ["a chain outside the policy", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 137), "refused", "chain 137 is not in the policy"],
-  ["an OP Stack transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 8453), "refused", "OP Stack L1 data fees"],
-  ["an Optimism transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 10), "refused", "OP Stack L1 data fees"],
-  ["a Blast transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 81457), "refused", "OP Stack L1 data fees"],
+  ["an OP Stack transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 8453), "refused", "separate L1 data fee"],
+  ["an Optimism transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 10), "refused", "separate L1 data fee"],
+  ["a Blast transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 81457), "refused", "separate L1 data fee"],
+  ["a Scroll transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 534352), "refused", "separate L1 data fee"],
   ["a swap with native value above the cap", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 10n ** 18n), "refused", "above the"],
 ];
 
@@ -139,7 +140,7 @@ const solana = solanaCases.map(([name, bytes, expect, reason]) => ({
 const policy = {
   version: 1,
   evm: {
-    chains: [CHAIN_ID, 10, 8453, 81457],
+    chains: [CHAIN_ID, 10, 8453, 81457, 534352],
     routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER] },
     settlers: { [CHAIN_ID]: [SETTLER] },
     kyberExecutors: { [CHAIN_ID]: [EXECUTOR] },
