@@ -1,4 +1,4 @@
-import { CHAINS, DEFAULT_EVM_FEE_LIMITS, type EvmFeeLimit } from "../chains.js";
+import { CHAINS, L1_DATA_FEE_CHAIN_IDS } from "../chains.js";
 import { isSolanaAddress } from "../signer.js";
 import { kyberSupports } from "../aggregators.js";
 import { DEFAULT_KYBER_CLIENT_ID } from "./types.js";
@@ -64,21 +64,6 @@ export function reorgDepths(raw: string | undefined): Record<number, number> {
   return map;
 }
 
-export function evmFeeLimits(raw: string | undefined): Record<number, EvmFeeLimit> {
-  const limits: Record<number, EvmFeeLimit> = { ...DEFAULT_EVM_FEE_LIMITS };
-  if (!raw) return limits;
-  const parsed: unknown = JSON.parse(raw);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("EVM_FEE_LIMITS_JSON must be an object");
-  const evmIds = new Set(CHAINS.flatMap((chain) => (chain.chain.kind === "evm" ? [chain.chain.chainId] : [])));
-  for (const [id, entry] of Object.entries(parsed)) {
-    const { maxGas, maxFeePerGas } = (entry ?? {}) as Record<string, unknown>;
-    const digits = (value: unknown) => typeof value === "string" && /^[1-9]\d*$/.test(value);
-    if (!/^\d+$/.test(id) || !evmIds.has(Number(id)) || !digits(maxGas) || !digits(maxFeePerGas)) throw new Error("EVM_FEE_LIMITS_JSON is invalid");
-    limits[Number(id)] = { maxGas: BigInt(maxGas as string), maxFeePerGas: BigInt(maxFeePerGas as string) };
-  }
-  return limits;
-}
-
 export function routerAllowlist(env: NodeJS.ProcessEnv): Record<number, string[]> {
   if (env.ROUTER_ALLOWLIST_JSON) return chainAddressMap(env.ROUTER_ALLOWLIST_JSON, "ROUTER_ALLOWLIST_JSON");
   const global = splitList(env.ROUTER_ALLOWLIST);
@@ -105,8 +90,7 @@ export function assertLiveEdges(config: AppConfig, env: NodeJS.ProcessEnv): void
     }
   }
   if (!config.live) return;
-  const unboundedL1Fees = new Set([10, 8453, 81457, 534352]);
-  const l1Fee = CHAINS.find((chain) => config.enabledChainKeys.has(chain.key) && chain.chain.kind === "evm" && unboundedL1Fees.has(chain.chain.chainId));
+  const l1Fee = CHAINS.find((chain) => config.enabledChainKeys.has(chain.key) && chain.chain.kind === "evm" && L1_DATA_FEE_CHAIN_IDS.has(chain.chain.chainId));
   if (l1Fee) throw new Error(`live mode is closed on ${l1Fee.key} until its separate L1 data fee can be bounded`);
   const fields = ["zeroExBase", "jupiterBase", "lifiBase", "oneInchBase", "kyberBase", "veloraBase", "hyperliquidUrl", "coingeckoBase", "dexscreenerBase"] as const;
   for (const field of fields) {

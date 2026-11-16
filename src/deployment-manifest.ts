@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { evmFeeLimits, type EvmFeeLimit } from "./chains.js";
 import { turnkeyPolicyDocument, type TurnkeyPolicyInput } from "./signing-policy.js";
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
@@ -17,6 +18,7 @@ export const deploymentManifestSchema = z.object({
   selectors: z.array(z.string().regex(/^0x[0-9a-fA-F]{8}$/)).default([]),
   maxValueWei: z.string().regex(/^\d+$/),
   solanaPrograms: z.array(solanaAddress).default([]),
+  evmFeeLimits: z.record(z.string(), z.object({ maxGas: z.string(), maxFeePerGas: z.string() }).strict()).default({}),
 });
 export type DeploymentManifest = z.infer<typeof deploymentManifestSchema>;
 
@@ -32,6 +34,10 @@ export function manifestRouters(manifest: DeploymentManifest): Record<number, st
   return out;
 }
 
+export function manifestFeeLimits(manifest: DeploymentManifest): Record<number, EvmFeeLimit> {
+  return evmFeeLimits(JSON.stringify(manifest.evmFeeLimits));
+}
+
 export function manifestTurnkeyInput(manifest: DeploymentManifest): TurnkeyPolicyInput {
   return {
     userId: manifest.turnkey.userId,
@@ -40,6 +46,7 @@ export function manifestTurnkeyInput(manifest: DeploymentManifest): TurnkeyPolic
     routers: manifestRouters(manifest),
     selectors: manifest.selectors,
     maxValueWei: BigInt(manifest.maxValueWei),
+    feeLimits: manifestFeeLimits(manifest),
     solanaPrograms: manifest.solanaPrograms,
   };
 }

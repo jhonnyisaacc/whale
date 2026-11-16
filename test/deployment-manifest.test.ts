@@ -14,7 +14,7 @@ const manifest = {
     solanaAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     hyperliquidAddress: null,
   },
-  routers: { "8453": [ROUTER] },
+  routers: { "42161": [ROUTER] },
   selectors: [],
   maxValueWei: "2000000000000000",
   solanaPrograms: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
@@ -22,9 +22,9 @@ const manifest = {
 
 test("a manifest parses and drives routers and the Turnkey document from one source", () => {
   const parsed = parseDeploymentManifest(manifest);
-  assert.deepEqual(manifestRouters(parsed), { 8453: [ROUTER.toLowerCase()] });
+  assert.deepEqual(manifestRouters(parsed), { 42161: [ROUTER.toLowerCase()] });
   const document = manifestPolicyDocument(parsed) as { condition: string }[];
-  assert.ok(document.some((row) => row.condition.includes("8453") && row.condition.includes(ROUTER.toLowerCase())));
+  assert.ok(document.some((row) => row.condition.includes("42161") && row.condition.includes(ROUTER.toLowerCase())));
   assert.ok(document.some((row) => row.condition.includes("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")));
 });
 
@@ -43,9 +43,9 @@ test("policy verification passes on equality and names a missing policy", () => 
 test("config takes routers from the manifest and refuses a disagreeing legacy allowlist", () => {
   const base = { EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456", WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(manifest) };
   const config = loadConfig(base);
-  assert.deepEqual(config.routerAllowlist, { 8453: [ROUTER.toLowerCase()] });
+  assert.deepEqual(config.routerAllowlist, { 42161: [ROUTER.toLowerCase()] });
   assert.equal(config.maxValueWei, 2000000000000000n);
-  assert.throws(() => loadConfig({ ...base, ROUTER_ALLOWLIST_JSON: JSON.stringify({ "8453": ["0x2222222222222222222222222222222222222222"] }) }), /disagree/);
+  assert.throws(() => loadConfig({ ...base, ROUTER_ALLOWLIST_JSON: JSON.stringify({ "42161": ["0x2222222222222222222222222222222222222222"] }) }), /disagree/);
 });
 
 test("support tiers default monad off and zksync to dry-run, with explicit overrides", () => {
@@ -61,4 +61,16 @@ test("config exposes the support map", () => {
   const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
   assert.equal(config.supportByChain.monad, "disabled");
   assert.equal(config.supportByChain.base, "live");
+});
+
+test("a manifest's EVM fee limits drive both the executor and its Turnkey policy, and EVM_FEE_LIMITS_JSON may not disagree", () => {
+  const limits = { "137": { maxGas: "2000000", maxFeePerGas: "2000000000000" } };
+  const tuned = parseDeploymentManifest({ ...manifest, routers: { "137": [ROUTER] }, evmFeeLimits: limits });
+  const document = JSON.stringify(manifestPolicyDocument(tuned));
+  assert.match(document, /eth\.tx\.chain_id == 137 && eth\.tx\.gas <= 2000000 && eth\.tx\.max_fee_per_gas <= 2000000000000/);
+  const env = { WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify({ ...manifest, routers: { "137": [ROUTER] }, evmFeeLimits: limits }) };
+  assert.deepEqual(loadConfig(env).evmFeeLimits[137], { maxGas: 2_000_000n, maxFeePerGas: 2_000_000_000_000n });
+  assert.doesNotThrow(() => loadConfig({ ...env, EVM_FEE_LIMITS_JSON: JSON.stringify(limits) }));
+  assert.throws(() => loadConfig({ ...env, EVM_FEE_LIMITS_JSON: JSON.stringify({ "137": { maxGas: "1000000", maxFeePerGas: "1" } }) }), /disagree on EVM fee limits/);
+  assert.throws(() => loadConfig({ WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(manifest), EVM_FEE_LIMITS_JSON: JSON.stringify(limits) }), /disagree on EVM fee limits/);
 });

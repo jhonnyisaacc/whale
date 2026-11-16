@@ -1,3 +1,4 @@
+import { DEFAULT_EVM_FEE_LIMITS } from "../src/chains.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -16,7 +17,7 @@ const DELEGATE_KEY = `02${"ab".repeat(32)}`;
 const SOLANA = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
 const BASE_ROUTER = "0x0000000000001ff3684f28c67538d4d072c22734";
 const ETH_ROUTER = "0x1111111111111111111111111111111111111111";
-const DELEGATION: DelegationConfig = { delegatePublicKey: DELEGATE_KEY, routers: { 8453: [BASE_ROUTER], 1: [ETH_ROUTER] }, maxValueWei: 2_000_000_000_000_000n };
+const DELEGATION: DelegationConfig = { delegatePublicKey: DELEGATE_KEY, routers: { 8453: [BASE_ROUTER], 42161: [BASE_ROUTER], 1: [ETH_ROUTER] }, maxValueWei: 2_000_000_000_000_000n, feeLimits: DEFAULT_EVM_FEE_LIMITS };
 
 type Fault = "unreachable" | "refused" | "timeout" | "lost" | "pending" | "fail";
 
@@ -85,7 +86,8 @@ test("expected Turnkey policies follow the wallet's EVM chains and scope Whale's
   const delegateUserId = randomUUID();
   const policies = expectedPolicies({ delegateUserId, walletId: randomUUID(), solanaAddress: SOLANA, policy: DEFAULT_POLICY, config: DELEGATION });
   const evm = policies.find((policy) => policy.policyName.startsWith("EVM"));
-  assert.match(evm?.condition ?? "", /eth\.tx\.chain_id == 8453/);
+  assert.match(evm?.condition ?? "", /eth\.tx\.chain_id == 42161/);
+  assert.doesNotMatch(evm?.condition ?? "", /eth\.tx\.chain_id == 8453/);
   assert.doesNotMatch(evm?.condition ?? "", /eth\.tx\.chain_id == 1 /);
   assert.ok(policies.every((policy) => policy.consensus === `approvers.any(user, user.id == '${delegateUserId}')`));
   assert.throws(() => delegationFromEnv({ TURNKEY_DELEGATE_API_PUBLIC_KEY: "nothex" }), /compressed P-256/);
@@ -665,7 +667,7 @@ test("a pending wallet narrowed after its policies were added but before confirm
     await assert.rejects(authorizeDelegate({ api: call(true), ...turnkey }, walletId), /network down/);
 
     const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets.find((entry: { id: string }) => entry.id === walletId);
-    const narrowed = await app.inject({ method: "PUT", url: `/api/wallets/${walletId}/policy`, headers: user.headers, payload: { baseVersion: listed.policyVersion, document: { ...listed.policy, chains: ["arbitrum", "solana"] } } });
+    const narrowed = await app.inject({ method: "PUT", url: `/api/wallets/${walletId}/policy`, headers: user.headers, payload: { baseVersion: listed.policyVersion, document: { ...listed.policy, chains: ["base", "solana"] } } });
     assert.equal(narrowed.statusCode, 200, narrowed.body);
 
     const refused = async () => {

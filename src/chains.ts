@@ -284,6 +284,23 @@ export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
   59144: { maxGas: 1_500_000n, maxFeePerGas: 5n * GWEI },
 };
 
+export const L1_DATA_FEE_CHAIN_IDS: ReadonlySet<number> = new Set([10, 8453, 81457, 534352]);
+
+export function evmFeeLimits(raw: string | undefined): Record<number, EvmFeeLimit> {
+  const limits: Record<number, EvmFeeLimit> = { ...DEFAULT_EVM_FEE_LIMITS };
+  if (!raw) return limits;
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("EVM_FEE_LIMITS_JSON must be an object");
+  const evmIds = new Set(CHAINS.flatMap((chain) => (chain.chain.kind === "evm" && chain.liveSend !== "disabled" && !L1_DATA_FEE_CHAIN_IDS.has(chain.chain.chainId) ? [chain.chain.chainId] : [])));
+  for (const [id, entry] of Object.entries(parsed)) {
+    const { maxGas, maxFeePerGas } = (entry ?? {}) as Record<string, unknown>;
+    const digits = (value: unknown) => typeof value === "string" && /^[1-9]\d*$/.test(value);
+    if (!/^\d+$/.test(id) || !evmIds.has(Number(id)) || !digits(maxGas) || !digits(maxFeePerGas)) throw new Error("EVM_FEE_LIMITS_JSON is invalid");
+    limits[Number(id)] = { maxGas: BigInt(maxGas as string), maxFeePerGas: BigInt(maxFeePerGas as string) };
+  }
+  return limits;
+}
+
 export function addressKey(chainKey: string, address: string): string {
   return chainByKey(chainKey)?.chain.kind === "evm" ? address.toLowerCase() : address;
 }
