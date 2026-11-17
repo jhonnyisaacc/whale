@@ -57,8 +57,12 @@ export async function readAddressBalance(
   if (!spec) return { holdings: [], reason: `unknown chain ${chainKey}` };
   const url = env[spec.rpcEnv];
   if (!url) return { holdings: [], reason: `${spec.rpcEnv} is unset` };
+  const unread = { holdings: [], reason: `the ${chainKey} RPC did not return a balance` };
   if (spec.chain.kind === "evm") {
-    const raw = await evmReadClient([url]).getBalance({ address: address as `0x${string}` });
+    const raw = await evmReadClient([url])
+      .getBalance({ address: address as `0x${string}` })
+      .catch(() => null);
+    if (raw === null) return unread;
     const decimals = 18;
     return {
       holdings: [
@@ -76,7 +80,10 @@ export async function readAddressBalance(
   }
   if (spec.chain.kind === "solana") {
     const { PublicKey } = await import("@solana/web3.js");
-    const lamports = await solanaConnection(url).getBalance(new PublicKey(address));
+    const lamports = await solanaConnection(url)
+      .getBalance(new PublicKey(address))
+      .catch(() => null);
+    if (lamports === null) return unread;
     return {
       holdings: [
         {

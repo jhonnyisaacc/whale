@@ -2,6 +2,8 @@ import { lookup } from "node:dns/promises";
 import { request, type RequestOptions } from "node:https";
 import { BlockList, isIP } from "node:net";
 
+export class RefusedRequest extends Error {}
+
 const blocked4 = new BlockList();
 const blocked6 = new BlockList();
 for (const [network, prefix] of [
@@ -30,7 +32,7 @@ export function publicHttpsUrl(raw: string): boolean {
 const guardedLookup: RequestOptions["lookup"] = (hostname, options, callback) => {
   lookup(hostname, { all: true })
     .then((addresses) => {
-      if (addresses.length === 0 || addresses.some((entry) => !publicAddress(entry.address))) callback(new Error("host resolves to a private address"), "", 4);
+      if (addresses.length === 0 || addresses.some((entry) => !publicAddress(entry.address))) callback(new RefusedRequest("host resolves to a private address"), "", 4);
       else if (options.all) callback(null, addresses);
       else {
         const first = addresses[0] as { address: string; family: number };
@@ -45,7 +47,7 @@ export type SafeInit = { method: "GET" | "POST"; headers?: Record<string, string
 
 export function pinnedRequest(url: URL, init: SafeInit, send: typeof request = request): Promise<SafeResponse> {
   return new Promise((resolve, reject) => {
-    const deadline = setTimeout(() => req.destroy(new Error("timed out")), init.timeoutMs);
+    const deadline = setTimeout(() => req.destroy(new RefusedRequest("timed out")), init.timeoutMs);
     const settle = <T>(finish: (value: T) => void) => (value: T) => {
       clearTimeout(deadline);
       finish(value);
@@ -76,6 +78,6 @@ export function pinnedRequest(url: URL, init: SafeInit, send: typeof request = r
 }
 
 export function safeRequest(raw: string, init: SafeInit): Promise<SafeResponse> {
-  if (!publicHttpsUrl(raw)) return Promise.reject(new Error("only public https URLs are allowed"));
+  if (!publicHttpsUrl(raw)) return Promise.reject(new RefusedRequest("only public https URLs are allowed"));
   return pinnedRequest(new URL(raw), init);
 }
