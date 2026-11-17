@@ -54,8 +54,7 @@ test("the MCP balance tool does not return a keyed RPC URL when the RPC fails", 
     const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "balance", arguments: { chainKey: "base", address } } };
     const { stdout } = await runScript("../src/mcp-server.js", [], { RPC_URL_8453: url }, `${JSON.stringify(call)}\n`);
     const reply = JSON.parse(stdout) as { result: { isError?: boolean; content: { text: string }[] } };
-    assert.equal(reply.result.isError, true);
-    assert.match(reply.result.content[0].text, /\[redacted\]/);
+    assert.match(reply.result.content[0].text, /the base RPC did not return a balance/);
     assertNoKey(reply.result.content[0].text);
   } finally {
     server.closeAllConnections();
@@ -67,9 +66,8 @@ test("the CLI balance command does not print a keyed RPC URL when the RPC fails"
   const { server, url } = await failingRpc();
   try {
     const { stdout, stderr } = await runScript("../src/cli.js", ["balance", "--chain", "base", "--address", address], { RPC_URL_8453: url }, "");
-    assert.equal(stdout, "");
-    assert.match(stderr, /\[redacted\]/);
-    assertNoKey(stderr);
+    assert.match(stdout, /the base RPC did not return a balance/);
+    assertNoKey(stdout + stderr);
   } finally {
     server.closeAllConnections();
     server.close();

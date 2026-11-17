@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { QUOTE_ASSETS, quoteAssetOf } from "../chains.js";
-import { safeRequest, type SafeResponse } from "./safe-https.js";
+import { RefusedRequest, safeRequest, type SafeResponse } from "./safe-https.js";
 
 const NETWORKS: Record<string, string> = {
   base: "base",
@@ -16,6 +16,14 @@ const NETWORKS: Record<string, string> = {
   solana: "solana",
   "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "solana",
 };
+
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function addressOn(chain: string | null, value: string): string | null {
+  const formats = chain === null ? [EVM_ADDRESS, SOLANA_ADDRESS] : [chain === "solana" ? SOLANA_ADDRESS : EVM_ADDRESS];
+  return formats.some((format) => format.test(value)) ? value : null;
+}
 
 const requirementSchema = z
   .object({
@@ -33,7 +41,7 @@ const challengeSchema = z.object({ x402Version: z.number().int(), accepts: z.arr
 export type X402Payment = { chainKey: string; token: string; to: string; amount: string; usd: number };
 export type X402Verdict = { verdict: "fits" | "needs_approval" | "refused"; reasons: string[] };
 export type JudgePayment = (payment: X402Payment) => Promise<X402Verdict>;
-export type X402Option = { network: string; chain: string | null; asset: string; symbol: string | null; amount: string | null; usd: number | null; payTo: string } & X402Verdict;
+export type X402Option = { network: string | null; chain: string | null; asset: string | null; symbol: string | null; amount: string | null; usd: number | null; payTo: string | null } & X402Verdict;
 export type X402Quote =
   | { status: "no_payment_required"; httpStatus: number }
   | { status: "plan"; paid: false; note: string; options: X402Option[]; best: X402Option | null }
@@ -44,19 +52,24 @@ export const fetch402: Fetch402 = (url) => safeRequest(url, { method: "GET", hea
 
 async function option(raw: z.infer<typeof requirementSchema>, judge: JudgePayment): Promise<X402Option> {
   const chain = NETWORKS[raw.network] ?? null;
+  const network = chain || /^eip155:\d{1,12}$/.test(raw.network) ? raw.network : null;
+  const asset = addressOn(chain, raw.asset);
+  const payTo = addressOn(chain, raw.payTo);
   const stated = raw.maxAmountRequired ?? raw.amount;
   const amount = stated && BigInt(stated) > 0n ? stated : null;
-  const known = chain ? quoteAssetOf(QUOTE_ASSETS, chain, raw.asset) : undefined;
+  const known = chain && asset ? quoteAssetOf(QUOTE_ASSETS, chain, asset) : undefined;
   const stable = known && (known.symbol === "USDC" || known.symbol === "USDT") ? known : undefined;
   const usd = stable && amount ? Number(amount) / 10 ** stable.decimals : null;
   const reasons: string[] = [];
-  if (raw.scheme !== "exact") reasons.push(`scheme ${raw.scheme} is not supported`);
-  if (!chain) reasons.push(`network ${raw.network} is not a supported mainnet`);
+  if (raw.scheme !== "exact") reasons.push("the scheme is not exact, the only one supported");
+  if (!chain) reasons.push("the network is not a supported mainnet");
+  if (asset === null) reasons.push("the asset is not a token address");
+  if (payTo === null) reasons.push("the payee is not an address");
   if (amount === null) reasons.push("the option names no amount to pay");
-  else if (!stable) reasons.push("the asset is not a known stablecoin, so the price is unknown");
-  const base = { network: raw.network, chain, asset: raw.asset, symbol: known?.symbol ?? null, amount, usd, payTo: raw.payTo };
-  if (reasons.length > 0 || chain === null || amount === null || usd === null) return { ...base, verdict: "refused", reasons };
-  return { ...base, ...(await judge({ chainKey: chain, token: raw.asset, to: raw.payTo, amount, usd })) };
+  else if (asset !== null && !stable) reasons.push("the asset is not a known stablecoin, so the price is unknown");
+  const base = { network, chain, asset, symbol: known?.symbol ?? null, amount, usd, payTo };
+  if (reasons.length > 0 || chain === null || asset === null || payTo === null || amount === null || usd === null) return { ...base, verdict: "refused", reasons };
+  return { ...base, ...(await judge({ chainKey: chain, token: asset, to: payTo, amount, usd })) };
 }
 
 function cheapest(options: X402Option[], verdict: X402Verdict["verdict"]): X402Option | null {
@@ -68,7 +81,7 @@ export async function x402Quote(url: string, judge: JudgePayment, fetchImpl: Fet
   try {
     response = await fetchImpl(url);
   } catch (error) {
-    return { status: "unreadable", reason: error instanceof Error ? error.message : "the resource could not be reached" };
+    return { status: "unreadable", reason: error instanceof RefusedRequest ? error.message : "the resource could not be reached" };
   }
   if (response.status !== 402) return { status: "no_payment_required", httpStatus: response.status };
   if (response.truncated) return { status: "unreadable", reason: "the 402 body is larger than 64 KiB" };

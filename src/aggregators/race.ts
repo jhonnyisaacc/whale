@@ -121,7 +121,7 @@ async function quoteOkx(config: AppConfig, chainIndex: string, hop: QuoteHop, re
 }
 
 export function chooseQuote(quotes: readonly HopQuote[]): HopQuote {
-  const usable = quotes.filter((quote) => quote.priceImpactPct !== null);
+  const usable = quotes.filter((quote) => quote.priceImpactPct !== null && /^\d{1,78}$/.test(quote.buyAmount));
   if (usable.length === 0) return empty();
   const signable = usable.filter((quote) => quote.signable !== false);
   const pool = signable.length > 0 ? signable : usable;
