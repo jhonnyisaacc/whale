@@ -21,8 +21,8 @@ const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function addressOn(chain: string | null, value: string): string | null {
-  const formats = chain === null ? [EVM_ADDRESS, SOLANA_ADDRESS] : [chain === "solana" ? SOLANA_ADDRESS : EVM_ADDRESS];
-  return formats.some((format) => format.test(value)) ? value : null;
+  if (chain === null) return null;
+  return (chain === "solana" ? SOLANA_ADDRESS : EVM_ADDRESS).test(value) ? value : null;
 }
 
 const requirementSchema = z

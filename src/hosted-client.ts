@@ -9,9 +9,17 @@ export class WhaleToolError extends Error {
   }
 }
 
+function failureCode(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  if (error.name === "TimeoutError" || error.name === "AbortError") return "timed out";
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === "string" && /^[A-Z][A-Z0-9_]{1,40}$/.test(code)) return code;
+  return failureCode(error.cause);
+}
+
 function unreachable(error: unknown): Error {
-  const cause = error instanceof Error && error.cause instanceof Error ? `: ${error.cause.message}` : "";
-  return new Error(`the Whale gateway is unreachable: ${error instanceof Error ? error.message : String(error)}${cause}`, { cause: error });
+  const code = failureCode(error);
+  return new Error(code ? `the Whale gateway is unreachable (${code})` : "the Whale gateway is unreachable", { cause: error });
 }
 
 async function refusal(response: Response): Promise<{ code: number; message: string }> {
