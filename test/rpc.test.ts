@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { createViemRpc } from "../src/broadcast/shared.js";
 import { evmReadClient, resetRpcClients } from "../src/rpc.js";
 
@@ -52,26 +52,6 @@ for (const { name, body, contentType } of [
   });
 }
 
-test("a one-off failure on every RPC is retried, so the read still succeeds", async () => {
-  resetRpcClients();
-  const flaky = () => {
-    let calls = 0;
-    return () => {
-      calls += 1;
-      return calls === 1 ? { status: 429, body: failure, retryAfter: "30" } : { status: 200, body: chainId };
-    };
-  };
-  const first = await rpcServer(flaky());
-  const second = await rpcServer(flaky());
-  try {
-    const started = Date.now();
-    assert.equal(await evmReadClient(8453, [first.url, second.url]).getChainId(), 8453);
-    assert.ok(Date.now() - started < 10_000, "the retry did not wait for Retry-After");
-  } finally {
-    await Promise.all([first.close(), second.close()]);
-  }
-});
-
 test("a limited RPC still falls through to a healthy one", async () => {
   resetRpcClients();
   const limitedRpc = await rpcServer(() => ({ status: 429, body: "slow down", contentType: "text/plain", retryAfter: "30" }));
@@ -83,7 +63,7 @@ test("a limited RPC still falls through to a healthy one", async () => {
   }
 });
 
-type ChainStub = { chainId: string; down: boolean };
+type ChainStub = { chainId: string; down: boolean; hang?: boolean; failNext?: number };
 
 async function chainServer(state: ChainStub): Promise<{ url: string; chainIdCalls: () => number; close: () => Promise<void> }> {
   let chainIdCalls = 0;
@@ -91,12 +71,19 @@ async function chainServer(state: ChainStub): Promise<{ url: string; chainIdCall
     let raw = "";
     request.on("data", (chunk) => (raw += chunk));
     request.on("end", () => {
+      if (state.hang) return;
       if (state.down) {
         request.socket.destroy();
         return;
       }
       const body = JSON.parse(raw) as { id: number; method: string };
       if (body.method === "eth_chainId") chainIdCalls += 1;
+      if (body.method !== "eth_chainId" && state.failNext) {
+        state.failNext -= 1;
+        response.writeHead(429, { "content-type": "application/json", "retry-after": "30" });
+        response.end(failure);
+        return;
+      }
       const result = body.method === "eth_chainId" ? state.chainId : "0x10";
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }));
@@ -121,6 +108,7 @@ function chainMismatch(url: string) {
     assert.match(text, /monad/);
     assert.match(text, /\b143\b/);
     assert.match(text, /\b1\b/);
+    assert.match(text, /RPC_URL_143, RPC_URLS_143 or MEV_RPC_URL_143/);
     assert.equal(text.includes(url), false, "the error does not leak the RPC URL");
     return true;
   };
@@ -151,8 +139,23 @@ test("an RPC on its configured chain is used, and its chain id is probed once pe
   }
 });
 
-test("an unreachable RPC is unchecked, so reads go on, and it is checked once it answers", async () => {
+test("a one-off failure on every RPC is retried, so the read still succeeds", async () => {
   resetRpcClients();
+  const first = await chainServer({ chainId: "0x2105", down: false, failNext: 1 });
+  const second = await chainServer({ chainId: "0x2105", down: false, failNext: 1 });
+  try {
+    const started = Date.now();
+    assert.equal(await evmReadClient(8453, [first.url, second.url]).getBlockNumber({ cacheTime: 0 }), 16n);
+    assert.ok(Date.now() - started < 10_000, "the retry did not wait for Retry-After");
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+  }
+});
+
+test("an unreachable RPC is unchecked, so reads go on, and it is checked again after the retry window", async (t) => {
+  resetRpcClients();
+  t.after(() => mock.timers.reset());
+  mock.timers.enable({ apis: ["Date"], now: Date.now() });
   const flakyState: ChainStub = { chainId: "0x1", down: true };
   const flaky = await chainServer(flakyState);
   const right = await chainServer({ chainId: "0x8f", down: false });
@@ -160,8 +163,25 @@ test("an unreachable RPC is unchecked, so reads go on, and it is checked once it
     const client = evmReadClient(143, [flaky.url, right.url]);
     assert.equal(await client.getBlockNumber({ cacheTime: 0 }), 16n);
     flakyState.down = false;
+    assert.equal(await client.getBlockNumber({ cacheTime: 0 }), 16n, "an unchecked RPC is not probed again inside the window");
+    mock.timers.tick(30_000);
     await assert.rejects(client.getBlockNumber({ cacheTime: 0 }), chainMismatch(flaky.url));
   } finally {
     await Promise.all([flaky.close(), right.close()]);
+  }
+});
+
+test("an RPC that never answers slows only the first read, not every read", async () => {
+  resetRpcClients();
+  const right = await chainServer({ chainId: "0x8f", down: false });
+  const silent = await chainServer({ chainId: "0x8f", down: false, hang: true });
+  try {
+    const client = evmReadClient(143, [right.url, silent.url]);
+    assert.equal(await client.getBlockNumber({ cacheTime: 0 }), 16n);
+    const started = Date.now();
+    assert.equal(await client.getBlockNumber({ cacheTime: 0 }), 16n);
+    assert.ok(Date.now() - started < 500, "the second read did not wait on the silent RPC");
+  } finally {
+    await Promise.all([right.close(), silent.close()]);
   }
 });
