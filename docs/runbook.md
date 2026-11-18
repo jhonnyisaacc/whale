@@ -169,9 +169,11 @@ The executor records each hosted send in its `hosted_sends` table, keyed by agen
 - `in_progress` leaves it reserved.
 - `not_started` releases it. The executor first records that the key is settled for every request issued before the sweep, so a request that arrives later is refused with 403 and never runs.
 
-Each send carries `issuedAt`, the gateway's reservation time. The executor refuses a send older than the same one-minute grace with 403, which releases the reservation once. A send that fails before it moves anything is recorded as not started.
+Each send carries `issuedAt`, the gateway's reservation time. The executor refuses a send older than the same one-minute grace with 403, which releases the reservation once. A send that throws is recorded as not started, which holds only while the hosted route cannot sign or post. A shutdown waits for a started send inside the drain window.
 
-Deploy the executor before the gateway. A gateway on this version sends `issuedAt`, which an older executor refuses with 400, and reads report states an older executor does not send, so it keeps every unsettled reservation until that UTC day ends.
+A send whose executor died after it was recorded as started stays `in_progress`. Its reservation keeps counting toward that UTC day's caps and its approval stays claimed, so retries of that key answer `settling`. Nothing settles it automatically. Check `hosted_sends` on the executor for rows in `started`.
+
+Deploy the executor and the gateway together, executor first, and set the executor's `DATABASE_URL` before either. Both mismatched pairs fail closed, but hosted swaps and transfers are refused until both are on this version. An older gateway sends no `issuedAt`, so this executor refuses each send with 400 and the gateway releases it. A gateway on this version sends `issuedAt`, which an older executor also refuses with 400, and cannot read an older executor's reports, so it keeps those unsettled reservations until that UTC day ends.
 
 `GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else.
 

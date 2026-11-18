@@ -62,17 +62,19 @@ export function registerHostedRoutes(
     if (now() - Date.parse(issuedAt) > HOSTED_SEND_GRACE_MS) return reply.code(403).send({ error: "the request is older than the gateway waits for it" });
     if (!journal) return reply.code(403).send({ error: "hosted sends need the executor's DATABASE_URL" });
     const key = { ...scope, idempotencyKey: command.idempotencyKey };
-    const started = await journal.start(key, command, issuedAt);
-    if (started.kind === "executed") return started.value;
-    if (started.kind === "in_progress") return reply.code(409).send({ error: "this send is still running" });
-    if (started.kind === "refused") return reply.code(403).send({ error: "the gateway already settled this request" });
-    if (started.kind === "conflict") return reply.code(400).send({ error: "this idempotencyKey was used for a different command" });
-    const value = await answer(command).catch(async (error: unknown) => {
-      await journal.abandon(key);
-      throw error;
+    return app.drain.track(async () => {
+      const started = await journal.start(key, command, issuedAt);
+      if (started.kind === "executed") return started.value;
+      if (started.kind === "in_progress") return reply.code(409).send({ error: "this send is still running" });
+      if (started.kind === "refused") return reply.code(403).send({ error: "the gateway already settled this request" });
+      if (started.kind === "conflict") return reply.code(400).send({ error: "this idempotencyKey was used for a different command" });
+      const value = await answer(command).catch(async (error: unknown) => {
+        await journal.abandon(key);
+        throw error;
+      });
+      await journal.finish(key, value);
+      return value;
     });
-    await journal.finish(key, value);
-    return value;
   });
   app.post("/hosted/reports", { config: { rateLimit: false } }, async (request, reply) => {
     if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });

@@ -85,17 +85,18 @@ async function harness(options: { executorNow?: () => number } = {}) {
   const spend = async (key: string) => (await pool.query<{ state: string }>("SELECT state FROM agent_spends WHERE idempotency_key = $1", [key])).rows[0]?.state;
   const sweep = () => settleStaleSends(pool, executor, 0);
   const ids = { accountId: user.accountId, walletId, agentId: agent.agentId };
-  return { pool, ids, quotes, gates, quoteFailures, held, holdNext, deliver, executor, swap, spend, sweep, drop: async () => (await app.close(), await executorApp.close(), await drop()) };
+  return { pool, ids, executorApp, quotes, gates, quoteFailures, held, holdNext, deliver, executor, swap, spend, sweep, drop: async () => (await app.close(), await executorApp.close(), await drop()) };
 }
 
 test("the sweeper keeps a reservation the executor has recorded as started, so a slow send is still counted when it lands", { skip: !TEST_DATABASE_URL }, async () => {
-  const { quotes, gates, swap, spend, sweep, drop } = await harness();
+  const { executorApp, quotes, gates, swap, spend, sweep, drop } = await harness();
   try {
     const slow = gate();
     gates.push(slow);
     const running = swap("slow-send", 15);
     await slow.entered;
     assert.equal(await spend("slow-send"), "reserved");
+    assert.equal(executorApp.drain.inFlight, 1, "a shutdown waits for the started send inside the drain window");
     assert.equal(await sweep(), 0, "a send the executor has started is not settled");
     assert.equal(await spend("slow-send"), "reserved", "the reservation is not released while the executor runs the send");
     slow.open();
