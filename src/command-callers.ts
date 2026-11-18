@@ -166,6 +166,11 @@ export function commandDeps(env: NodeJS.ProcessEnv, command: WalletCommand, fetc
   }
   if (command.kind === "quote" && quoteProviderConfigured(env)) return { quote: (item) => quoteWithHop(env, item) };
   if (command.kind === "balance") return { readBalance: (chainKey, address) => readAddressBalance(env, chainKey, address) };
+  if (command.kind === "swap" && command.mode === "dry_run") {
+    const config = loadConfig(env);
+    const swapLimits = { enabledChainKeys: config.enabledChainKeys, maxSlippageBps: config.maxSlippageBps };
+    return quoteProviderConfigured(env) ? { swapLimits, quote: (item) => quoteWithHop(env, item) } : { swapLimits };
+  }
   if (command.kind === "swap" && command.mode === "live" && env.WHALE_BROADCAST === "true") return { execute: (intent) => postIntent(env, intent) };
   return {};
 }

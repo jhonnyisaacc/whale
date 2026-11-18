@@ -1,5 +1,6 @@
 import type { ChainRef, ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
-import { addressKey } from "./chains.js";
+import { addressKey, chainByKey } from "./chains.js";
+import { pickRoute } from "./routing.js";
 import { bridgeRoute, planRebalance, type BridgePolicy, type BridgeQuote, type BridgeRequest, type BridgeRoute, type RebalancePlan } from "./rebalance.js";
 import { intentSchema } from "./schemas.js";
 
@@ -23,6 +24,8 @@ export type WalletResult =
   | { kind: "quote"; status: "quoted"; quote: RouteQuote }
   | { kind: "quote"; status: "skipped"; quote: null; reason: string }
   | { kind: "swap"; report: ExecutionReport }
+  | { kind: "swap"; status: "would_swap"; quote: RouteQuote; reason: string }
+  | { kind: "swap"; status: "skipped"; quote: null; reason: string }
   | { kind: "bridge"; plan: RebalancePlan; quotes: BridgeQuote[] }
   | { kind: "balance"; holdings: Holding[]; reason?: string }
   | { kind: "transfer"; status: "would_send" | "skipped"; reason: string };
@@ -30,29 +33,52 @@ export type WalletResult =
 export type CommandDeps = {
   quote?: (command: Extract<WalletCommand, { kind: "quote" }>) => Promise<RouteQuote | null>;
   execute?: (intent: SwapIntent) => Promise<ExecutionReport>;
+  swapLimits?: { enabledChainKeys: ReadonlySet<string>; maxSlippageBps: number };
   bridge?: { policy: BridgePolicy; quotes: (route: BridgeRoute) => Promise<BridgeQuote[]> };
   readBalance?: (chainKey: string, address: string) => Promise<{ holdings: Holding[]; reason?: string }>;
   now?: () => number;
 };
 
-function swapReport(
-  command: Extract<WalletCommand, { kind: "swap" }>,
-  now: number,
-  mode: "dry_run" | "live",
-  reason: string,
-): WalletResult {
+function liveSwapNotPosted(command: Extract<WalletCommand, { kind: "swap"; mode: "live" }>, now: number): WalletResult {
   return {
     kind: "swap",
     report: {
       idempotencyKey: command.idempotencyKey,
-      mode,
+      mode: "live",
       decision: "skipped",
-      reason,
+      reason: "live swap was not posted",
       venue: command.buy.chainKey,
       route: null,
       latency: { alertReceivedMs: now },
     },
   };
+}
+
+export const DRY_RUN_SWAP_REASON = "dry-run: this is the best signable route Whale quotes now. a live swap quotes again with a price check, so it can take another route or refuse. nothing was signed";
+
+async function dryRunSwap(command: Extract<WalletCommand, { kind: "swap"; mode: "dry_run" }>, deps: CommandDeps): Promise<WalletResult> {
+  const skip = (reason: string): WalletResult => ({ kind: "swap", status: "skipped", quote: null, reason });
+  const spec = chainByKey(command.sell.chainKey);
+  if (!spec) return skip(`unknown chain ${command.sell.chainKey}`);
+  if (command.buy.chainKey !== spec.key) return skip(`a swap sells and buys on one chain. use bridge to move between ${spec.key} and ${command.buy.chainKey}`);
+  if (spec.aggregator === "none") return skip(`${spec.key} has no swap aggregator`);
+  if (!deps.swapLimits) return skip("no swap limits configured");
+  const { enabledChainKeys, maxSlippageBps } = deps.swapLimits;
+  if (!enabledChainKeys.has(spec.key)) return skip(`chain ${spec.key} is disabled`);
+  if (!(command.slippageBps >= 0 && command.slippageBps <= maxSlippageBps)) return skip(`slippage exceeds ${maxSlippageBps} bps`);
+  if (!deps.quote) return skip("no quote provider");
+  const quote = await deps.quote({
+    kind: "quote",
+    sell: { ...command.sell, chain: spec.chain },
+    buy: { ...command.buy, chain: spec.chain },
+    sellAmount: command.sellAmount,
+    taker: null,
+    slippageBps: command.slippageBps,
+  });
+  if (!quote) return skip("no quote");
+  const route = pickRoute([quote], command.slippageBps);
+  if (route.kind === "none") return skip(route.reason);
+  return { kind: "swap", status: "would_swap", quote: route, reason: DRY_RUN_SWAP_REASON };
 }
 
 function swapIntent(command: Extract<WalletCommand, { kind: "swap"; mode: "live" }>, now: number): SwapIntent {
@@ -95,8 +121,8 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
     return { kind: "quote", status: "quoted", quote };
   }
   if (command.kind === "swap") {
-    if (command.mode !== "live") return swapReport(command, now, "dry_run", "nothing was broadcast");
-    if (!deps.execute) return swapReport(command, now, "live", "live swap was not posted");
+    if (command.mode === "dry_run") return dryRunSwap(command, deps);
+    if (!deps.execute) return liveSwapNotPosted(command, now);
     return { kind: "swap", report: await deps.execute(swapIntent(command, now)) };
   }
   if (command.kind === "bridge") {

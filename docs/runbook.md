@@ -257,7 +257,7 @@ pnpm run start:executor
 pnpm run start:cli quote --sell-chain base --sell-address 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --sell-symbol USDC --sell-decimals 6 --buy-chain base --buy-address 0x4200000000000000000000000000000000000006 --buy-symbol WETH --buy-decimals 18 --sell-amount 1 --slippage-bps 50
 ```
 
-`swap`, `bridge`, `balance`, and `transfer` are the other commands. A dry-run swap reports `nothing was broadcast`.
+`swap`, `bridge`, `balance`, and `transfer` are the other commands. A dry-run swap returns `would_swap` with the best signable route, or `skipped` with the reason, such as no quote, a disabled chain, or the slippage cap. It signs and broadcasts nothing.
 
 ```bash
 pnpm run start:cli bridge --from-chain base --to-chain arbitrum --asset USDC --amount 10000000 --to <owner address>

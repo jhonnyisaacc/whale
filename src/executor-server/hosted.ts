@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { CommandDeps, WalletCommand, WalletResult } from "../commands.js";
-import { run } from "../commands.js";
+import { DRY_RUN_SWAP_REASON, run } from "../commands.js";
 import { HOSTED_SEND_GRACE_MS, hostedReportRequestSchema, hostedRequestSchema, walletCommandOf, type HostedCommand, type HostedRequest } from "../hosted-commands.js";
 import { bearerOf } from "../bearer.js";
 import { anyTokenMatches } from "../http.js";
@@ -8,10 +8,6 @@ import { hostedJournal } from "./hosted-journal.js";
 import { cachedNetworkCosts, envCostReaders, skippedNetworks, type CostReaders } from "../network-costs.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
-
-export type HostedReply =
-  | WalletResult
-  | { kind: "swap"; status: "would_swap" | "skipped"; quote: Extract<WalletResult, { kind: "quote" }>["quote"]; reason: string };
 
 // The gateway's token can only reach this route. It is a different secret from the executor bearer, so a gateway
 // compromise cannot call /execute or /rebalance.
@@ -39,13 +35,13 @@ export function registerHostedRoutes(
   const costReaders = options.costReaders ?? envCostReaders(process.env);
   const journal = options.databaseUrl ? hostedJournal(options.databaseUrl) : null;
   const now = options.now ?? Date.now;
-  const answer = async (hosted: HostedCommand): Promise<HostedReply> => {
+  const answer = async (hosted: HostedCommand): Promise<WalletResult> => {
     const command = walletCommandOf(hosted);
     const deps = await depsFor(command);
     const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });
     if (hosted.kind !== "swap" || result.kind !== "quote") return result;
     return result.status === "quoted"
-      ? { kind: "swap", status: "would_swap", quote: result.quote, reason: "dry-run: this is the best signable route Whale quotes now. a live swap quotes again with a price check, so it can take another route or refuse. nothing was signed" }
+      ? { kind: "swap", status: "would_swap", quote: result.quote, reason: DRY_RUN_SWAP_REASON }
       : { kind: "swap", status: "skipped", quote: null, reason: result.reason };
   };
   const perAccount = app.createRateLimit({ max: 600, timeWindow: "1 minute", keyGenerator: (request) => (request.body as HostedRequest).accountId });

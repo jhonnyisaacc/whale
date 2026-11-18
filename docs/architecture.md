@@ -4,7 +4,7 @@ An agent quotes, swaps, reads a balance, or transfers through one command shape.
 
 ## Dry-run by default
 
-Default boot leaves `WHALE_BROADCAST` unset, so `config.live` is false. A dry-run swap returns a report that says nothing was broadcast and does not call the send path. The local keystore can decrypt for a dry-run. Live mode refuses raw key material, including `KEYSTORE_PATH`.
+Default boot leaves `WHALE_BROADCAST` unset, so `config.live` is false. A dry-run swap quotes the best signable route and returns `would_swap`, or `skipped` with the reason. It does not call the send path, even with `WHALE_BROADCAST=true`. The local keystore can decrypt for a dry-run. Live mode refuses raw key material, including `KEYSTORE_PATH`.
 
 Set `WHALE_BROADCAST` to the exact string `true` only when Turnkey and `DATABASE_URL` are loaded. Boot then throws `live mode requires Turnkey` if the signer is missing.
 

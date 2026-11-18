@@ -13,7 +13,7 @@ The public shape is `WalletCommand` in `src/commands.ts`. An `Asset` names a cha
 | Command | Result |
 | --- | --- |
 | `quote` | A route quote, or `skipped` when no provider is injected. |
-| `swap` | A dry-run execution report. Nothing is broadcast. |
+| `swap` | `would_swap` with the best signable route a dry run quotes, or `skipped` with the reason. Nothing is signed or broadcast. |
 | `bridge` | Routes fetched from LI.FI, Across, and Relay, ranked by fee, and a plan. `broadcast` stays false. |
 | `balance` | Holdings for one chain and address. |
 | `transfer` | `would_send` in dry-run. Live is `skipped`. |

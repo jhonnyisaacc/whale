@@ -84,7 +84,7 @@ function liveSwapSkipped(command: Extract<WalletCommand, { kind: "swap"; mode: "
 }
 
 async function depsFor(command: WalletCommand) {
-  if (command.kind !== "quote" && command.kind !== "balance" && command.kind !== "bridge" && !(command.kind === "swap" && command.mode === "live")) return {};
+  if (command.kind === "transfer") return {};
   const { commandDeps } = await import("./command-callers.js");
   return commandDeps(process.env, command);
 }
