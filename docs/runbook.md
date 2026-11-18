@@ -155,7 +155,7 @@ A hosted `swap` is priced by what it sells. A USDC, USDT, or USDB sell counts on
 - Above the wallet's `approvalAboveUsd`, it returns `approval_required` with an approval id, and the agent calls again later with the same `idempotencyKey`.
 - When it cannot be priced, it returns `approval_required` even when the wallet has no `approvalAboveUsd`, because no cap can be checked. An approved unpriced swap counts toward no daily total.
 
-A `transfer` asks for approval whenever the wallet has a threshold, because it has no quote to price it.
+A `transfer` is priced and capped the same way: a stablecoin at par against the agent's per-transaction and daily caps and the wallet's daily cap. It asks for approval whenever the wallet has a threshold, and whenever Whale cannot price the token. An approved transfer counts toward the daily totals. An approved unpriced transfer counts toward none.
 
 The owner sees pending approvals at `GET /api/approvals?status=pending`:
 - Approving needs a passkey step-up for `{ kind: "approval.approve", approvalId, command }`.

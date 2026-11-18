@@ -41,14 +41,14 @@ export async function recordedSpend(client: pg.Pool | pg.ClientBase, agent: Agen
   return row.binding === bindingOf(command) ? row.state : "conflict";
 }
 
-export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: Send, priced: Priced | null, approved: boolean): Promise<Reservation> {
+export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: Send, priced: Priced | null, approved: boolean, what: string): Promise<Reservation> {
   return inTransaction(pool, async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent_spends:${agent.walletId}`]);
     const recorded = await recordedSpend(client, agent, command);
     if (recorded === "conflict") return { kind: "refused", reason: KEY_REUSED };
     if (recorded === "reserved") return { kind: "settling" };
     if (recorded === "committed") return { kind: "unreserved" };
-    const refused = priced ? await dailyRefusal(client, agent, priced) : null;
+    const refused = priced ? await dailyRefusal(client, agent, priced, what) : null;
     if (refused) return { kind: "refused", reason: refused };
     if (approved) {
       const claimed = await client.query("UPDATE approvals SET status = 'claimed', claimed_at = now() WHERE agent_id = $1 AND idempotency_key = $2 AND status = 'approved' AND expires_at > now()", [

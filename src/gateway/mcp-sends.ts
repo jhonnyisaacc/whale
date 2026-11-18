@@ -1,6 +1,5 @@
 import type pg from "pg";
 import { QUOTE_ASSETS, quoteAssetOf } from "../chains.js";
-import type { HostedCommand } from "../hosted-commands.js";
 import { audit, inTransaction } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
 import { approvalFor, requestApproval } from "./approvals.js";
@@ -18,10 +17,11 @@ function usd(value: number): string {
   return `${value.toFixed(2)} USD`;
 }
 
-function sellUsd(command: Extract<HostedCommand, { kind: "swap" }>): number | null {
-  const asset = quoteAssetOf(QUOTE_ASSETS, command.chainKey, command.sellToken);
+function sendUsd(command: Send): number | null {
+  const [token, amount] = command.kind === "swap" ? [command.sellToken, command.sellAmount] : [command.token, command.amount];
+  const asset = quoteAssetOf(QUOTE_ASSETS, command.chainKey, token);
   if (!asset || !DOLLAR_TOKENS.has(asset.symbol)) return null;
-  return Number(BigInt(command.sellAmount)) / 10 ** asset.decimals;
+  return Number(BigInt(amount)) / 10 ** asset.decimals;
 }
 
 export function today(): string {
@@ -66,21 +66,19 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (approval === "pending") return { ok: true, value: { status: "approval_pending", reason: "the owner has not answered yet. Call again later with the same idempotencyKey" } };
   const approved = approval === "approved";
   const threshold = agent.policy.approvalAboveUsd;
-  let priced: Priced | null = null;
+  const [what, verb] = command.kind === "swap" ? ["the swap", "sells"] : ["the transfer", "moves"];
+  const estimate = sendUsd(command);
+  const overCap = estimate === null ? null : perTxRefusal(agent, estimate, `${what} ${verb} about`);
+  if (overCap) return deny(overCap);
+  const priced: Priced | null = estimate === null ? null : { usd: estimate, day: today() };
+  const overDaily = priced && recorded !== "committed" ? await dailyRefusal(pool, agent, priced, what) : null;
+  if (overDaily) return deny(overDaily);
+  if (!approved && estimate === null) return ask(null, `${what} ${verb} a token Whale cannot price`);
   const transferApproval = command.kind === "transfer" && !approved ? transferApprovalReason(agent) : null;
-  if (transferApproval) return ask(null, transferApproval);
-  if (command.kind === "swap") {
-    const estimate = sellUsd(command);
-    const overCap = estimate === null ? null : perTxRefusal(agent, estimate, "the swap sells about");
-    if (overCap) return deny(overCap);
-    priced = estimate === null ? null : { usd: estimate, day: today() };
-    const overDaily = priced && recorded !== "committed" ? await dailyRefusal(pool, agent, priced) : null;
-    if (overDaily) return deny(overDaily);
-    if (!approved && estimate === null) return ask(null, "the swap sells a token Whale cannot price");
-    if (!approved && estimate !== null && threshold !== null && estimate > threshold) return ask(estimate, `the swap sells about ${usd(estimate)}, above the ${usd(threshold)} approval threshold`);
-  }
+  if (transferApproval) return ask(estimate, transferApproval);
+  if (!approved && estimate !== null && threshold !== null && estimate > threshold) return ask(estimate, `${what} ${verb} about ${usd(estimate)}, above the ${usd(threshold)} approval threshold`);
 
-  const reservation = await reserveSend(pool, agent, command, priced, approved);
+  const reservation = await reserveSend(pool, agent, command, priced, approved, what);
   if (reservation.kind === "refused") return deny(reservation.reason);
   if (reservation.kind === "settling") return settling;
   if (reservation.kind === "lapsed") return lapsedApproval(pool, agent, command, deny, settling);
