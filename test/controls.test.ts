@@ -135,16 +135,17 @@ test("odos is not called and bridges are the four off-path providers", () => {
 });
 
 test("rebalance refuses an empty allowlist and a foreign destination", () => {
-  const quote = { provider: "lifi" as const, feeUsd: 0.01, amountInUsd: 10, destination: "0xabc" };
-  assert.equal(planRebalance({ quotes: [quote], maxBridgeUsd: 25, maxFeeBps: 50, spentBridgeUsd: 0, dailyBridgeCap: 50, ownAddresses: ["0xabc"], allowlist: [] }).kind, "skip");
+  const own = { chainKey: "base", address: "0xabc" };
+  const quote = { provider: "lifi" as const, feeUsd: 0.01, amountInUsd: 10, destination: own };
+  assert.equal(planRebalance({ quotes: [quote], maxBridgeUsd: 25, maxFeeBps: 50, spentBridgeUsd: 0, dailyBridgeCap: 50, ownAddresses: [own], allowlist: [] }).kind, "skip");
   const foreign = planRebalance({
     quotes: [quote],
     maxBridgeUsd: 25,
     maxFeeBps: 50,
     spentBridgeUsd: 0,
     dailyBridgeCap: 50,
-    ownAddresses: ["0xabc"],
-    allowlist: ["0xdef"],
+    ownAddresses: [own],
+    allowlist: [{ chainKey: "base", address: "0xdef" }],
   });
   assert.equal(foreign.kind, "skip");
 });

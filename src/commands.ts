@@ -1,6 +1,6 @@
 import type { ChainRef, ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
 import { addressKey } from "./chains.js";
-import { planRebalance, type BridgeQuote, type RebalancePlan } from "./rebalance.js";
+import { planRebalance, type BridgeQuote, type ChainAddress, type RebalancePlan } from "./rebalance.js";
 import { intentSchema } from "./schemas.js";
 
 export type Asset = {
@@ -22,8 +22,8 @@ export type WalletCommand =
       maxFeeBps: number;
       spentBridgeUsd: number;
       dailyBridgeCap: number;
-      ownAddresses: readonly string[];
-      allowlist: readonly string[];
+      ownAddresses: readonly ChainAddress[];
+      allowlist: readonly ChainAddress[];
     }
   | { kind: "balance"; chainKey: string; address: string }
   | { kind: "transfer"; idempotencyKey: string; asset: Asset; to: string; amount: string; mode: "dry_run" | "live" };
