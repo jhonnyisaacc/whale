@@ -257,7 +257,13 @@ pnpm run start:executor
 pnpm run start:cli quote --sell-chain base --sell-address 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --sell-symbol USDC --sell-decimals 6 --buy-chain base --buy-address 0x4200000000000000000000000000000000000006 --buy-symbol WETH --buy-decimals 18 --sell-amount 1 --slippage-bps 50
 ```
 
-`swap`, `balance`, and `transfer` are the other commands. A dry-run swap reports `nothing was broadcast`. `bridge` on the CLI exits before a fetch. The error says bridge quotes are not fetched yet.
+`swap`, `bridge`, `balance`, and `transfer` are the other commands. A dry-run swap reports `nothing was broadcast`.
+
+```bash
+pnpm run start:cli bridge --from-chain base --to-chain arbitrum --asset USDC --amount 10000000 --to <owner address>
+```
+
+`bridge` asks LI.FI, Across, and Relay for a route and prints the routes ranked by fee with a plan whose `broadcast` is false. The destination must be on `OWNER_WITHDRAW_ADDRESSES` and on an enabled chain. The sender is `TURNKEY_EVM_ADDRESS` or `TURNKEY_SOLANA_ADDRESS`. Each provider gets `BRIDGE_QUOTE_TIMEOUT_MS` (3000). A slow or failing provider is dropped and the others still rank.
 
 ## Start MCP
 

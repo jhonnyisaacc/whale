@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { nativeHoldingError } from "./balances.js";
-import { chainByKey } from "./chains.js";
+import { CHAINS, chainByKey } from "./chains.js";
 
 export const chainSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("solana") }),
@@ -119,6 +119,15 @@ export const rebalanceSchema = z.object({
     .max(8),
   ownAddresses: z.array(chainAddressSchema).max(8),
   spentBridgeUsd: z.number().nonnegative().default(0),
+});
+
+export const SMALLEST_UNIT = /^[1-9]\d{0,77}$/;
+
+export const bridgeRequestSchema = z.strictObject({
+  fromChainKey: z.enum(CHAINS.map((chain) => chain.key)),
+  destination: z.strictObject({ chainKey: z.enum(CHAINS.map((chain) => chain.key)), address: z.string().min(1).max(128) }),
+  asset: z.string().min(1).max(16),
+  amount: z.string().regex(SMALLEST_UNIT),
 });
 
 export const holdingsSchema = z.array(holdingSchema).max(64);

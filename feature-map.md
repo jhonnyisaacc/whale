@@ -6,7 +6,7 @@ Each row names a feature and the check that proves it. Add a row when a feature 
 | --- | --- |
 | Quote, swap, bridge, balance, and transfer share one command union | `pnpm test`. `test/commands.test.ts` covers the dispatcher. |
 | A dry-run swap does not broadcast, and a quote with no provider skips | `pnpm test`. The command and executor tests cover it. |
-| Bridge ranking refuses an empty allowlist and does not broadcast | `pnpm test`. The command and controls tests cover it. |
+| Bridge routes are fetched from LI.FI, Across, and Relay, ranked by fee, refused off the owner allowlist or enabled chains, and never broadcast | `pnpm test`. `test/bridge-routes.test.ts` stubs provider HTTP. The command and controls tests cover the planner. |
 | Live send is screened, simulated, reserved, and policy checked | `pnpm test`. The send-path and security-review tests cover it. |
 | Withdraw needs the admin token, the allowlist, and the per-call cap | `pnpm test`. The custody and controls tests cover it. |
 | Installs wait a week, keep publisher trust, run no dependency scripts, and pin every version and action | `pnpm test`. `test/supply-chain.test.ts` covers it. |

@@ -14,7 +14,7 @@ Set `WHALE_BROADCAST` to the exact string `true` only when Turnkey and `DATABASE
 
 `start:executor` runs `node dist/src/executor-server.js`. The Dockerfile command is that same file. The Railway root is the repository root. `start:cli` runs `node dist/src/cli.js`. `start:mcp` runs `node dist/src/mcp-server.js` on stdio.
 
-The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. `wallet_status` reads executor `GET /status`. `quote` returns a route, or skips when no provider key is present. `swap` and `transfer` stay dry-run in the MCP server. `bridge` on the CLI exits before a fetch. The MCP `bridge` tool ranks quotes the caller already supplied and does not broadcast.
+The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. `wallet_status` reads executor `GET /status`. `quote` returns a route, or skips when no provider key is present. `swap` and `transfer` stay dry-run in the MCP server. `bridge` on the CLI and in MCP fetches routes from LI.FI, Across, and Relay through `src/aggregators/bridge.ts` and ranks them by fee. The allowlist and the hot wallet come from config, never from the caller. The plan does not broadcast.
 
 ## Live signing
 

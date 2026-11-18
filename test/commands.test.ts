@@ -75,41 +75,6 @@ test("a live swap calls execute once with a positive notional and the stub does 
   if (result.kind === "swap") assert.equal(result.report.reason, "stub");
 });
 
-test("an empty bridge allowlist skips and the cheaper quote wins without a broadcast", async () => {
-  const own = { chainKey: "base", address: "0xabc" };
-  const empty = await run({
-    kind: "bridge",
-    quotes: [{ provider: "lifi", feeUsd: 1, amountInUsd: 10, destination: own }],
-    maxBridgeUsd: 100,
-    maxFeeBps: 100,
-    spentBridgeUsd: 0,
-    dailyBridgeCap: 100,
-    ownAddresses: [own],
-    allowlist: [],
-  });
-  assert.equal(empty.kind, "bridge");
-  if (empty.kind !== "bridge") return;
-  assert.equal(empty.plan.kind, "skip");
-
-  const ranked = await run({
-    kind: "bridge",
-    quotes: [
-      { provider: "across", feeUsd: 3, amountInUsd: 10, destination: own },
-      { provider: "lifi", feeUsd: 1, amountInUsd: 10, destination: own },
-    ],
-    maxBridgeUsd: 100,
-    maxFeeBps: 5_000,
-    spentBridgeUsd: 0,
-    dailyBridgeCap: 100,
-    ownAddresses: [own],
-    allowlist: [own],
-  });
-  assert.equal(ranked.kind, "bridge");
-  if (ranked.kind !== "bridge" || ranked.plan.kind !== "would_send") return;
-  assert.equal(ranked.plan.quote.provider, "lifi");
-  assert.equal(ranked.plan.broadcast, false);
-});
-
 test("an intent cannot authorize one chain key and sign on another chain", () => {
   const valid = {
     idempotencyKey: "chain-binding",
@@ -136,10 +101,9 @@ test("a dry-run transfer would send and a live transfer is skipped", async () =>
   if (live.kind === "transfer") assert.equal(live.status, "skipped");
 });
 
-test("the cli parses a quote and refuses a bridge fetch", () => {
+test("the cli parses a quote", () => {
   const command = parseCommand(["quote", "--sell-chain", "base", "--sell-address", sell.address, "--sell-symbol", "USDC", "--sell-decimals", "6", "--buy-chain", "base", "--buy-address", buy.address, "--buy-symbol", "WETH", "--buy-decimals", "18", "--sell-amount", "1000000", "--slippage-bps", "50"]);
   assert.equal(command.kind, "quote");
-  assert.throws(() => parseCommand(["bridge"]), /not fetched/);
 });
 
 test("swap stays dry-run unless --live carries a positive notional", () => {

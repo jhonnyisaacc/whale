@@ -14,7 +14,7 @@ The public shape is `WalletCommand` in `src/commands.ts`. An `Asset` names a cha
 | --- | --- |
 | `quote` | A route quote, or `skipped` when no provider is injected. |
 | `swap` | A dry-run execution report. Nothing is broadcast. |
-| `bridge` | A rebalance plan. `broadcast` stays false. |
+| `bridge` | Routes fetched from LI.FI, Across, and Relay, ranked by fee, and a plan. `broadcast` stays false. |
 | `balance` | Holdings for one chain and address. |
 | `transfer` | `would_send` in dry-run. Live is `skipped`. |
 
@@ -28,7 +28,7 @@ The layout follows the Binah rules at <https://github.com/jhonnyisaacc/binah> (r
 
 MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, and `.muse-plugin`. The skill is `skills/whale-wallet/SKILL.md`.
 
-CLI. After `pnpm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `balance`, and `transfer` are the other commands. `bridge` is refused on the CLI until a quote can be fetched.
+CLI. After `pnpm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `bridge`, `balance`, and `transfer` are the other commands. `bridge` takes `--from-chain`, `--to-chain`, `--asset` (USDC or USDT), `--amount` in the smallest unit, and `--to`.
 
 HTTP. `pnpm run start:executor` serves `/health`, `/status`, `/execute`, `/rebalance`, and `/withdraw`. `/execute` with the executor token forces dry-run. A strategy bearer can ask the engine to run under that strategy's cap. This service does not accept listing alerts.
 
@@ -47,6 +47,6 @@ pnpm run check
 
 ## Still open
 
-Real bridge support. `planRebalance` ranks quotes the caller already supplied. It does not request a quote from LI.FI, Across, Relay, or deBridge, and it does not broadcast. The TODO is in `src/commands.ts`.
+Live bridging. `bridge` fetches and ranks routes but never signs or sends one. deBridge is not called, because its fixed fee is charged in the native coin outside the quote and this path has no native price.
 
 Local signing for live transfers. The keystore can decrypt for a dry-run. `loadManagedSigner` refuses raw keys when the process is live and requires Turnkey. A live `transfer` command returns `skipped`. The TODO is in `src/commands.ts`.
