@@ -45,7 +45,7 @@ export function registerHostedRoutes(
     const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });
     if (hosted.kind !== "swap" || result.kind !== "quote") return result;
     return result.status === "quoted"
-      ? { kind: "swap", status: "would_swap", quote: result.quote, reason: "dry-run: this is the route a live swap would take. nothing was signed" }
+      ? { kind: "swap", status: "would_swap", quote: result.quote, reason: "dry-run: this is the best signable route Whale quotes now. a live swap quotes again with a price check, so it can take another route or refuse. nothing was signed" }
       : { kind: "swap", status: "skipped", quote: null, reason: result.reason };
   };
   const perAccount = app.createRateLimit({ max: 600, timeWindow: "1 minute", keyGenerator: (request) => (request.body as HostedRequest).accountId });

@@ -1,6 +1,6 @@
 import { formatUnits } from "viem";
 import { chainByKey } from "./chains.js";
-import { chooseLargestOutput, chooseQuote, fetchBridgeQuotes } from "./aggregators.js";
+import { chooseLargestOutput, chooseSignableQuote, fetchBridgeQuotes } from "./aggregators.js";
 import { quoteHop } from "./clients.js";
 import type { CommandDeps, WalletCommand } from "./commands.js";
 import { configSecrets, loadConfig, rpcLists, type AppConfig } from "./config.js";
@@ -33,7 +33,7 @@ async function quoteWithHop(env: NodeJS.ProcessEnv, command: Extract<WalletComma
     },
     null,
     fetch,
-    command.purpose === "price" ? chooseLargestOutput : chooseQuote,
+    command.purpose === "price" ? chooseLargestOutput : chooseSignableQuote,
   );
   if (hop.buyAmount === "" || hop.buyAmount === "0") return null;
   return {
@@ -47,7 +47,7 @@ async function quoteWithHop(env: NodeJS.ProcessEnv, command: Extract<WalletComma
     ...(hop.gasUsd !== undefined ? { gasUsd: hop.gasUsd } : {}),
     ...(hop.netOutputUsd !== undefined ? { netOutputUsd: hop.netOutputUsd } : {}),
     ...(hop.signable !== undefined ? { signable: hop.signable } : {}),
-    ...(hop.note ? { note: hop.note } : {}),
+    ...(hop.note ? { note: hop.note } : hop.priceImpactPct === null ? { note: "no price reference, so the price impact is unknown" } : {}),
     chain: command.sell.chain,
     chainKey: command.sell.chainKey,
   };

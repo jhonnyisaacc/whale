@@ -4,7 +4,7 @@ import { resetProviderGuards } from "../src/aggregators.js";
 import { commandDeps } from "../src/command-callers.js";
 import type { WalletCommand } from "../src/commands.js";
 
-test("a hosted pricing quote keeps EVM quotes and answers with the largest output, and any other quote keeps the race's usual choice", async () => {
+test("a hosted pricing quote answers with the largest output, and any other quote answers with the largest signable output", async () => {
   resetProviderGuards();
   const env = { ZEROX_API_KEY: "zeroex-key", LIFI_API_KEY: "lifi-key", QUOTE_TIMEOUT_MS: "200", QUOTE_DEADLINE_MS: "400" };
   const command: Extract<WalletCommand, { kind: "quote" }> = {
@@ -31,7 +31,9 @@ test("a hosted pricing quote keeps EVM quotes and answers with the largest outpu
     assert.ok(asked.has("api.0x.org") && asked.has("li.quest"));
     assert.equal(quote?.buyAmount, "3100000000");
     const { purpose: _purpose, ...plain } = command;
-    assert.equal(await commandDeps(env, plain).quote?.(plain), null, "a quote that is not for pricing still needs a price reference to pick a route");
+    const signable = await commandDeps(env, plain).quote?.(plain);
+    assert.equal(signable?.provider, "zeroex", "a quote that is not for pricing never answers with an unsignable route");
+    assert.equal(signable?.buyAmount, "3000000000");
   } finally {
     globalThis.fetch = original;
   }
