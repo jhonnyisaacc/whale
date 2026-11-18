@@ -13,6 +13,11 @@ blockExoticSubdeps: true
 strictDepBuilds: true
 engineStrict: true
 
+# GitHub withdrew GHSA-fc5q-39xc-vjpf (picomatch, via vite) on 2026-11-18, but npm's audit feed still lists it. Remove this once the feed drops it. See #85.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
+
 # jayson asks for uuid 8 and stream-json 1. See docs/decisions/0002-dependency-containment.md.
 overrides:
   # Optional native accelerators for ws. ws falls back to plain JS, so no native code ships.
