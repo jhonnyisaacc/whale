@@ -21,9 +21,14 @@ async function harness() {
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
   const during: (() => Promise<unknown>)[] = [];
+  const pricing: (() => Promise<unknown>)[] = [];
   const executor: ExecutorClient = {
     report: async () => ({ state: "not_started" }),
     run: async (request) => {
+      if (request.command.kind === "quote") {
+        await pricing.shift()?.();
+        return { kind: "quote", status: "quoted", quote: { buyAmount: String((BigInt(request.command.sellAmount) * 15_000_000n) / 10n ** 18n), feeUsd: 0, priceImpactPct: 0 } };
+      }
       await during.shift()?.();
       sent.push(request);
       return { kind: "swap", status: "would_swap", quote: { buyAmount: "42", feeUsd: 0 } };
@@ -57,8 +62,9 @@ async function harness() {
     return { isError: result.isError, text, body };
   };
   const swap = (apiKey: string, key: string, dollars: number) => call(apiKey, "swap", { chain: "base", sellToken: USDC, buyToken: WETH, sellAmount: usdc(dollars), idempotencyKey: key });
-  const ask = async (apiKey: string, key: string) => {
-    const reply = await swap(apiKey, key, 15);
+  const swapEth = (apiKey: string, key: string) => call(apiKey, "swap", { chain: "base", sellToken: WETH, buyToken: USDC, sellAmount: String(10n ** 18n), idempotencyKey: key });
+  const ask = async (apiKey: string, key: string, send = (apiKey: string, key: string) => swap(apiKey, key, 15)) => {
+    const reply = await send(apiKey, key);
     assert.equal(reply.body?.status, "approval_required");
     return String(reply.body?.approvalId);
   };
@@ -75,7 +81,7 @@ async function harness() {
     return app.inject({ method: "POST", url: `/api/approvals/${approvalId}/approve`, headers: user.headers, payload: { assertion: authenticator.assert(stepUp.challenge) } });
   };
   const expire = (approvalId: string) => pool.query("UPDATE approvals SET expires_at = now() - interval '1 second' WHERE id = $1", [approvalId]);
-  return { app, pool, user, sent, during, first: first.apiKey, second: second.apiKey, swap, ask, open, cancel, owner, approve, expire, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, user, sent, during, pricing, swapEth, first: first.apiKey, second: second.apiKey, swap, ask, open, cancel, owner, approve, expire, drop: async () => (await app.close(), await drop()) };
 }
 
 test("an approval request past its hour is listed as expired, not as pending, with no read to update it", { skip: !TEST_DATABASE_URL }, async () => {
@@ -178,6 +184,21 @@ test("a retry of a cancelled idempotencyKey answers that it was cancelled instea
     assert.equal(retry.isError, true);
     assert.match(retry.text, /cancelled/);
     assert.match(retry.text, /new idempotencyKey/);
+    assert.equal(sent.length, 0);
+  } finally {
+    await drop();
+  }
+});
+
+test("a cancel that lands while an approved send is being priced stops the send and says it was cancelled", { skip: !TEST_DATABASE_URL }, async () => {
+  const { sent, pricing, swapEth, first, ask, cancel, approve, drop } = await harness();
+  try {
+    const approvalId = await ask(first, "cancel-while-pricing", swapEth);
+    assert.equal((await approve(approvalId)).statusCode, 200);
+    pricing.push(async () => assert.equal((await cancel(first, approvalId)).isError, false));
+    const raced = await swapEth(first, "cancel-while-pricing");
+    assert.equal(raced.isError, true);
+    assert.match(raced.text, /cancelled/);
     assert.equal(sent.length, 0);
   } finally {
     await drop();
