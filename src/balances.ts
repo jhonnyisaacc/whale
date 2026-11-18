@@ -73,11 +73,15 @@ function nativeFitsChain(holding: NativeRow, tradeChainKey: string): boolean {
 
 export function holdingFitsChain(holding: Holding, tradeChainKey: string): boolean {
   if (holding.native) return nativeFitsChain(holding, tradeChainKey);
-  const kind = chainByKey(tradeChainKey)?.chain.kind;
-  if (kind === "evm") return /^0x[0-9a-fA-F]{40}$/.test(holding.address);
+  return addressFitsChain(tradeChainKey, holding.address);
+}
+
+export function addressFitsChain(chainKey: string, address: string): boolean {
+  const kind = chainByKey(chainKey)?.chain.kind;
+  if (kind === "evm") return /^0x[0-9a-fA-F]{40}$/.test(address);
   if (kind === "solana") {
     try {
-      new PublicKey(holding.address);
+      new PublicKey(address);
       return true;
     } catch {
       return false;

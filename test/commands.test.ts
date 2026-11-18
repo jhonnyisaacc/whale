@@ -76,14 +76,15 @@ test("a live swap calls execute once with a positive notional and the stub does 
 });
 
 test("an empty bridge allowlist skips and the cheaper quote wins without a broadcast", async () => {
+  const own = { chainKey: "base", address: "0xabc" };
   const empty = await run({
     kind: "bridge",
-    quotes: [{ provider: "lifi", feeUsd: 1, amountInUsd: 10, destination: "0xabc" }],
+    quotes: [{ provider: "lifi", feeUsd: 1, amountInUsd: 10, destination: own }],
     maxBridgeUsd: 100,
     maxFeeBps: 100,
     spentBridgeUsd: 0,
     dailyBridgeCap: 100,
-    ownAddresses: ["0xabc"],
+    ownAddresses: [own],
     allowlist: [],
   });
   assert.equal(empty.kind, "bridge");
@@ -93,15 +94,15 @@ test("an empty bridge allowlist skips and the cheaper quote wins without a broad
   const ranked = await run({
     kind: "bridge",
     quotes: [
-      { provider: "across", feeUsd: 3, amountInUsd: 10, destination: "0xabc" },
-      { provider: "lifi", feeUsd: 1, amountInUsd: 10, destination: "0xabc" },
+      { provider: "across", feeUsd: 3, amountInUsd: 10, destination: own },
+      { provider: "lifi", feeUsd: 1, amountInUsd: 10, destination: own },
     ],
     maxBridgeUsd: 100,
     maxFeeBps: 5_000,
     spentBridgeUsd: 0,
     dailyBridgeCap: 100,
-    ownAddresses: ["0xabc"],
-    allowlist: ["0xabc"],
+    ownAddresses: [own],
+    allowlist: [own],
   });
   assert.equal(ranked.kind, "bridge");
   if (ranked.kind !== "bridge" || ranked.plan.kind !== "would_send") return;
