@@ -133,7 +133,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 "evmAddress": keystore::evm_address(&keys.evm),
                 "solanaAddress": keystore::solana_address(&keys.solana),
                 "evmSignature": evm::personal_sign(&message, &keys.evm),
-                "solanaSignature": bs58::encode(solana::sign(message.as_bytes(), &keys.solana)).into_string(),
+                "solanaSignature": bs58::encode(solana::sign(message.as_bytes(), &keys.solana)?).into_string(),
             });
             let registered = gateway.register(&body)?;
             let token = registered["token"]
