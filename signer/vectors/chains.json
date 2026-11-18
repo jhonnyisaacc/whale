@@ -1,0 +1,54 @@
+[
+  {
+    "key": "ethereum",
+    "chainId": 1
+  },
+  {
+    "key": "optimism",
+    "chainId": 10
+  },
+  {
+    "key": "bnb",
+    "chainId": 56
+  },
+  {
+    "key": "polygon",
+    "chainId": 137
+  },
+  {
+    "key": "zksync",
+    "chainId": 324
+  },
+  {
+    "key": "base",
+    "chainId": 8453
+  },
+  {
+    "key": "arbitrum",
+    "chainId": 42161
+  },
+  {
+    "key": "linea",
+    "chainId": 59144
+  },
+  {
+    "key": "blast",
+    "chainId": 81457
+  },
+  {
+    "key": "scroll",
+    "chainId": 534352
+  },
+  {
+    "key": "robinhood",
+    "chainId": 4663
+  },
+  {
+    "key": "hyperevm",
+    "chainId": 999
+  },
+  {
+    "key": "monad",
+    "chainId": 143
+  }
+]
