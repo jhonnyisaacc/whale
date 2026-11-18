@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 type Json = Record<string, unknown>;
@@ -77,18 +77,24 @@ function checkSkills(root: string, source: SkillSource): string[] {
   const rel = inside(source.path);
   if (rel === undefined) return [`skills ${source.path} points outside the plugin root`];
   if (source.kind === "file") return checkSkillFile(root, rel);
-  const dir = path.join(root, rel);
-  if (!existsSync(dir) || !statSync(dir).isDirectory()) return [`skills ${source.path} is not a directory`];
-  const entries = readdirSync(dir).filter((name) => statSync(path.join(dir, name)).isDirectory());
+  let entries: string[];
+  try {
+    entries = readdirSync(path.join(root, rel), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch {
+    return [`skills ${source.path} is not a directory`];
+  }
   if (entries.length === 0) return [`skills ${source.path} holds no skill directory`];
   return entries.flatMap((name) => checkSkillFile(root, path.posix.join(rel, name, "SKILL.md")));
 }
 
 function checkSkillFile(root: string, rel: string): string[] {
-  const full = path.join(root, rel);
-  if (!existsSync(full)) return [`${rel}: missing`];
-  if (!statSync(full).isFile()) return [`${rel}: not a file`];
-  const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(readFileSync(full, "utf8"));
+  let text: string;
+  try {
+    text = readFileSync(path.join(root, rel), "utf8");
+  } catch (error) {
+    return [`${rel}: ${(error as NodeJS.ErrnoException).code === "EISDIR" ? "not a file" : "missing"}`];
+  }
+  const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(text);
   if (match === null) return [`${rel}: no frontmatter`];
   const fields = new Map(match[1].split(/\r?\n/).map((line) => /^([a-z-]+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1], m[2].trim()]));
   const errors: string[] = [];
@@ -111,9 +117,9 @@ function checkMcp(root: string, source: McpSource): string[] {
   if (source.kind === "inline") return checkCommand(root, source.id, source.command);
   const rel = inside(source.path);
   if (rel === undefined) return [`mcpServers ${source.path} points outside the plugin root`];
-  if (!existsSync(path.join(root, rel))) return [`mcpServers ${source.path} does not exist`];
   const config = readJson(path.join(root, rel)) as Json | undefined;
-  const servers = config?.mcpServers;
+  if (config === undefined) return [`mcpServers ${source.path} does not exist or is not JSON`];
+  const servers = config.mcpServers;
   if (typeof servers !== "object" || servers === null || Object.keys(servers).length === 0) return [`${rel} declares no MCP server`];
   return Object.entries(servers as Record<string, Json>).flatMap(([id, server]) => {
     const args = Array.isArray(server.args) ? server.args : [];
