@@ -88434,7 +88434,7 @@
           "type": "text",
           "id": "uUGIi",
           "fill": "$muted",
-          "content": "AUTH · v1 · 2026-11-18",
+          "content": "AUTH · DESIGN TARGET · FRAMES TAGGED \"NOT BUILT YET\" ARE NOT ON MAIN (4fbc638)",
           "fontFamily": "$font-mono",
           "fontSize": 12,
           "fontWeight": "normal",
@@ -88564,6 +88564,17 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "v8bdC",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · Google only today"
+                }
+              }
             }
           ]
         },
@@ -88780,6 +88791,17 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "Z8TOv",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · CAN / CANNOT list"
+                }
+              }
             }
           ]
         },
@@ -88937,7 +88959,7 @@
                       "type": "text",
                       "id": "I5bMm",
                       "fill": "$ink",
-                      "content": "claude-code on yoni-mbp",
+                      "content": "claude-code on my-laptop",
                       "fontFamily": "$font-display",
                       "fontSize": 14,
                       "fontWeight": "300"
@@ -89366,6 +89388,17 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "ivkUw",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · /connect/done"
+                }
+              }
             }
           ]
         },
@@ -89473,7 +89506,7 @@
                       "type": "text",
                       "id": "CMpeH",
                       "fill": "$ink",
-                      "content": "claude-code on yoni-mbp",
+                      "content": "claude-code on my-laptop",
                       "fontFamily": "$font-display",
                       "fontSize": 14,
                       "fontWeight": "300"
@@ -89670,6 +89703,17 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "ZbjJn",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · device code"
+                }
+              }
             }
           ]
         },
@@ -90087,12 +90131,23 @@
                   "id": "eNmQC",
                   "name": "UrlText",
                   "fill": "$ink",
-                  "content": "app.mywhalewallet.com/agents",
+                  "content": "app.mywhalewallet.com/wallets/<id>",
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "aTH5R",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · SIGN-IN column"
+                }
+              }
             }
           ]
         },
@@ -90305,7 +90360,7 @@
                           "type": "text",
                           "id": "dI7i6",
                           "fill": "$ink",
-                          "content": "claude-code on yoni-mbp",
+                          "content": "claude-code on my-laptop",
                           "fontFamily": "$font-display",
                           "fontSize": 14,
                           "fontWeight": "300"
@@ -90878,7 +90933,7 @@
                   "id": "O1A8O",
                   "name": "UrlText",
                   "fill": "$ink",
-                  "content": "app.mywhalewallet.com/approvals/apr_…",
+                  "content": "app.mywhalewallet.com/approvals",
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
                   "fontWeight": "normal"
@@ -90939,7 +90994,7 @@
                   "type": "text",
                   "id": "SyMiQ",
                   "fill": "$ink",
-                  "content": "Approve a $120 swap",
+                  "content": "Approve a $45 swap",
                   "fontFamily": "$font-display",
                   "fontSize": 30,
                   "fontWeight": "300",
@@ -90951,7 +91006,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "It is above the $100 approval threshold you set. Below it, agents trade on their own inside their caps.",
+                  "content": "It is above the $40 approval threshold you set. Below it, agents trade on their own inside their caps.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-display",
                   "fontSize": 15,
@@ -90985,7 +91040,7 @@
                       "type": "text",
                       "id": "O2W6yZ",
                       "fill": "$ink",
-                      "content": "claude-code on yoni-mbp",
+                      "content": "claude-code on my-laptop",
                       "fontFamily": "$font-display",
                       "fontSize": 14,
                       "fontWeight": "300"
@@ -91020,7 +91075,7 @@
                       "type": "text",
                       "id": "QXbJ8",
                       "fill": "$ink",
-                      "content": "120 USDC → ETH on Base",
+                      "content": "45 USDC → ETH on Base",
                       "fontFamily": "$font-display",
                       "fontSize": 14,
                       "fontWeight": "300"
@@ -91175,6 +91230,17 @@
               "fontFamily": "$font-mono",
               "fontSize": 12,
               "fontWeight": "normal"
+            },
+            {
+              "id": "BZrec",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · whale init"
+                }
+              }
             }
           ]
         },
@@ -91366,6 +91432,17 @@
               "fontFamily": "$font-mono",
               "fontSize": 12,
               "fontWeight": "normal"
+            },
+            {
+              "id": "t3XiH",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · whale login / mcp install"
+                }
+              }
             }
           ]
         },
@@ -91676,7 +91753,7 @@
               "fill": "$mint",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "  ✓ whale · connected · 7 tools",
+              "content": "  ✓ whale · connected · tools loaded",
               "lineHeight": 1.45,
               "fontFamily": "$font-mono",
               "fontSize": 14,
@@ -91774,6 +91851,17 @@
               "fontFamily": "$font-mono",
               "fontSize": 12,
               "fontWeight": "normal"
+            },
+            {
+              "id": "AuSbc",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · whale status / logout"
+                }
+              }
             }
           ]
         },
@@ -91879,7 +91967,7 @@
               "fill": "$mint",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Reachable   ✓ gateway 84 ms · ✓ 7 tools listed",
+              "content": "Reachable   ✓ gateway 84 ms · ✓ tools listed",
               "lineHeight": 1.45,
               "fontFamily": "$font-mono",
               "fontSize": 14,
@@ -92171,6 +92259,17 @@
                       "descendants": {
                         "k7RLXp": {
                           "content": "Executor token, 0600 file"
+                        }
+                      }
+                    },
+                    {
+                      "id": "e41Xt",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "name": "NotBuilt",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "Not built yet"
                         }
                       }
                     }
@@ -92503,6 +92602,17 @@
                           "content": "Device code (RFC 8628)"
                         }
                       }
+                    },
+                    {
+                      "id": "Izs3C",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "name": "NotBuilt",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "Not built yet"
+                        }
+                      }
                     }
                   ]
                 },
@@ -92721,6 +92831,17 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "UpHPX",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · whale doctor"
+                }
+              }
             }
           ]
         },
@@ -92924,7 +93045,7 @@
                       "type": "text",
                       "id": "S3s23",
                       "fill": "$ink",
-                      "content": "Whale · connected · 7 tools loaded",
+                      "content": "Whale · connected · Whale's tools loaded",
                       "fontFamily": "$font-mono",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -93038,6 +93159,17 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "y9kAUo",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet"
+                }
+              }
             }
           ]
         },
@@ -93360,7 +93492,7 @@
                   "id": "zIyQz",
                   "name": "UrlText",
                   "fill": "$ink",
-                  "content": "app.mywhalewallet.com/approvals/…",
+                  "content": "app.mywhalewallet.com/approvals",
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
                   "fontWeight": "normal"
@@ -93386,7 +93518,7 @@
               "type": "text",
               "id": "R4h8HG",
               "fill": "$ink",
-              "content": "Approve a $120 swap",
+              "content": "Approve a $45 swap",
               "fontFamily": "$font-display",
               "fontSize": 26,
               "fontWeight": "300",
@@ -93398,7 +93530,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Above your $100 threshold. claude-code on yoni-mbp wants to swap 120 USDC → ETH on Base.",
+              "content": "Above your $40 threshold. claude-code on my-laptop wants to swap 45 USDC → ETH on Base.",
               "lineHeight": 1.5,
               "fontFamily": "$font-display",
               "fontSize": 14,

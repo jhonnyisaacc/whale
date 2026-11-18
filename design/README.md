@@ -52,7 +52,7 @@ Each claim was checked against `origin/main` on 2026-11-18.
 | Topic | Site copy | Why |
 | --- | --- | --- |
 | Verbs | "Quote, swap and transfer (dry-run during beta), plus bridge-quote ranking" | `bridge` ranks quotes the caller supplies and never broadcasts (`src/commands.ts:110`). The CLI refuses it. |
-| Swap and transfer | Labelled dry-run | The local MCP forces dry-run (`src/mcp-server.ts:47`). Hosted sends stay dry-run until hosted live opens. |
+| Swap and transfer | Labelled dry-run | The local MCP forces dry-run (`src/mcp-server.ts:46`). Hosted sends stay dry-run until hosted live opens. |
 | Networks | "15 networks", with a badge on each limited chain | Ethereum: opt-in. Monad: opt-in, no router yet. zkSync: quotes only. Base, Optimism, Blast and Scroll: quotes only, because live mode refuses chains with an unbounded L1 data fee (`L1_DATA_FEE_CHAIN_IDS` at `src/chains.ts:287`, enforced at `src/config/guard.ts:94`). HyperCore: orders only. |
 | Approval | "Trades on its own inside per-trade and daily USD caps" | On `main` since #88, the owner approval threshold defaults to none, and hosted swaps and transfers are both priced and counted against the per-trade and daily USD caps. An owner can still set a threshold, and sends above it wait for a passkey approval. The unused approval-mode module was removed in #95. |
 | Hosted gateway | "Sends are dry-run during beta" | Hosted live is not open. |
