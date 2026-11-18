@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createAgent } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
-import type { ExecutorClient } from "../src/gateway/executor-client.js";
+import { ExecutorRefused, type ExecutorClient, type SendReport } from "../src/gateway/executor-client.js";
+import { settleStaleSends } from "../src/gateway/send-ledger.js";
 import { createWallet } from "../src/gateway/wallets.js";
 import type { HostedRequest } from "../src/hosted-commands.js";
 import { gatewayConfig, ORIGIN, signedInAccount } from "./gateway-fixtures.js";
@@ -21,7 +22,13 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const sent: HostedRequest[] = [];
   const failures: Error[] = [];
   const during: (() => Promise<unknown>)[] = [];
+  const reports: (SendReport | Error)[] = [];
   const executor: ExecutorClient = {
+    report: async () => {
+      const next = reports.shift() ?? { executed: false };
+      if (next instanceof Error) throw next;
+      return next;
+    },
     run: async (request) => {
       await during.shift()?.();
       const failure = failures.shift();
@@ -63,7 +70,8 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
     const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "approval.approve", approvalId, command: approval.command } } })).json();
     return app.inject({ method: "POST", url: `/api/approvals/${approvalId}/approve`, headers: user.headers, payload: { assertion: authenticator.assert(stepUp.challenge) } });
   };
-  return { app, pool, user, walletId, sent, failures, during, call, swap, approve, drop: async () => (await app.close(), await drop()) };
+  const sweep = () => settleStaleSends(pool, executor, 0);
+  return { app, pool, user, walletId, sent, failures, during, reports, sweep, call, swap, approve, drop: async () => (await app.close(), await drop()) };
 }
 
 test("a swap is priced by what it sells, so a bad quote cannot slip a large sell past the cap or the threshold", { skip: !TEST_DATABASE_URL }, async () => {
@@ -102,24 +110,70 @@ test("an approved send that waited past its hour is refused, not spent", { skip:
   }
 });
 
-test("an executor failure leaves the approval for the retry, and a spent approval says so instead of asking again", { skip: !TEST_DATABASE_URL }, async () => {
+test("an executor that refuses a send releases the approval at once for the retry, and a spent approval says so", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, user, sent, failures, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
   try {
-    const asked = await swap("flaky-executor", 15);
+    const asked = await swap("refused-by-executor", 15);
     assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
-    failures.push(new Error("executor answered 502"));
-    const failed = await swap("flaky-executor", 15);
+    failures.push(new ExecutorRefused("executor answered 429"));
+    const failed = await swap("refused-by-executor", 15);
     assert.equal(failed.isError, true);
-    const retried = await swap("flaky-executor", 15);
-    assert.equal(retried.isError, false);
+    assert.match(failed.text, /refused the send \(executor answered 429\)\. Nothing was spent/);
+    const retried = await swap("refused-by-executor", 15);
     assert.equal(retried.body?.status, "would_swap");
     assert.equal(sent.length, 1);
-    const replayed = await swap("flaky-executor", 15);
-    assert.equal(replayed.isError, true);
-    assert.match(replayed.text, /already used/);
-    const pending = (await app.inject({ method: "GET", url: "/api/approvals?status=pending", headers: user.headers })).json().approvals;
-    assert.deepEqual(pending, []);
+    assert.match((await swap("refused-by-executor", 15)).text, /already used/);
+    assert.deepEqual((await app.inject({ method: "GET", url: "/api/approvals?status=pending", headers: user.headers })).json().approvals, []);
     assert.equal(sent.length, 1);
+  } finally {
+    await drop();
+  }
+});
+
+test("an executor that does not answer leaves the spend reserved and the approval claimed until the sweeper settles them from the executor's report", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, failures, reports, sweep, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  const state = async (key: string) => ({
+    spend: (await pool.query("SELECT state FROM agent_spends WHERE idempotency_key = $1", [key])).rows[0]?.state,
+    approval: (await pool.query("SELECT status FROM approvals WHERE idempotency_key = $1", [key])).rows[0]?.status,
+  });
+  try {
+    for (const [key, report, settled] of [
+      ["lost-before-broadcast", { executed: false }, { spend: "released", approval: "approved" }],
+      ["lost-after-broadcast", { executed: true, value: { status: "sent" } }, { spend: "committed", approval: "used" }],
+    ] as const) {
+      const asked = await swap(key, 15);
+      assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
+      failures.push(new Error("executor answered 502"));
+      const lost = await swap(key, 15);
+      assert.equal(lost.isError, true);
+      assert.match(lost.text, /may have happened/);
+      assert.deepEqual(await state(key), { spend: "reserved", approval: "claimed" });
+      assert.equal((await swap(key, 15)).body?.status, "settling", "a retry does not reach the executor while the send is unsettled");
+      reports.push(report);
+      assert.equal(await sweep(), 1);
+      assert.deepEqual(await state(key), settled);
+    }
+    assert.equal(sent.length, 0);
+    assert.equal((await swap("lost-before-broadcast", 15)).body?.status, "would_swap", "a released approval can still be used");
+    assert.match((await swap("lost-after-broadcast", 15)).text, /already used/);
+    assert.equal(sent.length, 1);
+    const total = await pool.query("SELECT sum(usd)::float8 AS usd FROM agent_spends WHERE state = 'committed'");
+    assert.equal(total.rows[0].usd, 30);
+  } finally {
+    await drop();
+  }
+});
+
+test("a reservation the sweeper cannot confirm stays reserved and still counts toward the daily cap", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, failures, reports, sweep, swap, drop } = await harness({ approvalAboveUsd: null });
+  try {
+    failures.push(new Error("The operation was aborted due to timeout"));
+    assert.match((await swap("timed-out", 19)).text, /may have happened/);
+    reports.push(new Error("executor answered 503"));
+    assert.equal(await sweep(), 0);
+    assert.equal((await pool.query("SELECT state FROM agent_spends WHERE idempotency_key = 'timed-out'")).rows[0].state, "reserved");
+    assert.equal((await swap("after-timeout", 19)).body?.status, "would_swap");
+    assert.match((await swap("over-with-reserved", 3)).text, /about 41\.00 USD, above this agent's 40\.00 USD daily cap/);
   } finally {
     await drop();
   }
@@ -229,42 +283,43 @@ test("a key spent on a small swap cannot be approved for a larger one and record
   }
 });
 
-test("an approval that expires while the executor runs is refused as expired and counts nothing", { skip: !TEST_DATABASE_URL }, async () => {
-  const { pool, during, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+test("an approval claimed before it expires is honored when it expires while the executor runs, and the send is counted", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, during, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
   try {
     const asked = await swap("expires-mid-run", 15);
     assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
     during.push(() => pool.query("UPDATE approvals SET expires_at = now() - interval '1 second' WHERE idempotency_key = 'expires-mid-run'"));
-    const late = await swap("expires-mid-run", 15);
-    assert.equal(late.isError, true);
-    assert.match(late.text, /expired/);
-    const spends = await pool.query("SELECT 1 FROM agent_spends WHERE idempotency_key = 'expires-mid-run'");
-    assert.equal(spends.rowCount, 0);
-    const planned = await pool.query("SELECT 1 FROM audit_events WHERE action = 'mcp.swap_planned' AND detail->>'idempotencyKey' = 'expires-mid-run'");
-    assert.equal(planned.rowCount, 0);
-    assert.match((await swap("expires-mid-run", 15)).text, /expired/);
+    const ran = await swap("expires-mid-run", 15);
+    assert.equal(ran.isError, false, "the agent is not told denied for a send the executor carried out");
+    assert.equal(ran.body?.status, "would_swap");
+    assert.equal(sent.length, 1);
+    assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key = 'expires-mid-run'")).rows, [{ usd: 15, state: "committed" }]);
+    assert.equal((await pool.query("SELECT 1 FROM audit_events WHERE action = 'mcp.swap_planned' AND detail->>'idempotencyKey' = 'expires-mid-run'")).rowCount, 1);
+    assert.match((await swap("expires-mid-run", 15)).text, /already used/);
   } finally {
     await drop();
   }
 });
 
-test("a burst of retries of one approval answers every caller and leaves the pool free", { skip: !TEST_DATABASE_URL }, async () => {
-  const { pool, during, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+test("a burst of retries of one approval reaches the executor once, answers every caller, and leaves the pool free", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, during, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
   try {
     const asked = await swap("burst", 15);
     assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
-    const callers = 6;
-    let arrived = 0;
     let release: () => void = () => undefined;
-    const barrier = new Promise<void>((resolve) => (release = resolve));
-    for (let index = 0; index < callers; index += 1) during.push(async () => ((arrived += 1), arrived === callers && release(), await barrier));
-    const replies = await Promise.race([
-      Promise.all(Array.from({ length: callers }, () => swap("burst", 15))),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
-    ]);
-    assert.ok(replies, "every caller got an answer");
-    assert.equal(replies.filter((reply) => !reply.isError).length, 1);
-    for (const reply of replies.filter((entry) => entry.isError)) assert.match(reply.text, /already used/);
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let entered: () => void = () => undefined;
+    const inside = new Promise<void>((resolve) => (entered = resolve));
+    during.push(async () => (entered(), await held));
+    const first = swap("burst", 15);
+    await inside;
+    const others = await Promise.race([Promise.all(Array.from({ length: 5 }, () => swap("burst", 15))), new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000))]);
+    assert.ok(others, "every concurrent caller got an answer while the first send was in flight");
+    for (const reply of others) assert.equal(reply.body?.status, "settling");
+    release();
+    assert.equal((await first).body?.status, "would_swap");
+    assert.equal(sent.length, 1);
+    assert.match((await swap("burst", 15)).text, /already used/);
     assert.equal(pool.waitingCount, 0);
   } finally {
     await drop();

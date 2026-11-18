@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { CommandDeps, WalletCommand, WalletResult } from "../commands.js";
 import { run } from "../commands.js";
-import { hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
+import { hostedReportRequestSchema, hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
 import { bearerOf } from "../bearer.js";
 import { anyTokenMatches } from "../http.js";
 import { cachedNetworkCosts, envCostReaders, skippedNetworks, type CostReaders } from "../network-costs.js";
@@ -50,5 +50,10 @@ export function registerHostedRoutes(app: FastifyInstance, options: { token: str
         ? { kind: "swap", status: "would_swap", quote: result.quote, reason: "dry-run: this is the route a live swap would take. nothing was signed" }
         : { kind: "swap", status: "skipped", quote: null, reason: result.reason };
     return plan;
+  });
+  app.post("/hosted/reports", { config: { rateLimit: false } }, async (request, reply) => {
+    if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });
+    if (!hostedReportRequestSchema.safeParse(request.body).success) return reply.code(400).send({ error: "invalid request" });
+    return { executed: false };
   });
 }
