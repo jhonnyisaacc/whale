@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { isAllowanceHolderExec, swapTerms, type SwapTerms } from "./signing-policy/swap-terms.js";
-import { CHAINS, type EvmFeeLimit } from "./chains.js";
+import { chainByEvmId, CHAINS, type EvmFeeLimit } from "./chains.js";
 import { assertTradableAction, type HyperliquidAction } from "./hyperliquid.js";
 
 export * from "./signing-policy/swap-terms.js";
@@ -72,7 +72,23 @@ type EvmSigningInput = {
   approval?: EvmApproval;
 };
 
-export function assertEvmFee(limit: EvmFeeLimit | undefined, tx: { gas: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }): void {
+function evmChain(chainId: number): string {
+  return `${chainByEvmId(chainId)?.key ?? "unknown"} (chain id ${chainId})`;
+}
+
+function refusedOn<T>(chain: string, check: () => T): T {
+  try {
+    return check();
+  } catch (error) {
+    throw new Error(`${chain}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+}
+
+export function assertEvmFee(limit: EvmFeeLimit | undefined, tx: { chainId: number; gas: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }): void {
+  refusedOn(evmChain(tx.chainId), () => checkEvmFee(limit, tx));
+}
+
+function checkEvmFee(limit: EvmFeeLimit | undefined, tx: { gas: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }): void {
   if (!limit) throw new Error("chain has no EVM fee limit in the signing policy");
   if (tx.gas <= 0n || tx.maxPriorityFeePerGas < 0n) throw new Error("EVM fee fields are invalid");
   if (tx.maxPriorityFeePerGas > tx.maxFeePerGas) throw new Error("priority fee exceeds maxFeePerGas");
@@ -81,6 +97,10 @@ export function assertEvmFee(limit: EvmFeeLimit | undefined, tx: { gas: bigint; 
 }
 
 export function assertEvmSigning(input: EvmSigningInput): void {
+  refusedOn(evmChain(input.chainId), () => checkEvmSigning(input));
+}
+
+function checkEvmSigning(input: EvmSigningInput): void {
   if (!evmChainIds().includes(input.chainId)) throw new Error("chain is not in the signing policy");
   if (input.value < 0n || input.value > input.maxValueWei) throw new Error("native value exceeds the signing policy");
   const to = input.to.toLowerCase();
@@ -313,14 +333,20 @@ const SOLANA_INSTRUCTION_TABLE: Readonly<Record<string, ProgramRules>> = {
   },
 };
 
-export function assertSolanaSigning(input: {
+type SolanaSigningInput = {
   message: SolanaMessage;
   expectedFeePayer: string;
   allowlist: readonly string[];
   withdrawAllowlist: readonly string[];
   maxTipLamports: number;
   maxPriorityLamports: number;
-}): void {
+};
+
+export function assertSolanaSigning(input: SolanaSigningInput): void {
+  refusedOn("solana", () => checkSolanaSigning(input));
+}
+
+function checkSolanaSigning(input: SolanaSigningInput): void {
   const payer = input.expectedFeePayer;
   if (input.message.feePayer !== payer) throw new Error("solana fee payer is not the hot wallet");
   const allowed = new Set(input.allowlist);
@@ -347,6 +373,8 @@ export function assertSolanaSigning(input: {
 }
 
 export function assertHyperliquidSigning(action: { type: string }, maxLeverage: number): asserts action is HyperliquidAction {
-  assertTradableAction(action);
-  if (action.type === "updateLeverage" && action.leverage > maxLeverage) throw new Error("leverage exceeds the signing policy");
+  refusedOn("hypercore", () => {
+    assertTradableAction(action);
+    if (action.type === "updateLeverage" && action.leverage > maxLeverage) throw new Error("leverage exceeds the signing policy");
+  });
 }

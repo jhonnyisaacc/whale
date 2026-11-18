@@ -121,6 +121,66 @@
       },
       "expect": "refused",
       "reason": "lookup table"
+    },
+    {
+      "name": "an instruction whose program comes from a lookup table",
+      "job": {
+        "id": "an instruction whose program comes from a lookup table",
+        "kind": "solana",
+        "message": "gAEAAQKgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgEAAQEBBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcBAQA="
+      },
+      "expect": "refused",
+      "reason": "names its program through a lookup table"
+    },
+    {
+      "name": "a System instruction other than a SOL transfer",
+      "job": {
+        "id": "a System instruction other than a SOL transfer",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAgIAAQQAAAAA"
+      },
+      "expect": "refused",
+      "reason": "only a SOL transfer from this wallet"
+    },
+    {
+      "name": "an unknown compute budget instruction",
+      "job": {
+        "id": "an unknown compute budget instruction",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAACQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAwABCQ=="
+      },
+      "expect": "refused",
+      "reason": "unknown compute budget instruction"
+    },
+    {
+      "name": "a token transfer to an unlisted token account",
+      "job": {
+        "id": "a token transfer to an unlisted token account",
+        "kind": "solana",
+        "message": "AQADBKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwRERERERERERERERERERERERERERERERERERERERERETG+nrzvtutOj1l82qryXQxrlNAqeExeiNi2EzrlEVRBgbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkBAwQAAgEACgwBAAAAAAAAAAY="
+      },
+      "expect": "refused",
+      "reason": "may only pay a listed token account"
+    },
+    {
+      "name": "a token approve",
+      "job": {
+        "id": "a token approve",
+        "kind": "solana",
+        "message": "AQACA6CapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwREREREREREREREREREREREREREREREREREREREREREQG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJAQIDAAEACQQBAAAAAAAAAA=="
+      },
+      "expect": "refused",
+      "reason": "this token instruction is not allowed"
+    },
+    {
+      "name": "an associated token account funded by a stranger",
+      "job": {
+        "id": "an associated token account funded by a stranger",
+        "kind": "solana",
+        "message": "AQAHCKCapfR6Z1mAL/lV+NwtKhSlyZ0jvpf4ZBJ/+Tg0VaTwFI0DhoPAm22emH7QexJS8QoOKORFDTtT+BYdXwcQkwkzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM8b6evO+2606PWXzaqvJdDGuU0Cp4TF6I2LYTOuURVEGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqYyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZREREREREREREREREREREREREREREREREREREREREREQJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQEGBgcBAgMEBQEB"
+      },
+      "expect": "refused",
+      "reason": "must be funded by this wallet"
     }
   ]
 }

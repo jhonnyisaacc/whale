@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { Hex } from "viem";
+import { CHAINS } from "../src/chains.js";
 import { JUPITER_PROGRAM_ID } from "../src/signing-policy.js";
 import { swapTerms } from "../src/signing-policy/swap-terms.js";
 
@@ -20,4 +21,10 @@ test("the app's swap decoder reads the same recipient as the self-hosted signer'
 test("the example signer policy lists the Jupiter program the app signs for", () => {
   const policy = JSON.parse(readFileSync(new URL("../../signer/vectors/policy.json", import.meta.url), "utf8")) as { solana: { programs: string[] } };
   assert.deepEqual(policy.solana.programs, [JUPITER_PROGRAM_ID]);
+});
+
+test("the self-hosted signer names the same EVM chains as the app's chain table", () => {
+  const signer = JSON.parse(readFileSync(new URL("../../signer/vectors/chains.json", import.meta.url), "utf8")) as unknown;
+  const app = CHAINS.flatMap(({ key, chain }) => (chain.kind === "evm" ? [{ key, chainId: chain.chainId }] : []));
+  assert.deepEqual(signer, app, "run node signer/vectors/generate.mjs after a chain table change");
 });

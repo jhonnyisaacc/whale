@@ -29,7 +29,7 @@ pub fn run_job(
         Ok(ledger) => ledger,
         Err(error) => return refused(vec![error]),
     };
-    let (decision, work, sign): (policy::Decision, Vec<u8>, Sign<'_>) = match job
+    let (chain, decision, work, sign): (String, policy::Decision, Vec<u8>, Sign<'_>) = match job
         .get("kind")
         .and_then(Value::as_str)
     {
@@ -39,6 +39,7 @@ pub fn run_job(
                     let decision = policy.check_evm(&tx, keystore::evm_address_bytes(&keys.evm));
                     let work = evm::signing_hash(&tx).to_vec();
                     (
+                        evm::chain_label(tx.chain_id),
                         decision,
                         work,
                         Box::new(move || {
@@ -63,6 +64,7 @@ pub fn run_job(
                     let decision =
                         policy.check_solana(&message, keys.solana.verifying_key().to_bytes());
                     (
+                        "solana".into(),
                         decision,
                         bytes.clone(),
                         Box::new(move || {
@@ -74,6 +76,14 @@ pub fn run_job(
             }
         }
         _ => return refused(vec!["kind must be evm or solana".into()]),
+    };
+    let refused = |reasons: Vec<String>| {
+        refused(
+            reasons
+                .into_iter()
+                .map(|reason| format!("{chain}: {reason}"))
+                .collect(),
+        )
     };
     if !decision.allowed() {
         return refused(decision.reasons);

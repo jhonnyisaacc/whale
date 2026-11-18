@@ -14,6 +14,30 @@ pub struct Tx {
     pub data: Vec<u8>,
 }
 
+const CHAIN_KEYS: [(u64, &str); 13] = [
+    (1, "ethereum"),
+    (10, "optimism"),
+    (56, "bnb"),
+    (137, "polygon"),
+    (324, "zksync"),
+    (8453, "base"),
+    (42161, "arbitrum"),
+    (59144, "linea"),
+    (81457, "blast"),
+    (534352, "scroll"),
+    (4663, "robinhood"),
+    (999, "hyperevm"),
+    (143, "monad"),
+];
+
+pub fn chain_label(chain_id: u64) -> String {
+    let key = CHAIN_KEYS
+        .iter()
+        .find(|(id, _)| *id == chain_id)
+        .map_or("unknown", |(_, key)| key);
+    format!("{key} (chain id {chain_id})")
+}
+
 fn number(raw: &Value, name: &str) -> Result<u128, String> {
     let text = raw
         .get(name)
