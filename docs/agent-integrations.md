@@ -1,6 +1,6 @@
 # Rocket on agent hosts
 
-One wallet serves three hosts. The MCP server and the skills stay the same. Only the manifest differs.
+One wallet serves four hosts. The MCP server and the skills stay the same. Only the manifest differs.
 
 | Host | Manifest | Agent definition |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Install this directory as a Claude plugin, or copy `agents/claude/rocket-wallet.
 
 ## Muse (Meta)
 
-Install this directory as a Muse plugin. The manifest at `.muse-plugin/plugin.json` declares the three rocket skills and the `rocket` MCP server, which Muse starts as `node dist/src/mcp-server.js` from the plugin root. Register `agents/muse/rocket-wallet.md` as an Agent Definition when a dedicated wallet agent is wanted. A test keeps its rules in step with the Claude and Codex definitions.
+Install this directory as a Muse plugin. The manifest at `.muse-plugin/plugin.json` declares the `whale-wallet` skill and the `whale` MCP server, which Muse starts as `node dist/src/mcp-server.js` from the plugin root. Register `agents/muse/rocket-wallet.md` as an Agent Definition when a dedicated wallet agent is wanted. A test keeps its rules in step with the Claude and Codex definitions.
 
 ## Codex
 
