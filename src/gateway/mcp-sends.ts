@@ -81,6 +81,13 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   const recorded = await recordedSpend(pool, agent, command);
   if (recorded === "conflict") return deny(KEY_REUSED);
   if (recorded === "reserved") return settling;
+  const ids = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId };
+  if (recorded === "committed") {
+    const report = await executor.report({ ...ids, idempotencyKey: command.idempotencyKey, issuedBefore: await issuedNow(pool) });
+    if (report.state === "executed") return { ok: true, value: report.value };
+    if (report.state === "in_progress") return settling;
+    return deny("Whale counted this send as done but the executor has no record of it, so Whale did not run it again. Use a new idempotencyKey for a new send");
+  }
   const approval = await approvalFor(pool, agent, command.idempotencyKey, command);
   if (approval === "conflict") return deny(KEY_REUSED);
   if (approval === "claimed") return settling;
@@ -89,8 +96,6 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (approval === "expired") return deny("the approval request expired. Ask again with a new idempotencyKey");
   if (approval === "pending") return { ok: true, value: { status: "approval_pending", reason: "the owner has not answered yet. Call again later with the same idempotencyKey" } };
   const approved = approval === "approved";
-  const ids = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId };
-  if (recorded === "committed") return { ok: true, value: await executor.run({ ...ids, command, issuedAt: await issuedNow(pool) }) };
   const [what, verb] = command.kind === "swap" ? ["the swap", "sells"] : ["the transfer", "moves"];
   const estimate = await sendUsd(executor, agent, command, taker);
   if (estimate === null) return deny(`${what} ${verb} a token Whale could not price on ${command.chainKey}, so Whale refused it. No approval was requested and nothing was sent`);

@@ -30,10 +30,12 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const quoted: QuoteCommand[] = [];
   const failures: Error[] = [];
   const during: (() => Promise<unknown>)[] = [];
+  const journal = new Map<string, unknown>();
   const reports: (SendReport | Error | (() => Promise<SendReport>))[] = [];
   const executor: ExecutorClient = {
-    report: async () => {
-      const next = reports.shift() ?? { state: "not_started" };
+    report: async (lookup) => {
+      const stored = journal.get(lookup.idempotencyKey);
+      const next = reports.shift() ?? (stored === undefined ? { state: "not_started" } : { state: "executed", value: stored });
       if (next instanceof Error) throw next;
       return typeof next === "function" ? next() : next;
     },
@@ -47,7 +49,9 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
       const failure = failures.shift();
       if (failure) throw failure;
       sent.push(request);
-      return { kind: "swap", status: "would_swap", quote: { buyAmount: "42", feeUsd: 0, netOutputUsd: options.netOutputUsd } };
+      const value = { kind: "swap", status: "would_swap", quote: { buyAmount: "42", feeUsd: 0, netOutputUsd: options.netOutputUsd } };
+      if ("idempotencyKey" in request.command) journal.set(request.command.idempotencyKey, value);
+      return value;
     },
   };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor, turnkey: null, delegation: null });
@@ -125,7 +129,7 @@ test("an approved send that waited past its hour is refused, not spent", { skip:
   }
 });
 
-test("an executor that refuses a send releases the approval at once for the retry, and a spent approval says so", { skip: !TEST_DATABASE_URL }, async () => {
+test("an executor that refuses a send releases the approval at once for the retry, and a retry of the spent approval gets the stored answer", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, user, sent, failures, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
   try {
     const asked = await swap("refused-by-executor", 15);
@@ -137,7 +141,7 @@ test("an executor that refuses a send releases the approval at once for the retr
     const retried = await swap("refused-by-executor", 15);
     assert.equal(retried.body?.status, "would_swap");
     assert.equal(sent.length, 1);
-    assert.match((await swap("refused-by-executor", 15)).text, /already used/);
+    assert.equal((await swap("refused-by-executor", 15)).body?.status, "would_swap", "a retry of the spent approval gets the stored answer and does not run again");
     assert.deepEqual((await app.inject({ method: "GET", url: "/api/approvals?status=pending", headers: user.headers })).json().approvals, []);
     assert.equal(sent.length, 1);
   } finally {
@@ -170,7 +174,9 @@ test("an executor that does not answer leaves the spend reserved and the approva
     }
     assert.equal(sent.length, 0);
     assert.equal((await swap("lost-before-broadcast", 15)).body?.status, "would_swap", "a released approval can still be used");
-    assert.match((await swap("lost-after-broadcast", 15)).text, /already used/);
+    reports.push({ state: "executed", value: { status: "sent" } });
+    const replayed = await swap("lost-after-broadcast", 15);
+    assert.deepEqual(replayed.body, { status: "sent" }, "a retry after the sweeper committed the send gets the executor's answer, not a request for a new key");
     assert.equal(sent.length, 1);
     const total = await pool.query("SELECT sum(usd)::float8 AS usd FROM agent_spends WHERE state = 'committed'");
     assert.equal(total.rows[0].usd, 30);
@@ -324,7 +330,7 @@ test("a key spent on an earlier UTC day refuses a different swap, and a retry of
     assert.equal(reused.isError, true);
     assert.match(reused.text, /already used for a different command/);
     assert.equal((await swap("yesterday-key", 19)).body?.status, "would_swap");
-    assert.equal(sent.length, 2);
+    assert.equal(sent.length, 1, "the retry reads the stored answer and does not run again");
     assert.deepEqual(await spends(pool), [{ idempotency_key: "yesterday-key", usd: 19, day: yesterday }]);
   } finally {
     await drop();
@@ -358,7 +364,7 @@ test("an approval claimed before it expires is honored when it expires while the
     assert.equal(sent.length, 1);
     assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key = 'expires-mid-run'")).rows, [{ usd: 15, state: "committed" }]);
     assert.equal((await pool.query("SELECT 1 FROM audit_events WHERE action = 'mcp.swap_planned' AND detail->>'idempotencyKey' = 'expires-mid-run'")).rowCount, 1);
-    assert.match((await swap("expires-mid-run", 15)).text, /already used/);
+    assert.equal((await swap("expires-mid-run", 15)).body?.status, "would_swap", "a retry of the spent approval gets the stored answer and does not run again");
   } finally {
     await drop();
   }
@@ -382,7 +388,7 @@ test("a burst of retries of one approval reaches the executor once, answers ever
     release();
     assert.equal((await first).body?.status, "would_swap");
     assert.equal(sent.length, 1);
-    assert.match((await swap("burst", 15)).text, /already used/);
+    assert.equal((await swap("burst", 15)).body?.status, "would_swap", "a retry of the spent approval gets the stored answer and does not run again");
     assert.equal(pool.waitingCount, 0);
   } finally {
     await drop();
@@ -488,15 +494,17 @@ test("a native-asset transfer over the per-transaction cap is refused, with no a
 
 test("a retry of a send already committed is not priced again, so a quote outage cannot call it unsent", { skip: !TEST_DATABASE_URL }, async () => {
   let quotes = true;
-  const { pool, sent, quoted, transfer, drop } = await harness({ approvalAboveUsd: null, quoteUsd: (command) => (quotes ? ethAt(3000)(command) : null) });
+  const { pool, sent, quoted, reports, transfer, drop } = await harness({ approvalAboveUsd: null, quoteUsd: (command) => (quotes ? ethAt(3000)(command) : null) });
   try {
     assert.equal((await transfer("eth-retry", 0, ETH, eth(0.005))).isError, false);
     quotes = false;
     const asked = quoted.length;
+    reports.push({ state: "executed", value: { kind: "transfer", status: "would_send" } });
     const retried = await transfer("eth-retry", 0, ETH, eth(0.005));
     assert.equal(retried.isError, false, retried.text);
+    assert.equal(retried.body?.status, "would_send");
     assert.equal(quoted.length, asked);
-    assert.equal(sent.length, 2);
+    assert.equal(sent.length, 1, "the retry reads the executor's record and does not run the send again");
     assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key = 'eth-retry'")).rows, [{ usd: 15, state: "committed" }]);
   } finally {
     await drop();
