@@ -136,9 +136,27 @@ test("a Hermes stdio server whose script is gone fails", () => {
   rejects((dir) => editHermesServer(dir, (server) => { server.args = ["dist/src/gone.js"]; }), /^plugin\.json: MCP server whale runs dist\/src\/gone\.js/);
 });
 
-test("a Hermes server env that drifts from what src/mcp-server.ts reads fails", () => {
-  rejects((dir) => editHermesServer(dir, (server) => { server.env.WHALE_TYPO = "${WHALE_TYPO}"; }), /^plugin\.json: MCP server whale forwards WHALE_TYPO, which src\/mcp-server\.ts does not read/);
+test("a Hermes server env that drifts from what Whale reads fails", () => {
+  rejects((dir) => editHermesServer(dir, (server) => { server.env.WHALE_TYPO = "${WHALE_TYPO}"; }), /^plugin\.json: MCP server whale forwards WHALE_TYPO, which Whale does not read/);
   rejects((dir) => editHermesServer(dir, (server) => { delete server.env.EXECUTOR_AUTH_TOKEN; }), /^plugin\.json: MCP server whale does not forward EXECUTOR_AUTH_TOKEN/);
+  rejects((dir) => editHermesServer(dir, (server) => { delete server.env.SOLANA_RPC_URL; }), /^plugin\.json: MCP server whale does not forward SOLANA_RPC_URL/);
+  rejects((dir) => editHermesServer(dir, (server) => { delete server.env.RPC_URLS_8453; }), /^plugin\.json: MCP server whale does not forward RPC_URLS_8453/);
+  rejects((dir) => editHermesServer(dir, (server) => { delete server.env.ZEROX_API_KEY; }), /^plugin\.json: MCP server whale does not forward ZEROX_API_KEY/);
   rejects((dir) => editHermesServer(dir, (server) => { server.env.EXECUTOR_URL = "http://127.0.0.1:8788"; }), /^plugin\.json: MCP server whale must pass EXECUTOR_URL through as \$\{EXECUTOR_URL\}/);
   rejects((dir) => writeFileSync(path.join(dir, "src/mcp-server.ts"), `${readFileSync(path.join(dir, "src/mcp-server.ts"), "utf8")}\nprocess.env.WHALE_NEW;\n`), /^plugin\.json: MCP server whale does not forward WHALE_NEW/);
+});
+
+test("a Hermes server that forwards the retired AUTH_TOKEN fails", () => {
+  rejects((dir) => editHermesServer(dir, (server) => { server.env.AUTH_TOKEN = "${AUTH_TOKEN}"; }), /^plugin\.json: MCP server whale forwards AUTH_TOKEN, which Whale retired/);
+});
+
+test("a Hermes stdio entry the Hermes loader would skip fails", () => {
+  rejects((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).timeout = 30; }), /^plugin\.json: MCP server whale has timeout, which is not an Agent Plugins v1 stdio field/);
+  rejects((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).cwd = "dist"; }), /^plugin\.json: MCP server whale cwd dist must start with/);
+  rejects((dir) => editHermesServer(dir, (server) => { server.args = ["${CLAUDE_PLUGIN_ROOT}/dist/src/mcp-server.js"]; }), /^plugin\.json: MCP server whale runs \$\{CLAUDE_PLUGIN_ROOT\}/);
+});
+
+test("a Hermes server path under the Hermes plugin root variable passes", () => {
+  accepts((dir) => editHermesServer(dir, (server) => { server.args = ["${PLUGIN_ROOT}/dist/src/mcp-server.js"]; }));
+  accepts((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).cwd = "./"; }));
 });

@@ -36,18 +36,25 @@ Hermes installs this repo as a portable Agent Plugins v1 package. It reads the r
 2. Build it where Hermes put it. For the default profile, that is `~/.hermes/plugins/whale`. Run `pnpm install --frozen-lockfile && pnpm run build` there. Build again after each `hermes plugins update`.
 3. Enable it with `hermes plugins enable whale`.
 
-Hermes starts the `whale` server as `node dist/src/mcp-server.js` from the package root. A stdio server gets only the variables that its entry lists, plus a safe baseline. `mcp.json` forwards `EXECUTOR_URL`, `EXECUTOR_AUTH_TOKEN`, `AUTH_TOKEN`, `WHALE_GATEWAY_URL`, and `WHALE_API_KEY` from your shell or profile `.env`. Each entry is written as `${NAME}`, so the file holds no value, and Hermes drops a variable that is unset. A test fails when `src/mcp-server.ts` reads a variable that `mcp.json` does not forward.
+Hermes starts the `whale` server as `node dist/src/mcp-server.js` from the package root. A stdio server gets only the variables that its entry lists, plus a safe baseline. `mcp.json` forwards these variables from your shell or profile `.env`:
 
-Other settings, such as RPC URLs or quote provider keys, need their own entry. Define the server in `~/.hermes/config.yaml` under `mcp_servers.whale`. That entry replaces the package's server:
+- `EXECUTOR_URL`, `EXECUTOR_AUTH_TOKEN`, `WHALE_GATEWAY_URL`, and `WHALE_API_KEY`.
+- Each chain's RPC variable and its list form, such as `SOLANA_RPC_URL` and `RPC_URL_8453` or `RPC_URLS_8453`. `balance` needs the RPC variable of the chain it reads.
+- The quote provider keys `ZEROX_API_KEY`, `JUPITER_API_KEY`, `LIFI_API_KEY`, `ONEINCH_API_KEY`, and `OKX_API_KEY`. `quote` needs at least one.
+
+Each entry is written as `${NAME}`, so the file holds no value, and Hermes drops a variable that is unset. A test fails when the server reads one of these variables and `mcp.json` does not forward it. The retired `AUTH_TOKEN` is not forwarded. Use `EXECUTOR_AUTH_TOKEN`.
+
+Any other setting, such as `ENABLED_CHAINS`, needs its own entry. Define the server in `~/.hermes/config.yaml` under `mcp_servers.whale`. That entry replaces the package's server, so list every variable the server needs:
 
 ```yaml
 mcp_servers:
   whale:
     command: "node"
-    args: ["/home/you/.hermes/plugins/whale/dist/src/mcp-server.js"]
+    args: ["${HOME}/.hermes/plugins/whale/dist/src/mcp-server.js"]
     env:
       EXECUTOR_URL: "http://127.0.0.1:8788"
       EXECUTOR_AUTH_TOKEN: "<executor token>"
+      ENABLED_CHAINS: "<chain keys>"
 ```
 
 To use the hosted gateway without a checkout, add a remote entry to `~/.hermes/config.yaml` instead. Then run `hermes mcp login whale` from a new terminal to sign in:

@@ -1,5 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { CHAINS } from "../src/chains.js";
+import { QUOTE_KEY_NAMES } from "../src/command-callers.js";
+import { rpcListEnv } from "../src/config/load.js";
 
 type Json = Record<string, unknown>;
 type SkillSource = { kind: "dir"; path: string } | { kind: "file"; path: string };
@@ -8,6 +11,8 @@ type HostRefs = { skills: SkillSource[]; mcp: McpSource[]; errors: string[] };
 
 const agentPluginSchema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 const agentMcpSchema = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
+const agentStdioFields = ["type", "command", "args", "env", "cwd"];
+const retiredEnv = ["AUTH_TOKEN"];
 
 const hosts: Record<string, (manifest: Json) => HostRefs> = {
   ".claude-plugin/plugin.json": (manifest) => pointerHost(manifest, { skills: "./skills/", mcpServers: "./.mcp.json" }),
@@ -146,19 +151,28 @@ function checkAgentPluginMcp(root: string, file: string): string[] {
   if (Object.keys(json).sort().join() !== "$schema,mcpServers" || json.$schema !== agentMcpSchema) return [`${file} must hold only $schema ${agentMcpSchema} and mcpServers`];
   const servers = json.mcpServers;
   if (typeof servers !== "object" || servers === null || Object.keys(servers).length === 0) return [`${file} declares no MCP server`];
-  const read = mcpServerEnv(root);
+  const read = forwardedEnv(root);
   return Object.entries(servers as Record<string, Json>).flatMap(([id, server]) => {
     if (server.type !== "stdio") return [`MCP server ${id} must use the stdio transport`];
+    const errors = Object.keys(server).filter((key) => !agentStdioFields.includes(key)).map((key) => `MCP server ${id} has ${key}, which is not an Agent Plugins v1 stdio field`);
+    const cwd = server.cwd;
+    if (cwd !== undefined && (typeof cwd !== "string" || !/^(\.\/|\$\{PLUGIN_(ROOT|DATA)\}(\/|$))/.test(cwd))) errors.push(`MCP server ${id} cwd ${String(cwd)} must start with ./, \${PLUGIN_ROOT}, or \${PLUGIN_DATA}`);
     const args = Array.isArray(server.args) ? server.args : [];
-    const errors = checkCommand(root, id, [server.command, ...args]);
+    errors.push(...checkCommand(root, id, [server.command, ...args], "PLUGIN_ROOT"));
     const env = typeof server.env === "object" && server.env !== null ? (server.env as Json) : {};
     for (const [name, value] of Object.entries(env)) {
-      if (!read.includes(name)) errors.push(`MCP server ${id} forwards ${name}, which src/mcp-server.ts does not read`);
+      if (retiredEnv.includes(name)) errors.push(`MCP server ${id} forwards ${name}, which Whale retired`);
+      else if (!read.includes(name)) errors.push(`MCP server ${id} forwards ${name}, which Whale does not read`);
       else if (value !== `\${${name}}`) errors.push(`MCP server ${id} must pass ${name} through as \${${name}}, not a value`);
     }
-    for (const name of read) if (!(name in env)) errors.push(`MCP server ${id} does not forward ${name}, which src/mcp-server.ts reads`);
+    for (const name of read) if (!Object.hasOwn(env, name)) errors.push(`MCP server ${id} does not forward ${name}, which Whale reads`);
     return errors;
   });
+}
+
+function forwardedEnv(root: string): string[] {
+  const rpc = CHAINS.flatMap((chain) => [chain.rpcEnv, rpcListEnv(chain.rpcEnv) ?? []].flat());
+  return [...new Set([...mcpServerEnv(root).filter((name) => !retiredEnv.includes(name)), ...rpc, ...QUOTE_KEY_NAMES])];
 }
 
 function mcpServerEnv(root: string): string[] {
@@ -171,10 +185,11 @@ function mcpServerEnv(root: string): string[] {
   return [...new Set([...text.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)].map((match) => match[1]))];
 }
 
-function checkCommand(root: string, id: string, command: unknown): string[] {
+function checkCommand(root: string, id: string, command: unknown, rootVar = "CLAUDE_PLUGIN_ROOT"): string[] {
   const script = Array.isArray(command) && command[0] === "node" ? command.slice(1).find((arg) => typeof arg !== "string" || !arg.startsWith("-")) : undefined;
   if (typeof script !== "string") return [`MCP server ${id} must run node with a script path`];
-  const rel = inside(script.replace(/^\$\{CLAUDE_PLUGIN_ROOT\}\//, ""));
+  const prefix = "${" + rootVar + "}/";
+  const rel = inside(script.startsWith(prefix) ? script.slice(prefix.length) : script);
   if (rel === undefined) return [`MCP server ${id} runs ${script}, which is outside the plugin root`];
   const errors: string[] = [];
   if (!existsSync(path.join(root, rel))) errors.push(`MCP server ${id} runs ${rel}, which does not exist`);
