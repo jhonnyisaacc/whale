@@ -366,6 +366,7 @@ test("an untagged holding funds an alternate chain", async () => {
   const runtime: ExecutorDeps = {
     config,
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: async (hop) => {
       kinds.push(hop.chain.kind);
@@ -495,6 +496,7 @@ test("a null or thrown read skips that holding and the other chain still quotes"
     {
       config,
       mode: "live",
+      liquidityOf: async () => 2_000_000,
       spentTodayUsd: 0,
       quoteHop: async (hop) => {
         if (hop.chain.kind === "solana") throw new Error("solana quote failed");
@@ -569,6 +571,7 @@ test("live support tiers fall through to a live alternate and never quote a non-
       enabledChainKeys: new Set(["zksync", "base", "monad"]),
     },
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: async (hop) => {
       const chainId = hop.chain.kind === "evm" ? hop.chain.chainId : 0;
@@ -636,6 +639,7 @@ test("a flagged alternate is never quoted or sent, and a disabled hypercore rout
       enabledChainKeys: new Set(["ethereum", "base"]),
     },
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: async (hop) => {
       const chainId = hop.chain.kind === "evm" ? hop.chain.chainId : 0;
@@ -709,6 +713,7 @@ test("a flagged alternate is never quoted or sent, and a disabled hypercore rout
       enabledChainKeys: new Set(enabled),
     },
     mode: "live",
+    liquidityOf: async () => 100,
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
@@ -817,6 +822,7 @@ test("screening a denied primary still sends a clean alternate", async () => {
       enabledChainKeys: new Set(["ethereum", "base"]),
     },
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => null,

@@ -246,6 +246,7 @@ function liveDeps(send: ExecutorDeps["send"], spend: Map<string, string>, record
   return {
     config: { ...evmConfig, enabledChainKeys: new Set(["base"]), minExecutionSlippageBps: 20, quoteAssets: { base: [{ address: WETH, symbol: "WETH", decimals: 18 }] } },
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: async (hop) => {
       if (hop.sellAddress === USDC && hop.buyAddress === TOKEN) {
@@ -575,6 +576,7 @@ test("hyperliquid replies decide commit or release", async () => {
       ...liveDeps((request, onTx) => broadcastRoute(hyperConfig, evmSigner([]), request, 1, exchange(reply, seen), [], { onTx }), spend, [], false),
       config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
       markPrice: async () => 1,
+      liquidityOf: async () => 100,
       szDecimals: async () => 2,
     };
     const report = await execute(hyperIntent(key), deps);
@@ -604,6 +606,7 @@ test("a hyperliquid spot buy sends only the order, with no leverage action", asy
     ...liveDeps((request, onTx) => broadcastRoute(hyperConfig, evmSigner([]), request, 1, exchange(filled, seen), [], { onTx }), new Map(), [], false),
     config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
     markPrice: async () => 1,
+    liquidityOf: async () => 100,
     szDecimals: async () => 2,
   };
   const spot = { ...hyperIntent("hl-spot"), hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot" as const, maxLeverage: 1 } };
@@ -664,6 +667,7 @@ test("a hyperliquid sizing failure is skipped, not thrown", async () => {
     ...liveDeps(async () => assert.fail("must not send"), new Map(), [], false),
     config: { ...evmConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
     markPrice: async () => 1,
+    liquidityOf: async () => 100,
     szDecimals: async () => null,
   });
   assert.equal(report.decision, "skipped");

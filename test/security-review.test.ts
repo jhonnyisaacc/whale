@@ -68,6 +68,7 @@ function runtime(config: ReturnType<typeof loadConfig>, sends: string[], quote: 
   return {
     config,
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: quote,
     markPrice: async () => 1,
