@@ -300,6 +300,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     return report;
   }
   const screening = keepScreened(intent, deps);
+  const lookup = liquidityLookup(intent, deps);
   const rejected = () => {
     const report = skipped(intent, { alertReceivedMs: intent.receivedAtMs }, "token screening rejected the contract", intent.token.chainKey, deps.mode);
     reportsOf(deps).set(intent.idempotencyKey, report);
@@ -315,10 +316,10 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   let latency: Latency = { alertReceivedMs: intent.receivedAtMs };
   latency = stamp(latency, "resolvedMs", now());
   const spec = chainByKey(intent.token.chainKey);
-  const liquidityOf = await liquidityLookup(intent, deps);
+  const liquidityOf = await lookup;
   const liquidity = liquidityOf(intent.token);
   const liquidAlternate = alternates.some((token) => (liquidityOf(token).usd ?? 0) >= deps.config.minLiquidityUsd);
-  const useHyper = intent.hyperliquid !== null && (liquidity.usd === null || liquidity.usd < deps.config.minLiquidityUsd) && !liquidAlternate;
+  const useHyper = intent.hyperliquid !== null && (liquidity.usd === null ? liquidity.source === "caller" : liquidity.usd < deps.config.minLiquidityUsd) && !liquidAlternate;
   const venueChain = useHyper ? { kind: "hypercore" as const, market: intent.hyperliquid?.market ?? "perp" } : intent.token.chain;
   const venueKey = useHyper ? "hypercore" : intent.token.chainKey;
   const limits = checkLimits(deps.config, {
@@ -330,7 +331,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     chainKey: venueKey,
     liquidity,
   });
-  if (!limits.ok && !(limits.reason.startsWith("chain ") && alternates.length > 0)) return blockReport(intent, deps, latency, venueKey, limits.reason);
+  if (!limits.ok && !(/^(chain |liquidity unknown$)/.test(limits.reason) && alternates.length > 0)) return blockReport(intent, deps, latency, venueKey, limits.reason);
   if (!limits.ok) primaryBlocked = limits.reason;
   const tierOff = liveTierBlocked(deps.mode, deps.supportTierFor, intent.token.chainKey);
   if (deps.mode === "live" && !useHyper && (spec?.liveSend === "disabled" || tierOff)) {

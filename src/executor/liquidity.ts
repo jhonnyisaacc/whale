@@ -9,7 +9,7 @@ import { readVendorText, vendorResponse } from "../vendor-fetch.js";
 
 export type LiquidityOf = (token: { chainKey: string; address: string }) => Promise<number | null>;
 
-type LiquidityConfig = Pick<AppConfig, "dexscreenerBase" | "dexscreenerSlugOverrides" | "quoteAssets" | "priceTimeoutMs" | "liquidityRefreshMs">;
+type LiquidityConfig = Pick<AppConfig, "dexscreenerBase" | "dexscreenerSlugOverrides" | "quoteAssets" | "priceTimeoutMs">;
 
 const pairsSchema = z.array(
   z
@@ -39,17 +39,13 @@ export function deepestQuotedPoolUsd(pairs: readonly Pair[], chainKey: string, s
   return deepest;
 }
 
-export function dexscreenerLiquidity(config: LiquidityConfig, fetchImpl: typeof fetch = fetch, now: () => number = Date.now): LiquidityOf {
+export function dexscreenerLiquidity(config: LiquidityConfig, fetchImpl: typeof fetch = fetch): LiquidityOf {
   const slugs = new Map<string, string>();
   for (const [slug, chainKey] of dexscreenerSlugMap(config.dexscreenerSlugOverrides)) slugs.set(chainKey, slug);
   const base = config.dexscreenerBase.replace(/\/$/, "");
-  const cache = new Map<string, { usd: number; atMs: number }>();
   return async ({ chainKey, address }) => {
     const slug = slugs.get(chainKey);
     if (!slug) return null;
-    const key = `${chainKey}:${addressKey(chainKey, address)}`;
-    const hit = cache.get(key);
-    if (hit && now() - hit.atMs <= config.liquidityRefreshMs) return hit.usd;
     try {
       const pairs = await withTimeout(config.priceTimeoutMs, async (signal) => {
         const url = `${base}/token-pairs/v1/${encodeURIComponent(slug)}/${encodeURIComponent(address)}`;
@@ -57,9 +53,7 @@ export function dexscreenerLiquidity(config: LiquidityConfig, fetchImpl: typeof 
         if (!response.ok) throw new Error(`liquidity lookup failed ${response.status}`);
         return pairsSchema.parse(JSON.parse(await readVendorText(response)));
       });
-      const usd = deepestQuotedPoolUsd(pairs, chainKey, slug, address, config.quoteAssets);
-      cache.set(key, { usd, atMs: now() });
-      return usd;
+      return deepestQuotedPoolUsd(pairs, chainKey, slug, address, config.quoteAssets);
     } catch {
       return null;
     }
@@ -72,10 +66,10 @@ function tokenId(token: SwapIntent["token"]): string {
 
 export async function liquidityLookup(intent: SwapIntent, deps: Pick<ExecutorDeps, "mode" | "config" | "liquidityOf">): Promise<(token: SwapIntent["token"]) => Liquidity> {
   if (deps.mode !== "live") return (token) => ({ source: "caller", usd: token.pairMap.top?.liquidityUsd ?? null });
-  const tokens = [intent.token, ...(intent.alternates ?? [])].filter((token) => deps.config.enabledChainKeys.has(token.chainKey));
+  const tokens = new Map([intent.token, ...(intent.alternates ?? [])].filter((token) => deps.config.enabledChainKeys.has(token.chainKey)).map((token) => [tokenId(token), token]));
   const found = new Map<string, number | null>();
   await Promise.all(
-    tokens.map(async (token) => {
+    [...tokens.values()].map(async (token) => {
       const usd = deps.liquidityOf ? await deps.liquidityOf({ chainKey: token.chainKey, address: token.address }).catch(() => null) : null;
       found.set(tokenId(token), usd);
     }),
