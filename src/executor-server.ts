@@ -33,6 +33,7 @@ import {
   spentOnDay,
   type SpendScope,
 } from "./spend.js";
+import { CHAINS } from "./chains.js";
 import { planRebalance } from "./rebalance.js";
 import { screenToken } from "./screening.js";
 import { supportTierFor } from "./support.js";
@@ -180,7 +181,7 @@ export async function createExecutorApp(
       spentBridgeUsd: parsed.data.spentBridgeUsd,
       dailyBridgeCap: config.dailyBridgeUsdCap,
       ownAddresses: parsed.data.ownAddresses,
-      allowlist: config.withdrawAllowlist,
+      allowlist: CHAINS.flatMap((chain) => config.withdrawAllowlist.map((address) => ({ chainKey: chain.key, address }))),
     });
   });
   return app;

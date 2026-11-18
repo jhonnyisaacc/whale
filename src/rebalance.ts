@@ -2,11 +2,13 @@ export const BRIDGE_PROVIDERS = ["lifi", "across", "relay", "debridge"] as const
 
 export type BridgeProvider = (typeof BRIDGE_PROVIDERS)[number];
 
+export type ChainAddress = { chainKey: string; address: string };
+
 export type BridgeQuote = {
   provider: BridgeProvider;
   feeUsd: number;
   amountInUsd: number;
-  destination: string;
+  destination: ChainAddress;
 };
 
 export type RebalancePlan =
@@ -19,14 +21,14 @@ export function planRebalance(input: {
   maxFeeBps: number;
   spentBridgeUsd: number;
   dailyBridgeCap: number;
-  ownAddresses: readonly string[];
-  allowlist: readonly string[];
+  ownAddresses: readonly ChainAddress[];
+  allowlist: readonly ChainAddress[];
 }): RebalancePlan {
   if (input.allowlist.length === 0) return { kind: "skip", reason: "bridge allowlist is empty", quote: null };
-  const own = new Set(input.ownAddresses.map((item) => item.toLowerCase()));
-  const allowed = new Set(input.allowlist.map((item) => item.toLowerCase()));
+  const own = new Set(input.ownAddresses.map((item) => item.address.toLowerCase()));
+  const allowed = new Set(input.allowlist.map((item) => item.address.toLowerCase()));
   const usable = input.quotes.filter((quote) => {
-    const dest = quote.destination.toLowerCase();
+    const dest = quote.destination.address.toLowerCase();
     if (!own.has(dest) || !allowed.has(dest)) return false;
     if (!(quote.amountInUsd > 0) || quote.amountInUsd > input.maxBridgeUsd) return false;
     const feeBps = (quote.feeUsd / quote.amountInUsd) * 10_000;
