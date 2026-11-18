@@ -6,6 +6,7 @@ import { createBalanceCache, holdingFitsChain, type BalanceCache, type BalanceRe
 import { resolveTokenDecimals } from "./token-decimals.js";
 import { createExecutorState, execute, restoreSpent, type ExecutorDeps, type ExecutorState } from "./executor.js";
 import { chainReader } from "./executor-server/chain-reader.js";
+import { dexscreenerLiquidity } from "./executor/liquidity.js";
 import { hostedServiceToken, registerHostedRoutes } from "./executor-server/hosted.js";
 import { closeWithdrawPools } from "./withdraw-journal.js";
 import { latencyLog } from "./latency.js";
@@ -113,6 +114,7 @@ function deps(
     supportTierFor: (chainKey) => supportTierFor(config.supportByChain, chainKey),
     readTokenDecimals: (token) => resolveTokenDecimals(token.chainKey, token.address, token.chain, config.rpcByChainKey[token.chainKey]),
     readBalance: balances?.read ?? null,
+    liquidityOf: dexscreenerLiquidity(config),
   };
 }
 

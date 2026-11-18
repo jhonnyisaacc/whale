@@ -1,13 +1,14 @@
 import { holdingsForTrade, type BalanceReader } from "./balances.js";
 import type { ChainRef, ExecutionReport, HyperliquidMarket, Latency, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
 import { addressKey, chainByKey } from "./chains.js";
-import { checkLimits, type LimitConfig } from "./limits.js";
+import { checkLimits, type LimitConfig, type Liquidity } from "./limits.js";
 import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
 import { spendDay, type SpendScope } from "./spend.js";
 import { pickRoute } from "./routing.js";
 import { buildLeverage, buildOrder, cappedLimitPx, orderSize, wirePrice, type HyperliquidAction } from "./hyperliquid.js";
 import { keepScreened, publicRoute, quotePlan } from "./executor/quotes.js";
+import { liquidityLookup, type LiquidityOf } from "./executor/liquidity.js";
 import { liveTierBlocked, sendBlock, type SupportTier } from "./support.js";
 
 export type HopQuote = {
@@ -64,6 +65,7 @@ export type ExecutorDeps = {
   supportTierFor?: (chainKey: string) => SupportTier;
   readTokenDecimals?: (token: { chainKey: string; chain: ChainRef; address: string }) => Promise<number | null>;
   readBalance?: BalanceReader | null;
+  liquidityOf?: LiquidityOf;
   priceOf?: PriceOf | null;
   state?: ExecutorState;
   spendScope?: SpendScope;
@@ -248,7 +250,7 @@ function blockReport(intent: SwapIntent, deps: ExecutorDeps, latency: Latency, v
 
 type CandidateQuotes = { quotes: RouteQuote[]; unsized: boolean; unread: string | null; sized: boolean; crashed?: unknown };
 
-async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], deps: ExecutorDeps): Promise<CandidateQuotes> {
+async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], deps: ExecutorDeps, liquidity: Liquidity): Promise<CandidateQuotes> {
   const none: CandidateQuotes = { quotes: [], unsized: false, unread: null, sized: false };
   const allowed = checkLimits(deps.config, {
     notionalUsd: intent.notionalUsd,
@@ -257,7 +259,7 @@ async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], de
     spentTodayUsd: deps.spentTodayUsd + spentToday(stateOf(deps), today(deps)),
     chain: token.chain,
     chainKey: token.chainKey,
-    liquidityUsd: token.pairMap.top?.liquidityUsd ?? null,
+    liquidity,
   });
   if (!allowed.ok) return none;
   if (flagged(deps, token.chainKey, token.address)) return none;
@@ -298,6 +300,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     return report;
   }
   const screening = keepScreened(intent, deps);
+  const lookup = liquidityLookup(intent, deps);
   const rejected = () => {
     const report = skipped(intent, { alertReceivedMs: intent.receivedAtMs }, "token screening rejected the contract", intent.token.chainKey, deps.mode);
     reportsOf(deps).set(intent.idempotencyKey, report);
@@ -313,9 +316,10 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   let latency: Latency = { alertReceivedMs: intent.receivedAtMs };
   latency = stamp(latency, "resolvedMs", now());
   const spec = chainByKey(intent.token.chainKey);
-  const liquidity = intent.token.pairMap.top?.liquidityUsd ?? null;
-  const liquidAlternate = alternates.some((token) => (token.pairMap.top?.liquidityUsd ?? 0) >= deps.config.minLiquidityUsd);
-  const useHyper = intent.hyperliquid !== null && (liquidity === null || liquidity < deps.config.minLiquidityUsd) && !liquidAlternate;
+  const liquidityOf = await lookup;
+  const liquidity = liquidityOf(intent.token);
+  const liquidAlternate = alternates.some((token) => (liquidityOf(token).usd ?? 0) >= deps.config.minLiquidityUsd);
+  const useHyper = intent.hyperliquid !== null && (liquidity.usd === null ? liquidity.source === "caller" : liquidity.usd < deps.config.minLiquidityUsd) && !liquidAlternate;
   const venueChain = useHyper ? { kind: "hypercore" as const, market: intent.hyperliquid?.market ?? "perp" } : intent.token.chain;
   const venueKey = useHyper ? "hypercore" : intent.token.chainKey;
   const limits = checkLimits(deps.config, {
@@ -325,23 +329,15 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     spentTodayUsd: deps.spentTodayUsd + spentToday(stateOf(deps), today(deps)),
     chain: venueChain,
     chainKey: venueKey,
-    liquidityUsd: useHyper ? null : liquidity,
+    liquidity,
   });
-  if (!limits.ok && !(limits.reason.startsWith("chain ") && alternates.length > 0)) {
-    const report = skipped(intent, latency, limits.reason, venueKey, deps.mode);
-    reportsOf(deps).set(intent.idempotencyKey, report);
-    return report;
-  }
+  if (!limits.ok && !(/^(chain |liquidity unknown$)/.test(limits.reason) && alternates.length > 0)) return blockReport(intent, deps, latency, venueKey, limits.reason);
   if (!limits.ok) primaryBlocked = limits.reason;
   const tierOff = liveTierBlocked(deps.mode, deps.supportTierFor, intent.token.chainKey);
   if (deps.mode === "live" && !useHyper && (spec?.liveSend === "disabled" || tierOff)) {
     const other = alternates.some((token) => chainByKey(token.chainKey)?.liveSend !== "disabled" && !liveTierBlocked(deps.mode, deps.supportTierFor, token.chainKey));
     const reason = tierOff ? "chain is not enabled for live sends" : (spec?.gap ?? "live send disabled for this chain");
-    if (!other) {
-      const report = skipped(intent, latency, reason, venueKey, deps.mode);
-      reportsOf(deps).set(intent.idempotencyKey, report);
-      return report;
-    }
+    if (!other) return blockReport(intent, deps, latency, venueKey, reason);
     primaryBlocked = reason;
   }
 
@@ -404,7 +400,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   }
 
   const candidates = [intent.token, ...alternates].filter((token) => deps.config.enabledChainKeys.has(token.chainKey));
-  const results = await Promise.all(candidates.map((token) => quoteCandidate(intent, token, deps)));
+  const results = await Promise.all(candidates.map((token) => quoteCandidate(intent, token, deps, liquidityOf(token))));
   latency = stamp(latency, "quotedMs", now());
   const screened = await screening;
   if (!screened.ok) return rejected();
