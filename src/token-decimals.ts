@@ -1,6 +1,7 @@
-import { createPublicClient, erc20Abi, http } from "viem";
+import { erc20Abi } from "viem";
 import { addressKey } from "./chains.js";
 import type { ChainRef, TokenRecord } from "./domain.js";
+import { evmReadClient } from "./rpc.js";
 
 const cache = new Map<string, number>();
 
@@ -27,11 +28,10 @@ export function rememberTokenDecimals(chainKey: string, contract: string, decima
   cache.set(cacheKey(chainKey, contract), accepted);
 }
 
-export async function readErc20Decimals(rpc: string, contract: string): Promise<number | null> {
+export async function readErc20Decimals(chainId: number, rpc: string, contract: string): Promise<number | null> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(contract)) return null;
   try {
-    const client = createPublicClient({ transport: http(rpc, { retryCount: 0, timeout: 1500 }) });
-    const raw = await client.readContract({
+    const raw = await evmReadClient(chainId, [rpc]).readContract({
       address: contract as `0x${string}`,
       abi: erc20Abi,
       functionName: "decimals",
@@ -47,12 +47,12 @@ export async function resolveTokenDecimals(
   contract: string,
   chain: ChainRef,
   rpc: string | undefined,
-  read: (rpc: string, contract: string) => Promise<number | null> = readErc20Decimals,
+  read: (chainId: number, rpc: string, contract: string) => Promise<number | null> = readErc20Decimals,
 ): Promise<number | null> {
   const hit = cachedTokenDecimals(chainKey, contract);
   if (hit !== null) return hit;
   if (chain.kind !== "evm" || !rpc) return null;
-  const decimals = acceptDecimals(await read(rpc, contract));
+  const decimals = acceptDecimals(await read(chain.chainId, rpc, contract));
   if (decimals === null) return null;
   rememberTokenDecimals(chainKey, contract, decimals);
   return decimals;
@@ -61,7 +61,7 @@ export async function resolveTokenDecimals(
 export async function fillTokenDecimals(
   tokens: readonly TokenRecord[],
   rpcByChainKey: Readonly<Record<string, string>>,
-  read: (rpc: string, contract: string) => Promise<number | null> = readErc20Decimals,
+  read: (chainId: number, rpc: string, contract: string) => Promise<number | null> = readErc20Decimals,
 ): Promise<TokenRecord[]> {
   const out = tokens.slice();
   const jobs: number[] = [];
