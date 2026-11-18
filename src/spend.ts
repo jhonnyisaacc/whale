@@ -32,6 +32,19 @@ CREATE TABLE IF NOT EXISTS signed_tx (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE signed_tx ADD COLUMN IF NOT EXISTS nonce bigint;
+CREATE TABLE IF NOT EXISTS hosted_sends (
+  agent_id text NOT NULL,
+  idempotency_key text NOT NULL,
+  account_id text NOT NULL,
+  wallet_id text NOT NULL,
+  state text NOT NULL CHECK (state IN ('started', 'executed', 'refused')),
+  command jsonb,
+  issued_at timestamptz,
+  refused_before timestamptz,
+  result jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (agent_id, idempotency_key)
+);
 `;
 
 export const STRATEGY_COLUMN_SQL =
@@ -179,7 +192,7 @@ export function createMemoryJournal() {
 const pools = new Map<string, import("pg").Pool>();
 const ready = new Set<string>();
 
-async function poolFor(databaseUrl: string) {
+export async function poolFor(databaseUrl: string) {
   const { default: pg } = await import("pg");
   let pool = pools.get(databaseUrl);
   if (!pool) {

@@ -33,7 +33,7 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const reports: (SendReport | Error | (() => Promise<SendReport>))[] = [];
   const executor: ExecutorClient = {
     report: async () => {
-      const next = reports.shift() ?? { executed: false };
+      const next = reports.shift() ?? { state: "not_started" };
       if (next instanceof Error) throw next;
       return typeof next === "function" ? next() : next;
     },
@@ -153,8 +153,8 @@ test("an executor that does not answer leaves the spend reserved and the approva
   });
   try {
     for (const [key, report, settled] of [
-      ["lost-before-broadcast", { executed: false }, { spend: "released", approval: "approved" }],
-      ["lost-after-broadcast", { executed: true, value: { status: "sent" } }, { spend: "committed", approval: "used" }],
+      ["lost-before-broadcast", { state: "not_started" }, { spend: "released", approval: "approved" }],
+      ["lost-after-broadcast", { state: "executed", value: { status: "sent" } }, { spend: "committed", approval: "used" }],
     ] as const) {
       const asked = await swap(key, 15);
       assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
@@ -205,7 +205,7 @@ test("the sweeper leaves a reservation younger than its grace, and one re-reserv
     assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
     failures.push(new Error("executor answered 502"));
     assert.match((await swap("re-reserved", 15)).text, /may have happened/);
-    reports.push({ executed: false });
+    reports.push({ state: "not_started" });
     assert.equal(await sweep(60_000), 0, "a reservation younger than the grace is not asked about");
     assert.deepEqual(await state("re-reserved"), { spend: "reserved", approval: "claimed" });
     await pool.query("UPDATE agent_spends SET reserved_at = now() - interval '2 minutes'");
@@ -214,7 +214,7 @@ test("the sweeper leaves a reservation younger than its grace, and one re-reserv
     reports.push(async () => {
       await pool.query("UPDATE agent_spends SET reserved_at = now()");
       await pool.query("UPDATE approvals SET claimed_at = now()");
-      return { executed: false };
+      return { state: "not_started" };
     });
     assert.equal(await sweep(60_000), 0, "a send re-reserved while the sweeper waited on the executor is not released from the old snapshot");
     assert.deepEqual(await state("re-reserved"), { spend: "reserved", approval: "claimed" });

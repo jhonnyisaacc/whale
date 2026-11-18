@@ -9,6 +9,9 @@ const address = z.string().min(32).max(64);
 const chainKey = z.string().min(1).max(32).refine((key) => chainByKey(key) !== undefined, "unknown chain");
 const idempotencyKey = z.string().min(8).max(128).regex(/^[A-Za-z0-9:_-]+$/);
 const slippageBps = z.number().int().min(1).max(1_000);
+const instant = z.iso.datetime();
+
+export const HOSTED_SEND_GRACE_MS = 60_000;
 
 export const hostedCommandSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("quote"), chainKey, sellToken: address, buyToken: address, sellAmount: hostedAmount, slippageBps, taker: address.nullable() }).strict(),
@@ -21,13 +24,20 @@ export type HostedCommand = z.infer<typeof hostedCommandSchema>;
 export const costsCommandSchema = z.object({ kind: z.literal("costs"), chainKeys: z.array(chainKey).min(1).max(16) }).strict();
 export type CostsCommand = z.infer<typeof costsCommandSchema>;
 
-export const hostedRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), command: z.union([hostedCommandSchema, costsCommandSchema]) }).strict();
+export const hostedRequestSchema = z
+  .object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), command: z.union([hostedCommandSchema, costsCommandSchema]), issuedAt: instant.optional() })
+  .strict();
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
 
-export const hostedReportRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), idempotencyKey }).strict();
+export const hostedReportRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), idempotencyKey, issuedBefore: instant }).strict();
 export type HostedReportRequest = z.infer<typeof hostedReportRequestSchema>;
 
-export const hostedReportSchema = z.discriminatedUnion("executed", [z.object({ executed: z.literal(false) }), z.object({ executed: z.literal(true), value: z.unknown() })]);
+export const hostedReportSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("not_started") }),
+  z.object({ state: z.literal("in_progress") }),
+  z.object({ state: z.literal("executed"), value: z.unknown() }),
+]);
+export type HostedReport = z.infer<typeof hostedReportSchema>;
 
 function asset(key: string, tokenAddress: string): Asset {
   const spec = chainByKey(key);

@@ -6,7 +6,7 @@ import type { AgentContext } from "./agents.js";
 import { approvalFor, requestApproval } from "./approvals.js";
 import { ExecutorRefused, type ExecutorClient } from "./executor-client.js";
 import { effectiveLimits } from "./policy.js";
-import { dailyRefusal, KEY_REUSED, recordedSpend, reserveSend, settleSend, type Priced, type Send } from "./send-ledger.js";
+import { dailyRefusal, issuedNow, KEY_REUSED, recordedSpend, reserveSend, settleSend, type Priced, type Send } from "./send-ledger.js";
 
 export { dailyRefusal } from "./send-ledger.js";
 
@@ -89,8 +89,8 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (approval === "expired") return deny("the approval request expired. Ask again with a new idempotencyKey");
   if (approval === "pending") return { ok: true, value: { status: "approval_pending", reason: "the owner has not answered yet. Call again later with the same idempotencyKey" } };
   const approved = approval === "approved";
-  const request = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command };
-  if (recorded === "committed") return { ok: true, value: await executor.run(request) };
+  const ids = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId };
+  if (recorded === "committed") return { ok: true, value: await executor.run({ ...ids, command, issuedAt: await issuedNow(pool) }) };
   const [what, verb] = command.kind === "swap" ? ["the swap", "sells"] : ["the transfer", "moves"];
   const estimate = await sendUsd(executor, agent, command, taker);
   if (estimate === null) return deny(`${what} ${verb} a token Whale could not price on ${command.chainKey}, so Whale refused it. No approval was requested and nothing was sent`);
@@ -108,7 +108,7 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (reservation.kind === "lapsed") return lapsedApproval(pool, agent, command, deny, settling);
   let value: unknown;
   try {
-    value = await executor.run(request);
+    value = await executor.run({ ...ids, command, issuedAt: reservation.issuedAt });
   } catch (error) {
     if (reservation.kind === "unreserved") throw error;
     if (!(error instanceof ExecutorRefused)) return { ok: false, error: "the executor did not confirm the send, so it may have happened. Nothing is released until Whale settles it. Call again later with the same idempotencyKey" };

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { CommandDeps, WalletCommand } from "../src/commands.js";
 import { hostedServiceToken, registerHostedRoutes } from "../src/executor-server/hosted.js";
@@ -6,6 +7,7 @@ import { hostedCommandSchema, walletCommandOf } from "../src/hosted-commands.js"
 import { executorFrom } from "../src/gateway/config.js";
 import { executorClient, ExecutorRefused } from "../src/gateway/executor-client.js";
 import { buildApp } from "../src/http.js";
+import { closeSpendPools } from "../src/spend.js";
 
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
@@ -38,7 +40,7 @@ test("the hosted service token must be long and must differ from the executor to
   assert.throws(() => hostedServiceToken({ HOSTED_SERVICE_TOKEN: " ".repeat(40) }, []), /at least 32/);
 });
 
-test("the executor's hosted route accepts only its own token and never reaches a sender", async () => {
+test("the executor's hosted route accepts only its own token and never reaches a sender", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const seen: WalletCommand[] = [];
   const depsFor = async (command: WalletCommand): Promise<CommandDeps> => {
     seen.push(command);
@@ -50,21 +52,24 @@ test("the executor's hosted route accepts only its own token and never reaches a
     };
   };
   const app = await buildApp({ authTokens: ["executor-token-123456"], logger: false });
-  registerHostedRoutes(app, { token: HOSTED_TOKEN, depsFor });
+  registerHostedRoutes(app, { token: HOSTED_TOKEN, depsFor, databaseUrl: process.env.TEST_DATABASE_URL ?? null });
+  const issuedAt = new Date().toISOString();
+  const agentId = randomUUID();
   try {
-    const swap = { ...IDS, command: { kind: "swap", chainKey: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000", slippageBps: 50, taker: null, idempotencyKey: "swap-0001" } };
+    const swap = { ...IDS, agentId, issuedAt, command: { kind: "swap", chainKey: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000", slippageBps: 50, taker: null, idempotencyKey: "swap-0001" } };
     const post = (token: string, payload: unknown) => app.inject({ method: "POST", url: "/hosted/commands", headers: { authorization: `Bearer ${token}` }, payload: payload as Record<string, unknown> });
     assert.equal((await post("executor-token-123456", swap)).statusCode, 401);
     const planned = await post(HOSTED_TOKEN, swap);
     assert.equal(planned.statusCode, 200);
     assert.equal(planned.json().status, "would_swap");
     assert.equal(planned.json().quote.buyAmount, "42");
-    const transfer = await post(HOSTED_TOKEN, { ...IDS, command: { kind: "transfer", chainKey: "base", token: USDC, to: WETH, amount: "5", idempotencyKey: "xfer-0001" } });
+    const transfer = await post(HOSTED_TOKEN, { ...IDS, agentId, issuedAt, command: { kind: "transfer", chainKey: "base", token: USDC, to: WETH, amount: "5", idempotencyKey: "xfer-0001" } });
     assert.equal(transfer.json().status, "would_send");
     assert.equal((await post(HOSTED_TOKEN, { ...swap, command: { ...swap.command, mode: "live" } })).statusCode, 400);
     assert.deepEqual(seen.map((command) => command.kind), ["quote", "transfer"]);
   } finally {
     await app.close();
+    await closeSpendPools();
   }
 });
 
@@ -125,18 +130,21 @@ test("the gateway treats only the executor's own 400, 401, 403, and 429 as defin
   for (const status of [404, 408, 421, 499, 500, 502, 503]) await assert.rejects(answering(status).run(request), (error: unknown) => error instanceof Error && !(error instanceof ExecutorRefused), String(status));
 });
 
-test("the executor's report route answers only its own token and reports that a hosted send moved nothing", async () => {
+test("an executor without a database refuses hosted sends and does not claim any send never started", async () => {
   const app = await buildApp({ authTokens: ["executor-token-123456"], logger: false });
   registerHostedRoutes(app, { token: HOSTED_TOKEN });
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     const reply = await app.inject({ method: "POST", url: new URL(String(input)).pathname, headers: init?.headers as Record<string, string>, payload: String(init?.body) });
     return new Response(reply.body, { status: reply.statusCode });
   }) as typeof fetch;
+  const client = (token: string) => executorClient({ url: new URL("http://executor.internal:8080"), token }, fetchImpl);
   try {
-    const lookup = { ...IDS, idempotencyKey: "swap-0001" };
-    assert.deepEqual(await executorClient({ url: new URL("http://executor.internal:8080"), token: HOSTED_TOKEN }, fetchImpl).report(lookup), { executed: false });
-    await assert.rejects(executorClient({ url: new URL("http://executor.internal:8080"), token: "executor-token-123456" }, fetchImpl).report(lookup), ExecutorRefused);
-    await assert.rejects(executorClient({ url: new URL("http://executor.internal:8080"), token: HOSTED_TOKEN }, fetchImpl).report({ ...lookup, idempotencyKey: "bad key!" }), ExecutorRefused);
+    const send = { ...IDS, issuedAt: new Date().toISOString(), command: { kind: "transfer" as const, chainKey: "base", token: USDC, to: WETH, amount: "5", idempotencyKey: "xfer-0001" } };
+    await assert.rejects(client(HOSTED_TOKEN).run(send), /executor answered 403/);
+    const lookup = { ...IDS, idempotencyKey: "swap-0001", issuedBefore: new Date().toISOString() };
+    await assert.rejects(client(HOSTED_TOKEN).report(lookup), (error: unknown) => error instanceof Error && !(error instanceof ExecutorRefused) && /503/.test(error.message));
+    await assert.rejects(client("executor-token-123456").report(lookup), ExecutorRefused);
+    await assert.rejects(client(HOSTED_TOKEN).report({ ...lookup, idempotencyKey: "bad key!" }), ExecutorRefused);
   } finally {
     await app.close();
   }

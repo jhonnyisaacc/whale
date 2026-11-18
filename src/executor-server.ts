@@ -165,7 +165,7 @@ export async function createExecutorApp(
     return report;
   });
   const hostedToken = hostedServiceToken(process.env, config.executorAuthTokens);
-  if (hostedToken) registerHostedRoutes(app, { token: hostedToken });
+  if (hostedToken) registerHostedRoutes(app, { token: hostedToken, databaseUrl: config.databaseUrl });
   void holdings;
   void fetchImpl;
   app.post("/rebalance", guard, async (request, reply) => {
