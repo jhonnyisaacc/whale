@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { validateHostManifests } from "./host-manifests.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const copied = [".claude-plugin", ".codex-plugin", ".grok-plugin", ".muse-plugin", ".mcp.json", "package.json", "skills", "src/mcp-server.ts", "dist/src/mcp-server.js"];
+const copied = [".claude-plugin", ".codex-plugin", ".grok-plugin", ".muse-plugin", ".mcp.json", "plugin.json", "mcp.json", "package.json", "skills", "src/mcp-server.ts", "dist/src/mcp-server.js"];
 
 function fixture(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "whale-manifests-"));
@@ -34,7 +34,7 @@ function rejects(break_: (dir: string) => void, expected: RegExp): void {
   }
 }
 
-test("the repo's four host manifests pass validation", () => {
+test("the repo's five host manifests pass validation", () => {
   assert.deepEqual(validateHostManifests(repo), []);
 });
 
@@ -47,6 +47,7 @@ test("a missing skills directory fails every host that loads skills", () => {
   for (const manifest of [".claude-plugin", ".codex-plugin", ".grok-plugin", ".muse-plugin"]) {
     rejects((dir) => rmSync(path.join(dir, "skills"), { recursive: true }), new RegExp(`^\\${manifest}/plugin\\.json: .*skills`));
   }
+  rejects((dir) => rmSync(path.join(dir, "skills"), { recursive: true }), /^plugin\.json: .*skills/);
 });
 
 test("a manifest version that drifts from package.json fails", () => {
@@ -108,4 +109,36 @@ test("an MCP command under the plugin root variable or after node flags passes",
 
 test("a Muse skill path that names a directory fails with a manifest error", () => {
   rejects((dir) => editJson(dir, ".muse-plugin/plugin.json", (value) => { (value.capabilities as { skills: { path: string }[] }).skills[0].path = "skills/whale-wallet"; }), /^\.muse-plugin\/plugin\.json: skills\/whale-wallet: not a file/);
+});
+
+type HermesServer = { type: string; command: string; args: string[]; env: Record<string, string> };
+
+function editHermesServer(dir: string, edit: (server: HermesServer) => void): void {
+  editJson(dir, "mcp.json", (value) => edit((value.mcpServers as Record<string, HermesServer>).whale));
+}
+
+test("a Hermes plugin.json without the Agent Plugins v1 schema or a valid name fails", () => {
+  rejects((dir) => editJson(dir, "plugin.json", (value) => { delete value.$schema; }), /^plugin\.json: \$schema must be https:\/\/agent-plugins\.org\/schemas\/1\.0\.0\/plugin\.schema\.json/);
+  rejects((dir) => editJson(dir, "plugin.json", (value) => { value.name = "Whale Wallet"; }), /^plugin\.json: name Whale Wallet/);
+  rejects((dir) => editJson(dir, "plugin.json", (value) => { value.version = "9.9.9"; }), /^plugin\.json: version 9\.9\.9/);
+});
+
+test("a Hermes mcp.json that leaves the Agent Plugins v1 shape fails", () => {
+  rejects((dir) => rmSync(path.join(dir, "mcp.json")), /^plugin\.json: mcp\.json does not exist/);
+  rejects((dir) => editJson(dir, "mcp.json", (value) => { delete value.$schema; }), /^plugin\.json: mcp\.json must hold only/);
+  rejects((dir) => editJson(dir, "mcp.json", (value) => { value.extra = {}; }), /^plugin\.json: mcp\.json must hold only/);
+  rejects((dir) => editJson(dir, "mcp.json", (value) => { value.mcpServers = {}; }), /^plugin\.json: mcp\.json declares no MCP server/);
+  rejects((dir) => editHermesServer(dir, (server) => { server.type = "sse"; }), /^plugin\.json: MCP server whale must use the stdio transport/);
+});
+
+test("a Hermes stdio server whose script is gone fails", () => {
+  rejects((dir) => rmSync(path.join(dir, "dist/src/mcp-server.js")), /^plugin\.json: MCP server whale runs dist\/src\/mcp-server\.js, which does not exist/);
+  rejects((dir) => editHermesServer(dir, (server) => { server.args = ["dist/src/gone.js"]; }), /^plugin\.json: MCP server whale runs dist\/src\/gone\.js/);
+});
+
+test("a Hermes server env that drifts from what src/mcp-server.ts reads fails", () => {
+  rejects((dir) => editHermesServer(dir, (server) => { server.env.WHALE_TYPO = "${WHALE_TYPO}"; }), /^plugin\.json: MCP server whale forwards WHALE_TYPO, which src\/mcp-server\.ts does not read/);
+  rejects((dir) => editHermesServer(dir, (server) => { delete server.env.EXECUTOR_AUTH_TOKEN; }), /^plugin\.json: MCP server whale does not forward EXECUTOR_AUTH_TOKEN/);
+  rejects((dir) => editHermesServer(dir, (server) => { server.env.EXECUTOR_URL = "http://127.0.0.1:8788"; }), /^plugin\.json: MCP server whale must pass EXECUTOR_URL through as \$\{EXECUTOR_URL\}/);
+  rejects((dir) => writeFileSync(path.join(dir, "src/mcp-server.ts"), `${readFileSync(path.join(dir, "src/mcp-server.ts"), "utf8")}\nprocess.env.WHALE_NEW;\n`), /^plugin\.json: MCP server whale does not forward WHALE_NEW/);
 });

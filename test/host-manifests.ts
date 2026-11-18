@@ -3,14 +3,18 @@ import path from "node:path";
 
 type Json = Record<string, unknown>;
 type SkillSource = { kind: "dir"; path: string } | { kind: "file"; path: string };
-type McpSource = { kind: "config"; path: string } | { kind: "inline"; id: string; command: unknown };
+type McpSource = { kind: "config"; path: string } | { kind: "agent-plugins"; path: string } | { kind: "inline"; id: string; command: unknown };
 type HostRefs = { skills: SkillSource[]; mcp: McpSource[]; errors: string[] };
+
+const agentPluginSchema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
+const agentMcpSchema = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
 
 const hosts: Record<string, (manifest: Json) => HostRefs> = {
   ".claude-plugin/plugin.json": (manifest) => pointerHost(manifest, { skills: "./skills/", mcpServers: "./.mcp.json" }),
   ".codex-plugin/plugin.json": (manifest) => pointerHost(manifest, {}),
   ".grok-plugin/plugin.json": () => ({ skills: [{ kind: "dir", path: "skills" }], mcp: [], errors: [] }),
   ".muse-plugin/plugin.json": museHost,
+  "plugin.json": hermesHost,
 };
 
 export function validateHostManifests(root: string): string[] {
@@ -73,6 +77,13 @@ function museHost(manifest: Json): HostRefs {
   };
 }
 
+function hermesHost(manifest: Json): HostRefs {
+  const errors: string[] = [];
+  if (manifest.$schema !== agentPluginSchema) errors.push(`$schema must be ${agentPluginSchema}`);
+  if (typeof manifest.name === "string" && !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(manifest.name)) errors.push(`name ${manifest.name} breaks the Agent Plugins v1 name rule`);
+  return { skills: [{ kind: "dir", path: "skills" }], mcp: [{ kind: "agent-plugins", path: "mcp.json" }], errors };
+}
+
 function checkSkills(root: string, source: SkillSource): string[] {
   const rel = inside(source.path);
   if (rel === undefined) return [`skills ${source.path} points outside the plugin root`];
@@ -115,6 +126,7 @@ function checkSkillFile(root: string, rel: string): string[] {
 
 function checkMcp(root: string, source: McpSource): string[] {
   if (source.kind === "inline") return checkCommand(root, source.id, source.command);
+  if (source.kind === "agent-plugins") return checkAgentPluginMcp(root, source.path);
   const rel = inside(source.path);
   if (rel === undefined) return [`mcpServers ${source.path} points outside the plugin root`];
   const config = readJson(path.join(root, rel)) as Json | undefined;
@@ -125,6 +137,38 @@ function checkMcp(root: string, source: McpSource): string[] {
     const args = Array.isArray(server.args) ? server.args : [];
     return checkCommand(root, id, [server.command, ...args]);
   });
+}
+
+function checkAgentPluginMcp(root: string, file: string): string[] {
+  const config = readJson(path.join(root, file));
+  if (typeof config !== "object" || config === null) return [`${file} does not exist or is not JSON`];
+  const json = config as Json;
+  if (Object.keys(json).sort().join() !== "$schema,mcpServers" || json.$schema !== agentMcpSchema) return [`${file} must hold only $schema ${agentMcpSchema} and mcpServers`];
+  const servers = json.mcpServers;
+  if (typeof servers !== "object" || servers === null || Object.keys(servers).length === 0) return [`${file} declares no MCP server`];
+  const read = mcpServerEnv(root);
+  return Object.entries(servers as Record<string, Json>).flatMap(([id, server]) => {
+    if (server.type !== "stdio") return [`MCP server ${id} must use the stdio transport`];
+    const args = Array.isArray(server.args) ? server.args : [];
+    const errors = checkCommand(root, id, [server.command, ...args]);
+    const env = typeof server.env === "object" && server.env !== null ? (server.env as Json) : {};
+    for (const [name, value] of Object.entries(env)) {
+      if (!read.includes(name)) errors.push(`MCP server ${id} forwards ${name}, which src/mcp-server.ts does not read`);
+      else if (value !== `\${${name}}`) errors.push(`MCP server ${id} must pass ${name} through as \${${name}}, not a value`);
+    }
+    for (const name of read) if (!(name in env)) errors.push(`MCP server ${id} does not forward ${name}, which src/mcp-server.ts reads`);
+    return errors;
+  });
+}
+
+function mcpServerEnv(root: string): string[] {
+  let text: string;
+  try {
+    text = readFileSync(path.join(root, "src/mcp-server.ts"), "utf8");
+  } catch {
+    return [];
+  }
+  return [...new Set([...text.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)].map((match) => match[1]))];
 }
 
 function checkCommand(root: string, id: string, command: unknown): string[] {

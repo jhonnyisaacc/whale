@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "whale": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "dist/src/mcp-server.js"
+      ],
+      "env": {
+        "EXECUTOR_URL": "${EXECUTOR_URL}",
+        "EXECUTOR_AUTH_TOKEN": "${EXECUTOR_AUTH_TOKEN}",
+        "AUTH_TOKEN": "${AUTH_TOKEN}",
+        "WHALE_GATEWAY_URL": "${WHALE_GATEWAY_URL}",
+        "WHALE_API_KEY": "${WHALE_API_KEY}"
+      }
+    }
+  }
+}
