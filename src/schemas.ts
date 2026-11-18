@@ -97,6 +97,15 @@ export const withdrawSchema = z.object({
   decimals: z.number().int().nonnegative().max(18).optional(),
 });
 
+const chainAddressSchema = z.object({
+  chainKey: z
+    .string()
+    .min(1)
+    .max(40)
+    .refine((value) => chainByKey(value) !== undefined, { message: "unknown chain" }),
+  address: z.string().min(1).max(128),
+});
+
 export const rebalanceSchema = z.object({
   quotes: z
     .array(
@@ -104,11 +113,11 @@ export const rebalanceSchema = z.object({
         provider: z.enum(["lifi", "across", "relay", "debridge"]),
         feeUsd: z.number(),
         amountInUsd: z.number(),
-        destination: z.string().min(1).max(128),
+        destination: chainAddressSchema,
       }),
     )
     .max(8),
-  ownAddresses: z.array(z.string().min(1).max(128)).max(8),
+  ownAddresses: z.array(chainAddressSchema).max(8),
   spentBridgeUsd: z.number().nonnegative().default(0),
 });
 
