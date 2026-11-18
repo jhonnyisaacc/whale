@@ -147,6 +147,8 @@ Two routes freeze, with no passkey needed:
 
 An enclave wallet's Turnkey policy can drift from its wallet policy after a change. `GET /api/wallets/:id/enclave/delegation` reports `inSync`, `delegatePolicyIds` (the policies that name Whale's delegate) and, when the allow policies differ from the rendered set, `stalePolicyIds`. The policy editor then shows a banner. Under the owner's passkey, the dashboard deletes the stale allow policies (`DELETE_POLICIES`) and creates the rendered set (`CREATE_POLICIES`). `POST /api/wallets/:id/enclave/resync` reads Turnkey back and records `wallet.delegation_resynced` only when the state is exactly right and the delegate is the one approved at activation; otherwise it answers 409. Until then, Turnkey keeps the old rules: a chain added in the app stays refused, and a chain removed in the app is still refused by the app policy.
 
+`test/gateway-enclave-real-turnkey.test.ts` runs this resync against real Turnkey, with a software passkey driving the dashboard's own `resyncDelegation`. It skips unless `WHALE_REAL_TURNKEY=1`, `TURNKEY_PARENT_ORGANIZATION_ID`, `TURNKEY_PARENT_API_PUBLIC_KEY`, `TURNKEY_PARENT_API_PRIVATE_KEY`, `TURNKEY_DELEGATE_API_PUBLIC_KEY`, and `TEST_DATABASE_URL` are all set. Keep the executor's signing env unset. Each run creates one new sub-organization and signs nothing. Run `pnpm run build && node --test dist/test/gateway-enclave-real-turnkey.test.js`.
+
 ### Approvals and activity
 
 A hosted `swap` is priced by what it sells. A USDC, USDT, or USDB sell counts one dollar per token. Any other sell token cannot be priced yet. The quote's output is never used, because price impact or slippage can make it far smaller than what leaves the wallet.
