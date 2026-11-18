@@ -45,10 +45,10 @@ async function callHttp(deps: McpDeps, route: string): Promise<unknown> {
 }
 
 function commandFrom(name: string, args: Record<string, unknown>): WalletCommand {
-  if (name === "swap") return { kind: "swap", ...args, mode: "dry_run" } as WalletCommand;
+  if (name === "swap") return { ...args, kind: "swap", mode: "dry_run" } as WalletCommand;
   if (name === "bridge") return { kind: "bridge", ...bridgeRequestSchema.parse(args) };
   if (name === "quote" || name === "balance" || name === "transfer") {
-    return { kind: name, ...args } as WalletCommand;
+    return { ...args, kind: name } as WalletCommand;
   }
   throw new Error(`unknown tool ${name}`);
 }
@@ -57,7 +57,7 @@ export async function callTool(deps: McpDeps, name: string, args: Record<string,
   if (name === "wallet_status") return callHttp(deps, "/status");
   const execute = deps.runCommand ?? run;
   const command = commandFrom(name, args);
-  if (command.kind === "transfer") return execute(command);
+  if (command.kind === "transfer" || (command.kind === "swap" && command.mode !== "dry_run")) return execute(command);
   const { commandDeps } = await import("./command-callers.js");
   return execute(command, commandDeps(process.env, command));
 }
