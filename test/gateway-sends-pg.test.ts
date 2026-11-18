@@ -14,13 +14,20 @@ const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
 const OWN = "0x9999999999999999999999999999999999999999";
 const COLD = "0x1111111111111111111111111111111111111111";
+const ETH = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const JUNK = "0x2222222222222222222222222222222222222222";
+const ONE_ETH = 10n ** 18n;
+const eth = (fraction: number) => String(BigInt(Math.round(fraction * 1e6)) * 10n ** 12n);
+type QuoteCommand = Extract<HostedRequest["command"], { kind: "quote" }>;
+const ethAt = (usdPerEth: number) => (command: QuoteCommand) => (command.sellToken === ETH || command.sellToken === WETH ? (Number(command.sellAmount) / Number(ONE_ETH)) * usdPerEth : null);
 const usdc = (dollars: number) => String(Math.round(dollars * 1_000_000));
 
 type Reply = { isError: boolean; text: string; body: Record<string, unknown> | null };
 
-async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?: number; walletDailyUsd?: number }) {
+async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?: number; walletDailyUsd?: number; quoteUsd?: (command: QuoteCommand) => number | null }) {
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
+  const quoted: QuoteCommand[] = [];
   const failures: Error[] = [];
   const during: (() => Promise<unknown>)[] = [];
   const reports: (SendReport | Error | (() => Promise<SendReport>))[] = [];
@@ -31,6 +38,11 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
       return typeof next === "function" ? next() : next;
     },
     run: async (request) => {
+      if (request.command.kind === "quote") {
+        quoted.push(request.command);
+        const dollars = options.quoteUsd?.(request.command) ?? null;
+        return dollars === null ? { kind: "quote", status: "skipped", quote: null, reason: "no quote" } : { kind: "quote", status: "quoted", quote: { buyAmount: usdc(dollars), feeUsd: 0, priceImpactPct: 0 } };
+      }
       await during.shift()?.();
       const failure = failures.shift();
       if (failure) throw failure;
@@ -73,7 +85,8 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
     return app.inject({ method: "POST", url: `/api/approvals/${approvalId}/approve`, headers: user.headers, payload: { assertion: authenticator.assert(stepUp.challenge) } });
   };
   const sweep = (graceMs = 0) => settleStaleSends(pool, executor, graceMs);
-  return { app, pool, user, walletId, sent, failures, during, reports, sweep, call, swap, transfer, approve, drop: async () => (await app.close(), await drop()) };
+  const approvals = async () => (await pool.query("SELECT count(*)::int AS n FROM approvals")).rows[0].n as number;
+  return { app, pool, user, walletId, sent, quoted, approvals, failures, during, reports, sweep, call, swap, transfer, approve, drop: async () => (await app.close(), await drop()) };
 }
 
 test("a swap is priced by what it sells, so a bad quote cannot slip a large sell past the cap or the threshold", { skip: !TEST_DATABASE_URL }, async () => {
@@ -87,8 +100,8 @@ test("a swap is priced by what it sells, so a bad quote cannot slip a large sell
       assert.equal(held.body?.status, "approval_required");
       assert.equal(held.body?.estimateUsd, 15);
       const unpriced = await swap(`weth-${netOutputUsd}`, 0, WETH);
-      assert.equal(unpriced.body?.status, "approval_required");
-      assert.equal(unpriced.body?.estimateUsd, null);
+      assert.equal(unpriced.isError, true);
+      assert.match(unpriced.text, /Whale could not price/);
       assert.equal(sent.length, 0);
     } finally {
       await drop();
@@ -231,14 +244,33 @@ test("an agent's swaps stop at its daily cap, and the wallet's daily cap covers 
   }
 });
 
-test("with no approval threshold, a swap Whale cannot price still waits for the owner instead of skipping the caps", { skip: !TEST_DATABASE_URL }, async () => {
-  const { sent, swap, drop } = await harness({ approvalAboveUsd: null });
+test("a swap Whale cannot price is refused with that reason, with no approval and no executor call, threshold or not", { skip: !TEST_DATABASE_URL }, async () => {
+  for (const approvalAboveUsd of [null, 10]) {
+    const { sent, quoted, approvals, swap, drop } = await harness({ approvalAboveUsd });
+    try {
+      const unpriced = await swap(`weth-${approvalAboveUsd}`, 0, WETH);
+      assert.equal(unpriced.isError, true);
+      assert.match(unpriced.text, /the swap sells a token Whale could not price on base, so Whale refused it\. No approval was requested and nothing was sent/);
+      assert.equal(quoted.length > 0, true, "Whale asked for a quote before refusing");
+      assert.equal(await approvals(), 0);
+      assert.equal(sent.length, 0);
+    } finally {
+      await drop();
+    }
+  }
+});
+
+test("a swap that sells a native or other token is priced by selling it into USDC, not by the route the agent asked for", { skip: !TEST_DATABASE_URL }, async () => {
+  const { sent, quoted, approvals, call, drop } = await harness({ approvalAboveUsd: null, netOutputUsd: 0.01, quoteUsd: ethAt(3000) });
   try {
-    const unpriced = await swap("weth-no-threshold", 0, WETH);
-    assert.equal(unpriced.isError, false);
-    assert.equal(unpriced.body?.status, "approval_required");
-    assert.equal(unpriced.body?.estimateUsd, null);
-    assert.equal((await swap("usdc-no-threshold", 5)).body?.status, "would_swap");
+    const swap = (key: string, amount: string, slippageBps: number) => call("swap", { chain: "base", sellToken: ETH, buyToken: JUNK, sellAmount: amount, slippageBps, idempotencyKey: key });
+    const big = await swap("eth-big", ONE_ETH.toString(), 1);
+    assert.equal(big.isError, true);
+    assert.match(big.text, /the swap sells about 3000\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
+    assert.ok(quoted.every((command) => command.buyToken === "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" && command.slippageBps === 50 && command.taker === OWN), "the pricing quote ignores the agent's buy token and slippage");
+    const small = await swap("eth-small", eth(0.005), 1);
+    assert.equal(small.body?.status, "would_swap");
+    assert.equal(await approvals(), 0);
     assert.equal(sent.length, 1);
   } finally {
     await drop();
@@ -412,13 +444,89 @@ test("an approved transfer counts toward the daily total, so a later swap gets n
   }
 });
 
-test("a transfer Whale cannot price waits for the owner even with no approval threshold", { skip: !TEST_DATABASE_URL }, async () => {
-  const { sent, transfer, drop } = await harness({ approvalAboveUsd: null });
+test("a transfer Whale cannot price is refused with that reason, with no approval and no executor call", { skip: !TEST_DATABASE_URL }, async () => {
+  for (const approvalAboveUsd of [null, 10]) {
+    const { sent, approvals, transfer, drop } = await harness({ approvalAboveUsd, quoteUsd: ethAt(3000) });
+    try {
+      const unpriced = await transfer(`xfer-junk-${approvalAboveUsd}`, 0, JUNK);
+      assert.equal(unpriced.isError, true);
+      assert.match(unpriced.text, /the transfer moves a token Whale could not price on base, so Whale refused it\. No approval was requested and nothing was sent/);
+      assert.equal(await approvals(), 0);
+      assert.equal(sent.length, 0);
+    } finally {
+      await drop();
+    }
+  }
+});
+
+test("a native-asset transfer is priced and counted against the daily cap", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, approvals, transfer, drop } = await harness({ approvalAboveUsd: null, quoteUsd: ethAt(3000) });
   try {
-    const unpriced = await transfer("xfer-weth", 0, WETH);
-    assert.equal(unpriced.body?.status, "approval_required");
-    assert.equal(unpriced.body?.estimateUsd, null);
-    assert.match(String(unpriced.body?.reason), /the transfer moves a token Whale cannot price/);
+    assert.equal((await transfer("eth-1", 0, ETH, eth(0.005))).isError, false);
+    assert.equal((await transfer("eth-2", 0, ETH, eth(0.005))).isError, false);
+    assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key LIKE 'eth-%' ORDER BY idempotency_key")).rows, [{ usd: 15, state: "committed" }, { usd: 15, state: "committed" }]);
+    assert.match((await transfer("eth-3", 0, ETH, eth(0.005))).text, /the transfer would take today's total to about 45\.00 USD, above this agent's 40\.00 USD daily cap/);
+    assert.equal(await approvals(), 0);
+    assert.equal(sent.length, 2);
+  } finally {
+    await drop();
+  }
+});
+
+test("a native-asset transfer over the per-transaction cap is refused, with no approval, threshold or not", { skip: !TEST_DATABASE_URL }, async () => {
+  for (const approvalAboveUsd of [null, 10]) {
+    const { sent, approvals, transfer, drop } = await harness({ approvalAboveUsd, quoteUsd: ethAt(3000) });
+    try {
+      assert.match((await transfer(`eth-over-${approvalAboveUsd}`, 0, ETH, eth(0.01))).text, /the transfer moves about 30\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
+      assert.equal(await approvals(), 0);
+      assert.equal(sent.length, 0);
+    } finally {
+      await drop();
+    }
+  }
+});
+
+test("with no approval threshold, no send of any kind creates an approval", { skip: !TEST_DATABASE_URL }, async () => {
+  const { approvals, swap, transfer, drop } = await harness({ approvalAboveUsd: null, quoteUsd: ethAt(3000) });
+  try {
+    await swap("none-usdc", 15);
+    await swap("none-usdc-over", 25);
+    await swap("none-weth", 0, WETH);
+    await swap("none-junk", 0, JUNK);
+    await transfer("none-xfer", 15);
+    await transfer("none-xfer-over", 25);
+    await transfer("none-eth", 0, ETH, eth(0.005));
+    await transfer("none-eth-over", 0, ETH, eth(1));
+    await transfer("none-junk-xfer", 0, JUNK);
+    assert.equal(await approvals(), 0);
+  } finally {
+    await drop();
+  }
+});
+
+test("with a threshold, a priced send asks only above it", { skip: !TEST_DATABASE_URL }, async () => {
+  const { sent, approvals, transfer, drop } = await harness({ approvalAboveUsd: 10, quoteUsd: ethAt(3000) });
+  try {
+    assert.equal((await transfer("under-threshold", 5)).isError, false);
+    assert.equal((await transfer("eth-under-threshold", 0, ETH, eth(0.003))).isError, false);
+    const asked = await transfer("eth-over-threshold", 0, ETH, eth(0.005));
+    assert.equal(asked.body?.status, "approval_required");
+    assert.equal(asked.body?.estimateUsd, 15);
+    assert.equal(await approvals(), 1);
+    assert.equal(sent.length, 2);
+  } finally {
+    await drop();
+  }
+});
+
+test("a large amount that moves a thin market is priced at the market's small-trade rate, not the lower rate its own size gets", { skip: !TEST_DATABASE_URL }, async () => {
+  const thin = (command: QuoteCommand) => (command.sellToken === ETH ? Math.min((Number(command.sellAmount) / Number(ONE_ETH)) * 3000, 15) : null);
+  const { sent, approvals, transfer, drop } = await harness({ approvalAboveUsd: null, quoteUsd: thin });
+  try {
+    const big = await transfer("eth-thin", 0, ETH, ONE_ETH.toString());
+    assert.equal(big.isError, true);
+    assert.match(big.text, /the transfer moves about 3000\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
+    assert.equal(await approvals(), 0);
     assert.equal(sent.length, 0);
   } finally {
     await drop();

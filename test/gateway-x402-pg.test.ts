@@ -56,12 +56,13 @@ test("an x402 option fits only when the hosted transfer checks and the USD caps 
   }
 });
 
-test("an x402 payment needs approval when the owner set a threshold, and is refused to an agent that may not transfer", { skip: !TEST_DATABASE_URL }, async () => {
+test("an x402 payment needs approval only above the owner's threshold, and is refused to an agent that may not transfer", { skip: !TEST_DATABASE_URL }, async () => {
   const held = await harness({ approvalAboveUsd: 10, actions: ["swap", "transfer"] });
   try {
-    const plan = await held.quote([pay(5, LISTED)]);
-    assert.equal(plan.best?.verdict, "needs_approval");
-    assert.match(plan.best?.reasons.join("; ") ?? "", /owner's approval/);
+    const plan = await held.quote([pay(15, LISTED), pay(5, LISTED)]);
+    assert.deepEqual(plan.options.map((entry) => entry.verdict), ["needs_approval", "fits"]);
+    assert.match(plan.options[0]?.reasons.join("; ") ?? "", /15\.00 USD, above the 10\.00 USD approval threshold/);
+    assert.equal(plan.best?.amount, usdc(5));
   } finally {
     await held.drop();
   }

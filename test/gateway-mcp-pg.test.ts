@@ -262,11 +262,11 @@ test("sends above the threshold wait for a passkey approval of that exact comman
     const tooBig = await call("swap", { ...swap, sellAmount: "25000000", idempotencyKey: "swap-big-2" });
     assert.match(tooBig.content[0].text, /above this agent's 20\.00 USD per-transaction cap/);
 
-    const transfer = JSON.parse((await call("transfer", { chain: "base", token: USDC, to: COLD, amount: "1", idempotencyKey: "xfer-1" })).content[0].text);
+    const transfer = JSON.parse((await call("transfer", { chain: "base", token: USDC, to: COLD, amount: "15000000", idempotencyKey: "xfer-1" })).content[0].text);
     assert.equal(transfer.status, "approval_required");
     const transferApproval = (await app.inject({ method: "GET", url: "/api/approvals?status=pending", headers: user.headers })).json().approvals.find((entry: { kind: string }) => entry.kind === "transfer");
     assert.deepEqual((await app.inject({ method: "POST", url: `/api/approvals/${transferApproval.id}/deny`, headers: user.headers, payload: {} })).json(), { status: "denied" });
-    const refused = await call("transfer", { chain: "base", token: USDC, to: COLD, amount: "1", idempotencyKey: "xfer-1" });
+    const refused = await call("transfer", { chain: "base", token: USDC, to: COLD, amount: "15000000", idempotencyKey: "xfer-1" });
     assert.match(refused.content[0].text, /denied/);
 
     const activity = (await app.inject({ method: "GET", url: "/api/activity", headers: user.headers })).json().events;
