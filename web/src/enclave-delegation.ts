@@ -4,6 +4,22 @@ type Call = <T>(path: string, init?: { method?: string; body?: unknown }) => Pro
 type Submit = (delegation: Delegation) => Promise<unknown>;
 export type DelegationDeps = { api: Call; addDelegate: Submit; deletePolicies: Submit; addPolicies: Submit; addOwnerPasskeys: Submit };
 
+async function replacePolicies(deps: DelegationDeps, delegation: Delegation, onStatus: (status: string) => void): Promise<void> {
+  if (delegation.policiesInPlace) return;
+  if (delegation.stalePolicyIds.length > 0) {
+    onStatus("Approve removing the outdated signing policy with your passkey…");
+    await deps.deletePolicies(delegation);
+  }
+  onStatus("Approve the signing policy with your passkey…");
+  await deps.addPolicies(delegation);
+}
+
+export async function resyncDelegation(deps: DelegationDeps, walletId: string, onStatus: (status: string) => void = () => undefined): Promise<void> {
+  await replacePolicies(deps, await deps.api<Delegation>(`/api/wallets/${walletId}/enclave/delegation`), onStatus);
+  onStatus("Checking Turnkey…");
+  await deps.api(`/api/wallets/${walletId}/enclave/resync`, { method: "POST", body: {} });
+}
+
 export async function authorizeDelegate(deps: DelegationDeps, walletId: string, onStatus: (status: string) => void = () => undefined): Promise<void> {
   let delegation = await deps.api<Delegation>(`/api/wallets/${walletId}/enclave/delegation`);
   if (!delegation.delegateUserId) {
@@ -11,14 +27,7 @@ export async function authorizeDelegate(deps: DelegationDeps, walletId: string, 
     await deps.addDelegate(delegation);
     delegation = await deps.api<Delegation>(`/api/wallets/${walletId}/enclave/delegation`);
   }
-  if (!delegation.policiesInPlace) {
-    if (delegation.stalePolicyIds.length > 0) {
-      onStatus("Approve removing the outdated signing policy with your passkey…");
-      await deps.deletePolicies(delegation);
-    }
-    onStatus("Approve the signing policy with your passkey…");
-    await deps.addPolicies(delegation);
-  }
+  await replacePolicies(deps, delegation, onStatus);
   onStatus("Checking Turnkey…");
   await deps.api(`/api/wallets/${walletId}/enclave/confirm`, { method: "POST", body: {} });
   if (delegation.missingAuthenticators.length > 0) {

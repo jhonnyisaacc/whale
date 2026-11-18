@@ -145,7 +145,7 @@ Two routes freeze, with no passkey needed:
 
 `POST /api/wallets/:id/unfreeze` needs a step-up for `{ kind: "wallet.unfreeze", walletId }`.
 
-The Turnkey policy of an enclave wallet stays as rendered at activation. A widening that adds an EVM chain changes the app policy only, and Turnkey keeps refusing that chain until the delegation is rendered again under the user's passkey.
+An enclave wallet's Turnkey policy can drift from its wallet policy after a change. `GET /api/wallets/:id/enclave/delegation` reports `inSync`, `delegatePolicyIds` (the policies that name Whale's delegate) and, when the allow policies differ from the rendered set, `stalePolicyIds`. The policy editor then shows a banner. Under the owner's passkey, the dashboard deletes the stale allow policies (`DELETE_POLICIES`) and creates the rendered set (`CREATE_POLICIES`). `POST /api/wallets/:id/enclave/resync` reads Turnkey back and records `wallet.delegation_resynced` only when the state is exactly right and the delegate is the one approved at activation; otherwise it answers 409. Until then, Turnkey keeps the old rules: a chain added in the app stays refused, and a chain removed in the app is still refused by the app policy.
 
 ### Approvals and activity
 

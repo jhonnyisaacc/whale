@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, describe, type Policy, type Wallet } from "../api.js";
 import { stepUp } from "../stepup.js";
+import { resyncDelegation } from "../enclave-delegation.js";
+import { addDelegate, addOwnerPasskeys, addPolicies, deletePolicies, type Delegation } from "../turnkey.js";
 
 type Pending = { id: string; document: Policy; requestedAt: string; effectiveAt: string } | null;
 
@@ -16,15 +18,34 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [destination, setDestination] = useState({ family: "evm" as "evm" | "solana", address: "", label: "" });
+  const [drift, setDrift] = useState(false);
+  const enclave = wallet.level === "enclave" && wallet.status === "active";
 
   const loadPending = () =>
     api<{ pending: Pending }>(`/api/wallets/${wallet.id}/policy/pending`)
       .then((reply) => setPending(reply.pending))
       .catch((caught: unknown) => setError(describe(caught)));
+  const checkDrift = () =>
+    enclave
+      ? api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`)
+          .then((delegation) => setDrift(!delegation.inSync))
+          .catch(() => undefined)
+      : Promise.resolve();
   useEffect(() => {
     setDraft(wallet.policy);
     void loadPending();
+    void checkDrift();
   }, [wallet.id, wallet.policyVersion]);
+
+  const resync = async () => {
+    setError(null);
+    try {
+      await resyncDelegation({ api, addDelegate, deletePolicies, addPolicies, addOwnerPasskeys }, wallet.id);
+      setDrift(false);
+    } catch (caught) {
+      setError(describe(caught));
+    }
+  };
 
   const toggle = <T extends string>(list: T[], item: T): T[] => (list.includes(item) ? list.filter((entry) => entry !== item) : [...list, item]);
 
@@ -66,6 +87,12 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
   return (
     <div className="card stack">
       <h2>Policy · version {wallet.policyVersion}</h2>
+      {drift ? (
+        <div className="notice row">
+          <span>The enclave's Turnkey policy no longer matches this policy. Until you update it, Turnkey keeps the old rules.</span>
+          <button onClick={() => void resync()}>Update with passkey</button>
+        </div>
+      ) : null}
       {pending ? (
         <div className="notice stack">
           <span>A loosening waits until {new Date(pending.effectiveAt).toLocaleString()}. The form below shows the policy in force now.</span>
