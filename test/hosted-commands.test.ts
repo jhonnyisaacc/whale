@@ -118,11 +118,11 @@ test("the gateway reaches the hosted route under any path on HOSTED_EXECUTOR_URL
   assert.deepEqual(urls, ["http://executor.internal:8080/hosted/commands", "http://executor.internal:8080/whale/hosted/commands", "http://executor.internal:8080/whale/hosted/commands"]);
 });
 
-test("the gateway treats an executor 4xx as a definite refusal and a 5xx as an unknown outcome", async () => {
+test("the gateway treats only the executor's own 400, 401, 403, and 429 as definite refusals, and any other failure as an unknown outcome", async () => {
   const request = { ...IDS, command: { kind: "balance" as const, chainKey: "base", address: WETH } };
   const answering = (status: number) => executorClient({ url: new URL("http://executor.internal:8080"), token: HOSTED_TOKEN }, (async () => new Response("{}", { status })) as typeof fetch);
-  for (const status of [400, 401, 429]) await assert.rejects(answering(status).run(request), (error: unknown) => error instanceof ExecutorRefused, String(status));
-  for (const status of [500, 502, 503]) await assert.rejects(answering(status).run(request), (error: unknown) => error instanceof Error && !(error instanceof ExecutorRefused), String(status));
+  for (const status of [400, 401, 403, 429]) await assert.rejects(answering(status).run(request), (error: unknown) => error instanceof ExecutorRefused, String(status));
+  for (const status of [404, 408, 421, 499, 500, 502, 503]) await assert.rejects(answering(status).run(request), (error: unknown) => error instanceof Error && !(error instanceof ExecutorRefused), String(status));
 });
 
 test("the executor's report route answers only its own token and reports that a hosted send moved nothing", async () => {
