@@ -95,9 +95,15 @@ export async function readAddressBalance(
     const tokens = new Map<string, { raw: bigint; decimals: number }>();
     for (const { value } of programs) {
       for (const { account } of value) {
-        const { mint, tokenAmount } = account.data.parsed.info as { mint: string; tokenAmount: { amount: string; decimals: number } };
-        const raw = (tokens.get(mint)?.raw ?? 0n) + BigInt(tokenAmount.amount);
-        tokens.set(mint, { raw, decimals: tokenAmount.decimals });
+        const info = account.data.parsed?.info as { mint?: unknown; tokenAmount?: { amount?: unknown; decimals?: unknown } } | undefined;
+        const mint = info?.mint;
+        const amount = info?.tokenAmount?.amount;
+        const decimals = info?.tokenAmount?.decimals;
+        if (typeof mint !== "string" || typeof amount !== "string" || !/^\d+$/.test(amount)) return unread;
+        if (typeof decimals !== "number" || !Number.isInteger(decimals) || decimals < 0 || decimals > 255) return unread;
+        const known = tokens.get(mint);
+        if (known && known.decimals !== decimals) return unread;
+        tokens.set(mint, { raw: (known?.raw ?? 0n) + BigInt(amount), decimals });
       }
     }
     return {
@@ -106,20 +112,24 @@ export async function readAddressBalance(
           symbol: spec.nativeSymbol,
           address,
           amount: lamports / 1_000_000_000,
+          raw: String(lamports),
           usd: 0,
           native: true,
           decimals: 9,
           chainKey,
         },
-        ...[...tokens].map(([mint, { raw, decimals }]) => ({
-          symbol: mint,
-          address,
-          amount: Number(formatUnits(raw, decimals)),
-          usd: 0,
-          native: false,
-          decimals,
-          chainKey,
-        })),
+        ...[...tokens]
+          .filter(([, { raw }]) => raw > 0n)
+          .map(([mint, { raw, decimals }]) => ({
+            symbol: mint,
+            address,
+            amount: Number(formatUnits(raw, decimals)),
+            raw: raw.toString(),
+            usd: 0,
+            native: false,
+            decimals,
+            chainKey,
+          })),
       ],
     };
   }

@@ -52,6 +52,7 @@ export type Holding = {
   symbol: string;
   address: string;
   amount: number;
+  raw?: string;
   usd: number;
   native: boolean;
   decimals?: number;
