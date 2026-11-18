@@ -744,6 +744,15 @@ test("an active enclave narrowed in the app drifts, refuses resync until the das
     assert.equal(org(synced).policies.filter((entry) => entry.effect === "EFFECT_ALLOW").length, synced.policies.length);
     const audit = await app.inject({ method: "GET", url: "/api/activity", headers: user.headers });
     assert.match(audit.body, /wallet\.delegation_resynced/);
+
+    const state = org(synced);
+    const delegateUser = state.users.find((entry) => entry.userId === synced.delegateUserId);
+    if (!delegateUser) throw new Error("the delegate user is missing");
+    delegateUser.userId = randomUUID();
+    state.policies = (await app.inject({ method: "GET", url: delegationUrl, headers: user.headers })).json().policies.map((entry: object) => ({ ...entry, policyId: randomUUID() }));
+    const replaced = (await app.inject({ method: "GET", url: delegationUrl, headers: user.headers })).json();
+    assert.deepEqual([replaced.policiesInPlace, replaced.inSync], [true, false]);
+    assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${walletId}/enclave/resync`, headers: user.headers, payload: {} })).statusCode, 409);
   } finally {
     await close();
   }

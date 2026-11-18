@@ -25,25 +25,29 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
     api<{ pending: Pending }>(`/api/wallets/${wallet.id}/policy/pending`)
       .then((reply) => setPending(reply.pending))
       .catch((caught: unknown) => setError(describe(caught)));
-  const checkDrift = () =>
-    enclave
-      ? api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`)
-          .then((delegation) => setDrift(!delegation.inSync))
-          .catch(() => undefined)
-      : Promise.resolve();
+  const checkDrift = () => {
+    setDrift(false);
+    if (!enclave) return Promise.resolve();
+    return api<Delegation>(`/api/wallets/${wallet.id}/enclave/delegation`)
+      .then((delegation) => setDrift(!delegation.inSync))
+      .catch(() => undefined);
+  };
   useEffect(() => {
     setDraft(wallet.policy);
     void loadPending();
     void checkDrift();
-  }, [wallet.id, wallet.policyVersion]);
+  }, [wallet.id, wallet.policyVersion, wallet.status]);
 
   const resync = async () => {
     setError(null);
+    setBusy(true);
     try {
       await resyncDelegation({ api, addDelegate, deletePolicies, addPolicies, addOwnerPasskeys }, wallet.id);
       setDrift(false);
     } catch (caught) {
       setError(describe(caught));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -87,10 +91,10 @@ export function PolicyEditor({ wallet, chains, onSaved }: { wallet: Wallet; chai
   return (
     <div className="card stack">
       <h2>Policy · version {wallet.policyVersion}</h2>
-      {drift ? (
+      {drift && enclave ? (
         <div className="notice row">
           <span>The enclave's Turnkey policy no longer matches this policy. Until you update it, Turnkey keeps the old rules.</span>
-          <button onClick={() => void resync()}>Update with passkey</button>
+          <button disabled={busy} onClick={() => void resync()}>Update with passkey</button>
         </div>
       ) : null}
       {pending ? (

@@ -196,6 +196,7 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const stalePolicyIds = policies !== null && !policiesInPlace ? state.policies.flatMap((entry) => (entry.effect === "EFFECT_ALLOW" && entry.policyId ? [entry.policyId] : [])) : [];
     const inSync =
       delegate !== undefined &&
+      delegate.userId === wallet.turnkey_delegate_user_id &&
       wallet.turnkey_owner_user_id !== null &&
       wallet.root_credential_id !== null &&
       !("problems" in verifyDelegation(state, { ownerUserId: wallet.turnkey_owner_user_id, rootCredentialId: wallet.root_credential_id, delegatePublicKey: deps.delegation.delegatePublicKey, expected: () => policies ?? [] }));
