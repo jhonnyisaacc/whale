@@ -1,15 +1,16 @@
 import { formatUnits } from "viem";
 import { chainByKey } from "./chains.js";
-import { chooseLargestOutput, chooseSignableQuote } from "./aggregators.js";
+import { chooseLargestOutput, chooseSignableQuote, fetchBridgeQuotes } from "./aggregators.js";
 import { quoteHop } from "./clients.js";
 import type { CommandDeps, WalletCommand } from "./commands.js";
-import { configSecrets, loadConfig, rpcLists } from "./config.js";
+import { configSecrets, loadConfig, rpcLists, type AppConfig } from "./config.js";
 import type { ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
+import { chainAddresses, type BridgePolicy } from "./rebalance.js";
 import { redactError, urlSecretForms } from "./redact.js";
 import { evmReadClient, solanaConnection } from "./rpc.js";
 
 const SPL_TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"] as const;
-const QUOTE_KEY_NAMES = ["ZEROX_API_KEY", "JUPITER_API_KEY", "LIFI_API_KEY", "ONEINCH_API_KEY", "OKX_API_KEY"] as const;
+export const QUOTE_KEY_NAMES = ["ZEROX_API_KEY", "JUPITER_API_KEY", "LIFI_API_KEY", "ONEINCH_API_KEY", "OKX_API_KEY"] as const;
 
 export function quoteProviderConfigured(env: NodeJS.ProcessEnv): boolean {
   return QUOTE_KEY_NAMES.some((name) => {
@@ -63,7 +64,7 @@ export async function readAddressBalance(
   if (!url) return { holdings: [], reason: `${spec.rpcEnv} is unset` };
   const unread = { holdings: [], reason: `the ${chainKey} RPC did not return a balance` };
   if (spec.chain.kind === "evm") {
-    const raw = await evmReadClient([url])
+    const raw = await evmReadClient(spec.chain.chainId, [url])
       .getBalance({ address: address as `0x${string}` })
       .catch(() => null);
     if (raw === null) return unread;
@@ -145,7 +146,24 @@ async function postIntent(env: NodeJS.ProcessEnv, intent: SwapIntent): Promise<E
   return (await response.json()) as ExecutionReport;
 }
 
-export function commandDeps(env: NodeJS.ProcessEnv, command: WalletCommand): CommandDeps {
+function bridgePolicy(env: NodeJS.ProcessEnv, config: AppConfig): BridgePolicy {
+  const hotWallets = [env.TURNKEY_EVM_ADDRESS, env.TURNKEY_SOLANA_ADDRESS].flatMap((address) => (address?.trim() ? [address.trim()] : []));
+  return {
+    enabledChainKeys: config.enabledChainKeys,
+    allowlist: chainAddresses(config.enabledChainKeys, config.withdrawAllowlist),
+    senders: chainAddresses(config.enabledChainKeys, hotWallets),
+    assets: config.quoteAssets,
+    maxBridgeUsd: config.maxBridgeUsd,
+    maxFeeBps: config.maxBridgeFeeBps,
+    dailyBridgeCap: config.dailyBridgeUsdCap,
+  };
+}
+
+export function commandDeps(env: NodeJS.ProcessEnv, command: WalletCommand, fetchImpl: typeof fetch = fetch): CommandDeps {
+  if (command.kind === "bridge") {
+    const config = loadConfig(env);
+    return { bridge: { policy: bridgePolicy(env, config), quotes: (route) => fetchBridgeQuotes(config, route, fetchImpl) } };
+  }
   if (command.kind === "quote" && quoteProviderConfigured(env)) return { quote: (item) => quoteWithHop(env, item) };
   if (command.kind === "balance") return { readBalance: (chainKey, address) => readAddressBalance(env, chainKey, address) };
   if (command.kind === "swap" && command.mode === "live" && env.WHALE_BROADCAST === "true") return { execute: (intent) => postIntent(env, intent) };

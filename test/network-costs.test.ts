@@ -52,8 +52,9 @@ test("live gas reads use the RPC_URLS_<id> list, falling through to the next URL
     request.on("data", (chunk: Buffer) => (raw += chunk.toString()));
     request.on("end", () => {
       if (request.url === "/down") return response.writeHead(500).end();
-      const body = JSON.parse(raw) as { id: number };
-      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: "0x3b9aca00" }));
+      const body = JSON.parse(raw) as { id: number; method: string };
+      const result = body.method === "eth_chainId" ? "0x2105" : "0x3b9aca00";
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

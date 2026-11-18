@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Keypair } from "@solana/web3.js";
 import { providersFor } from "../src/aggregators.js";
-import { chainByKey, feeRankOf } from "../src/chains.js";
+import { CHAINS, DEFAULT_EVM_FEE_LIMITS, L1_DATA_FEE_CHAIN_IDS, chainByKey, feeRankOf } from "../src/chains.js";
 import { loadConfig } from "../src/config.js";
+import { routerAllowlist } from "../src/config/guard.js";
+import { turnkeyPolicyDocument } from "../src/signing-policy/turnkey.js";
 
 test("Robinhood Chain and HyperEVM use the published chain ids and RPCs", () => {
   const robinhood = chainByKey("robinhood");
@@ -50,4 +53,26 @@ test("live mode is off unless the flag is the exact string true", () => {
   const live = loadConfig({ WHALE_BROADCAST: "true" } as NodeJS.ProcessEnv);
   assert.equal(live.live, true);
   assert.throws(() => loadConfig({ MAX_SLIPPAGE_BPS: "400" } as NodeJS.ProcessEnv));
+});
+
+test("every EVM chain id matches its RPC variable, router allowlist, fee limit, and Turnkey policy clause", () => {
+  const sorted = (list: Iterable<number | string>) => [...list].map(Number).sort((left, right) => left - right);
+  const evm = CHAINS.flatMap((chain) => (chain.chain.kind === "evm" ? [{ ...chain, id: chain.chain.chainId }] : []));
+  const ids = sorted(evm.map((chain) => chain.id));
+  for (const chain of evm) assert.equal(chain.rpcEnv, `RPC_URL_${chain.id}`, chain.key);
+  const allowlist = routerAllowlist({ ROUTER_ALLOWLIST: `0x${"3".repeat(40)}` } as NodeJS.ProcessEnv);
+  assert.deepEqual(sorted(Object.keys(allowlist)), ids);
+  const signable = sorted(evm.filter((chain) => chain.liveSend === "eip1559" && !L1_DATA_FEE_CHAIN_IDS.has(chain.id)).map((chain) => chain.id));
+  assert.deepEqual(sorted(Object.keys(DEFAULT_EVM_FEE_LIMITS)), signable);
+  for (const id of L1_DATA_FEE_CHAIN_IDS) assert.ok(ids.includes(id), `L1 data fee chain ${id} is in the chain table`);
+  const uuid = (digit: string) => `${digit.repeat(8)}-${digit.repeat(4)}-${digit.repeat(4)}-${digit.repeat(4)}-${digit.repeat(12)}`;
+  const policy = turnkeyPolicyDocument({
+    userId: uuid("1"),
+    wallets: { evm: uuid("2"), solana: uuid("3"), hyperliquid: null },
+    solanaAddress: Keypair.generate().publicKey.toBase58(),
+    routers: allowlist,
+    maxValueWei: 1n,
+  });
+  const clauses = [...JSON.stringify(policy).matchAll(/eth\.tx\.chain_id == (\d+) &&/g)].map((match) => match[1] ?? "");
+  assert.deepEqual(sorted(clauses), signable);
 });

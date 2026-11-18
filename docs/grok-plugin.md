@@ -11,7 +11,7 @@ An MCP server runs from `dist/src/mcp-server.js` over stdio. It holds no keys an
 | `wallet_status` | Reads executor `GET /status` | No |
 | `quote` | Quotes a swap, or skips when no provider key is set | No |
 | `swap` | Dry-run swap through `run` | No |
-| `bridge` | Ranks caller-supplied bridge quotes | No |
+| `bridge` | Fetches and ranks bridge routes | No |
 | `balance` | Reads holdings for one chain and address | No |
 | `transfer` | Dry-run transfer | No |
 

@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { guardFor } from "./aggregators.js";
 import type { ExecutionReport, SwapIntent, TxRecord } from "./domain.js";
 import { configSecrets, drainTimeoutMs, loadConfig, publicConfig, type AppConfig } from "./config.js";
-import { addressFitsChain, createBalanceCache, holdingFitsChain, type BalanceCache, type BalanceReader } from "./balances.js";
+import { createBalanceCache, holdingFitsChain, type BalanceCache, type BalanceReader } from "./balances.js";
 import { resolveTokenDecimals } from "./token-decimals.js";
 import { createExecutorState, execute, restoreSpent, type ExecutorDeps, type ExecutorState } from "./executor.js";
 import { chainReader } from "./executor-server/chain-reader.js";
@@ -33,8 +33,7 @@ import {
   spentOnDay,
   type SpendScope,
 } from "./spend.js";
-import { CHAINS } from "./chains.js";
-import { planRebalance } from "./rebalance.js";
+import { chainAddresses, planRebalance } from "./rebalance.js";
 import { screenToken } from "./screening.js";
 import { supportTierFor } from "./support.js";
 import { evmReadClient, firstOk, solanaConnection } from "./rpc.js";
@@ -181,9 +180,7 @@ export async function createExecutorApp(
       spentBridgeUsd: parsed.data.spentBridgeUsd,
       dailyBridgeCap: config.dailyBridgeUsdCap,
       ownAddresses: parsed.data.ownAddresses,
-      allowlist: CHAINS.filter((chain) => config.enabledChainKeys.has(chain.key)).flatMap((chain) =>
-        config.withdrawAllowlist.filter((address) => addressFitsChain(chain.key, address)).map((address) => ({ chainKey: chain.key, address })),
-      ),
+      allowlist: chainAddresses(config.enabledChainKeys, config.withdrawAllowlist),
     });
   });
   return app;

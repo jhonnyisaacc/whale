@@ -34,7 +34,7 @@ export function chainReader(config: AppConfig, signer: TransactionSigner | null)
     const owner = signer.evmAddress();
     if (!owner) return null;
     const { erc20Abi, formatUnits } = await import("viem");
-    const client = evmReadClient(rpcs);
+    const client = evmReadClient(spec.chain.chainId, rpcs);
     if (holding.native) {
       const raw = await client.getBalance({ address: owner as `0x${string}` });
       return Number(formatUnits(raw, decimals));

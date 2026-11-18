@@ -59,7 +59,7 @@ test("a viem error from a failing RPC does not print the key", async () => {
   const { port } = server.address() as { port: number };
   const url = `http://LOCALHOST:${port}?apikey=${rpcKey}`;
   try {
-    const failure = await evmReadClient([url]).getChainId().then(
+    const failure = await evmReadClient(8453, [url]).getChainId().then(
       () => assert.fail("the RPC should fail"),
       (error: unknown) => error,
     );

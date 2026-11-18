@@ -44,7 +44,8 @@ export function envCostReaders(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch =
   return {
     async evmGasPriceWei(chainKey) {
       const urls = rpcs[chainKey];
-      return urls ? within(evmReadClient(urls).getGasPrice()) : null;
+      const spec = chainByKey(chainKey);
+      return urls && spec?.chain.kind === "evm" ? within(evmReadClient(spec.chain.chainId, urls).getGasPrice()) : null;
     },
     async solanaPriorityMicroLamports() {
       const urls = rpcs.solana;
