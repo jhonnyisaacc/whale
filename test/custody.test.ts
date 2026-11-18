@@ -174,13 +174,13 @@ test("swap calldata must pay the hot wallet unless opaque swaps are opted in", (
 
 test("the EVM fee policy bounds gas and fee per gas on each chain and refuses a chain without limits", () => {
   const polygon = DEFAULT_EVM_FEE_LIMITS[137];
-  const swap = { gas: 300_000n, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n };
+  const swap = { chainId: 137, gas: 300_000n, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n };
   assert.doesNotThrow(() => assertEvmFee(polygon, swap));
   assert.doesNotThrow(() => assertEvmFee(polygon, { ...swap, gas: polygon!.maxGas, maxFeePerGas: polygon!.maxFeePerGas }));
   assert.throws(() => assertEvmFee(polygon, { ...swap, gas: polygon!.maxGas + 1n }), /gas limit exceeds/);
   assert.throws(() => assertEvmFee(polygon, { ...swap, maxFeePerGas: polygon!.maxFeePerGas + 1n }), /maxFeePerGas exceeds/);
   assert.throws(() => assertEvmFee(polygon, { ...swap, maxPriorityFeePerGas: swap.maxFeePerGas + 1n }), /priority fee exceeds/);
-  for (const chainId of [10, 8453, 81457, 534352]) assert.throws(() => assertEvmFee(DEFAULT_EVM_FEE_LIMITS[chainId], swap), /no EVM fee limit/);
+  for (const chainId of [10, 8453, 81457, 534352]) assert.throws(() => assertEvmFee(DEFAULT_EVM_FEE_LIMITS[chainId], { ...swap, chainId }), /no EVM fee limit/);
 });
 
 test("a 0x exec must lend the allowance to a pinned Settler and call it", () => {
