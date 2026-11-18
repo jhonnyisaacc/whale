@@ -66,9 +66,7 @@ pub fn run_job(
                         decision,
                         bytes.clone(),
                         Box::new(move || {
-                            Ok(
-                                json!({ "signature": bs58::encode(solana::sign(&bytes, &keys.solana)).into_string() }),
-                            )
+                            solana::sign(&bytes, &keys.solana).map(|signature| json!({ "signature": bs58::encode(signature).into_string() }))
                         }),
                     )
                 }

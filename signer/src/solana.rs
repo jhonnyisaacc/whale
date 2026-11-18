@@ -120,7 +120,17 @@ pub fn key(text: &str) -> Result<[u8; 32], String> {
         .map_err(|_| format!("{text} is not a 32-byte key"))
 }
 
-pub fn sign(message: &[u8], key: &ed25519_dalek::SigningKey) -> [u8; 64] {
+pub fn verify(message: &[u8], public: &[u8; 32], signature: &[u8; 64]) -> Result<(), String> {
+    let refused = |_| "solana signature failed verify_strict against the signing key".to_string();
+    ed25519_dalek::VerifyingKey::from_bytes(public)
+        .map_err(refused)?
+        .verify_strict(message, &ed25519_dalek::Signature::from_bytes(signature))
+        .map_err(refused)
+}
+
+pub fn sign(message: &[u8], key: &ed25519_dalek::SigningKey) -> Result<[u8; 64], String> {
     use ed25519_dalek::Signer;
-    key.sign(message).to_bytes()
+    let signature = key.sign(message).to_bytes();
+    verify(message, &key.verifying_key().to_bytes(), &signature)?;
+    Ok(signature)
 }

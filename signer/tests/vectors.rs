@@ -367,3 +367,75 @@ fn a_job_signed_again_after_a_lost_answer_is_charged_once() {
     assert_eq!(spent(), charged);
     let _ = std::fs::remove_file(ledger);
 }
+
+fn signed_solana_cases() -> Vec<(String, Vec<u8>, [u8; 64])> {
+    use base64::Engine;
+    load("solana.json")["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|case| {
+            let signature = case.get("signature")?.as_str().unwrap();
+            let message = base64::engine::general_purpose::STANDARD
+                .decode(case["job"]["message"].as_str().unwrap())
+                .unwrap();
+            let signature: [u8; 64] = bs58::decode(signature)
+                .into_vec()
+                .unwrap()
+                .try_into()
+                .unwrap();
+            Some((
+                case["name"].as_str().unwrap().to_owned(),
+                message,
+                signature,
+            ))
+        })
+        .collect()
+}
+
+fn solana_public_key() -> [u8; 32] {
+    whale_signer::solana::key(load("solana.json")["own"].as_str().unwrap()).unwrap()
+}
+
+#[test]
+fn every_solana_vector_signature_verifies_against_its_public_key() {
+    let cases = signed_solana_cases();
+    assert_eq!(cases.len(), 5, "the signed Solana vectors");
+    for (name, message, signature) in cases {
+        assert_eq!(
+            whale_signer::solana::verify(&message, &solana_public_key(), &signature),
+            Ok(()),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn a_corrupted_solana_signature_or_key_is_refused() {
+    let (name, message, signature) = signed_solana_cases().remove(0);
+    let mut bad_signature = signature;
+    bad_signature[0] ^= 1;
+    let mut bad_key = solana_public_key();
+    bad_key[0] ^= 1;
+    for (label, key, signature) in [
+        ("corrupted signature", solana_public_key(), bad_signature),
+        ("corrupted key", bad_key, signature),
+    ] {
+        let error = whale_signer::solana::verify(&message, &key, &signature)
+            .expect_err(&format!("{name}: {label} must be refused"));
+        assert!(
+            error.contains("solana") && error.contains("verify_strict"),
+            "{label}: {error}"
+        );
+    }
+}
+
+#[test]
+fn a_solana_signature_over_other_bytes_is_refused() {
+    let (name, mut message, signature) = signed_solana_cases().remove(0);
+    message[0] ^= 1;
+    assert!(
+        whale_signer::solana::verify(&message, &solana_public_key(), &signature).is_err(),
+        "{name}"
+    );
+}
