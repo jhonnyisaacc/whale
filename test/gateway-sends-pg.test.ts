@@ -267,7 +267,7 @@ test("a swap that sells a native or other token is priced by selling it into USD
     const big = await swap("eth-big", ONE_ETH.toString(), 1);
     assert.equal(big.isError, true);
     assert.match(big.text, /the swap sells about 3000\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
-    assert.ok(quoted.every((command) => command.buyToken === "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" && command.slippageBps === 50 && command.taker === OWN), "the pricing quote ignores the agent's buy token and slippage");
+    assert.ok(quoted.every((command) => command.buyToken === USDC && command.slippageBps === 50 && command.taker === OWN), "the pricing quote ignores the agent's buy token and slippage");
     const small = await swap("eth-small", eth(0.005), 1);
     assert.equal(small.body?.status, "would_swap");
     assert.equal(await approvals(), 0);

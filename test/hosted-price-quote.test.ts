@@ -26,7 +26,8 @@ test("a hosted quote with no price reference keeps EVM quotes and answers with t
   };
   try {
     const quote = await commandDeps(env, command).quote?.(command);
-    assert.ok(hosts.includes("api.0x.org") && hosts.includes("li.quest"));
+    const asked = new Set(hosts);
+    assert.ok(asked.has("api.0x.org") && asked.has("li.quest"));
     assert.equal(quote?.buyAmount, "3100000000");
   } finally {
     globalThis.fetch = original;
