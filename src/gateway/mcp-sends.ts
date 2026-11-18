@@ -84,7 +84,7 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (reservation.kind === "refused") return deny(reservation.reason);
   if (reservation.kind === "settling") return settling;
   if (reservation.kind === "lapsed") return lapsedApproval(pool, agent, command, deny, settling);
-  const request = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command };
+  const request = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command, issuedAt: reservation.issuedAt };
   let value: unknown;
   try {
     value = await executor.run(request);
