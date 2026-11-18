@@ -74,3 +74,38 @@ test("a manifest that breaks its host's schema fails", () => {
   rejects((dir) => editJson(dir, ".muse-plugin/plugin.json", (value) => { delete value.schemaVersion; }), /^\.muse-plugin\/plugin\.json: schemaVersion/);
   rejects((dir) => editJson(dir, ".muse-plugin/plugin.json", (value) => { (value.capabilities as { skills: { path: string }[] }).skills[0].path = "skills/gone/SKILL.md"; }), /^\.muse-plugin\/plugin\.json: .*skills\/gone\/SKILL\.md/);
 });
+
+function accepts(change: (dir: string) => void): void {
+  const dir = fixture();
+  try {
+    change(dir);
+    assert.deepEqual(validateHostManifests(dir), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function editSkill(dir: string, edit: (text: string) => string): void {
+  const file = path.join(dir, "skills/whale-wallet/SKILL.md");
+  writeFileSync(file, edit(readFileSync(file, "utf8")));
+}
+
+test("valid SKILL.md frontmatter forms pass", () => {
+  accepts((dir) => editSkill(dir, (text) => text.replace("name: whale-wallet", 'name: "whale-wallet"')));
+  accepts((dir) => editSkill(dir, (text) => text.replace("name: whale-wallet", "name: 'whale-wallet'")));
+  accepts((dir) => editSkill(dir, (text) => `﻿${text}`));
+});
+
+test("SKILL.md frontmatter a YAML loader would drop fails", () => {
+  rejects((dir) => editSkill(dir, (text) => text.replace(/^description: .*$/m, 'description: ""')), /skills\/whale-wallet\/SKILL\.md: frontmatter lacks description/);
+  rejects((dir) => editSkill(dir, (text) => text.replace(/^description: .*$/m, "description: Use when: anything")), /skills\/whale-wallet\/SKILL\.md: frontmatter description needs quotes/);
+});
+
+test("an MCP command under the plugin root variable or after node flags passes", () => {
+  accepts((dir) => editJson(dir, ".mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["${CLAUDE_PLUGIN_ROOT}/dist/src/mcp-server.js"]; }));
+  accepts((dir) => editJson(dir, ".mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["--enable-source-maps", "dist/src/mcp-server.js"]; }));
+});
+
+test("a Muse skill path that names a directory fails with a manifest error", () => {
+  rejects((dir) => editJson(dir, ".muse-plugin/plugin.json", (value) => { (value.capabilities as { skills: { path: string }[] }).skills[0].path = "skills/whale-wallet"; }), /^\.muse-plugin\/plugin\.json: skills\/whale-wallet: not a file/);
+});
