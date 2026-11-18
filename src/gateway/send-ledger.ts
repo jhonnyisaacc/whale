@@ -83,6 +83,18 @@ export async function settleSend(client: pg.ClientBase, agentId: string, idempot
   return (spend.rowCount ?? 0) + (approval.rowCount ?? 0) > 0;
 }
 
+export function oneAtATime(work: () => Promise<unknown>): () => void {
+  let running = false;
+  const done = () => {
+    running = false;
+  };
+  return () => {
+    if (running) return;
+    running = true;
+    void work().then(done, done);
+  };
+}
+
 export async function settleStaleSends(pool: pg.Pool, executor: ExecutorClient, graceMs = SETTLE_GRACE_MS, onError: (error: unknown) => void = () => undefined): Promise<number> {
   const cutoff = (await pool.query<{ cutoff: Date }>("SELECT now() - $1 * interval '1 millisecond' AS cutoff", [graceMs])).rows[0]?.cutoff as Date;
   const stale = await pool.query<{ agent_id: string; idempotency_key: string; account_id: string; wallet_id: string }>(
