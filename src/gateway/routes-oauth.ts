@@ -115,6 +115,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: { config: Gatewa
     if (outside) return reply.code(400).send({ error: "limits_outside_policy", detail: outside });
     const redirect = await approveRequest(pool, { requestId: params.data.id, accountId: session.accountId, walletId: wallet.id, name: body.data.name, limits: body.data.limits, issuer }, now());
     if (!redirect) return reply.code(404).send({ error: "not_found" });
+    if (typeof redirect !== "string") return reply.code(409).send({ error: "wallet_frozen", detail: `unfreeze it at ${endpoint(`/wallets/${wallet.id}`)} with your passkey, then start the connection again from your app` });
     return { redirect };
   });
 

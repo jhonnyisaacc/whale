@@ -13,6 +13,7 @@ export function Connect({ requestId }: { requestId: string }) {
   const [request, setRequest] = useState<Request | null>(null);
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [frozen, setFrozen] = useState(0);
   const [walletId, setWalletId] = useState("");
   const [name, setName] = useState("");
   const [limits, setLimits] = useState<Limits | null>(null);
@@ -33,6 +34,7 @@ export function Connect({ requestId }: { requestId: string }) {
       .then((reply) => {
         const usable = reply.wallets.filter((wallet) => wallet.status === "active" || wallet.status === "pending");
         setWallets(usable);
+        setFrozen(reply.wallets.filter((wallet) => wallet.status === "frozen").length);
         const first = usable[0];
         if (first) {
           setWalletId(first.id);
@@ -84,6 +86,8 @@ export function Connect({ requestId }: { requestId: string }) {
           </a>
           <button onClick={() => void deny()}>Deny</button>
         </div>
+      ) : wallets.length === 0 && frozen > 0 ? (
+        <p>A frozen wallet cannot take a connection. Unfreeze one from the Wallets page with your passkey, then start the connection again from your app.</p>
       ) : wallets.length === 0 ? (
         <p>You have no wallet yet. Create one from the Wallets page, then start the connection again.</p>
       ) : (
