@@ -58,8 +58,9 @@ const SIGNABLE_AND_LARGER_UNSIGNABLE: Answers = { zeroex: "3000000000", kyberswa
 test("an MCP quote on Base with no price reference returns the largest signable route, never a larger unsignable one", async () => {
   const result = await withStubs(SIGNABLE_AND_LARGER_UNSIGNABLE, () => callTool(MCP, "quote", QUOTE_ARGS));
   assert.equal((result as { status: string }).status, "quoted", JSON.stringify(result));
-  const { quote } = result as { quote: { provider: string; buyAmount: string; signable: boolean } };
+  const { quote } = result as { quote: { provider: string; buyAmount: string; signable: boolean; note?: string } };
   assert.equal(quote.provider, "kyberswap");
+  assert.match(quote.note ?? "", /price impact is unknown/);
   assert.equal(quote.buyAmount, "3050000000");
   assert.equal(quote.signable, true);
 });

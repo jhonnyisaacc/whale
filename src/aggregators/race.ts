@@ -143,6 +143,12 @@ export function chooseLargestOutput(quotes: readonly HopQuote[]): HopQuote {
   return usable.reduce<HopQuote | null>((best, quote) => (best === null || BigInt(quote.buyAmount) > BigInt(best.buyAmount) ? quote : best), null) ?? empty();
 }
 
+export function chooseSignableQuote(quotes: readonly HopQuote[]): HopQuote {
+  const signable = quotes.filter((quote) => quote.signable !== false);
+  const checked = chooseQuote(signable);
+  return checked.priceImpactPct === null ? chooseLargestOutput(signable) : checked;
+}
+
 export async function raceProviderQuotes(config: AppConfig, hop: QuoteHop, reference: Reference | null, fetchImpl: typeof fetch = fetch, choose: (quotes: readonly HopQuote[]) => HopQuote = chooseQuote): Promise<HopQuote> {
   if (!validSellAmount(hop.sellAmount)) return empty();
   const ids = providersFor(hop.chain, config);
