@@ -38,6 +38,8 @@ async function submit(path: string, type: string, organizationId: string, parame
 }
 
 export type Delegation = {
+  inSync: boolean;
+  delegatePolicyIds: string[];
   subOrganizationId: string;
   ownerUserId: string;
   ownerCredentialIds: string[];

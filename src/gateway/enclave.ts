@@ -24,6 +24,7 @@ type EnclaveRow = {
   turnkey_sub_org_id: string | null;
   turnkey_wallet_id: string | null;
   turnkey_owner_user_id: string | null;
+  turnkey_delegate_user_id: string | null;
   root_credential_id: string | null;
   turnkey_activity_id: string | null;
   lease_expired: boolean;
@@ -34,7 +35,7 @@ type EnclaveRow = {
 
 async function enclaveWallet(pool: pg.Pool | pg.PoolClient, accountId: string, walletId: string): Promise<EnclaveRow | null> {
   const found = await pool.query<EnclaveRow>(
-    `SELECT w.id, w.status, w.level, w.turnkey_sub_org_id, w.turnkey_wallet_id, w.turnkey_owner_user_id, w.root_credential_id, w.turnkey_activity_id, p.document,
+    `SELECT w.id, w.status, w.level, w.turnkey_sub_org_id, w.turnkey_wallet_id, w.turnkey_owner_user_id, w.turnkey_delegate_user_id, w.root_credential_id, w.turnkey_activity_id, p.document,
        w.root_claimed_at < now() - interval '2 minutes' AS lease_expired,
        w.root_claimed_at < now() - interval '24 hours' AS unrecorded_claim_expired,
        (SELECT address FROM wallet_addresses a WHERE a.wallet_id = w.id AND a.family = 'solana') AS solana
@@ -193,7 +194,15 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
     const ownerCredentialIds = state.users.find((user) => user.userId === wallet.turnkey_owner_user_id)?.credentialIds ?? [];
     const policiesInPlace = policies !== null && allowPoliciesMatch(state.policies, policies);
     const stalePolicyIds = policies !== null && !policiesInPlace ? state.policies.flatMap((entry) => (entry.effect === "EFFECT_ALLOW" && entry.policyId ? [entry.policyId] : [])) : [];
+    const inSync =
+      delegate !== undefined &&
+      delegate.userId === wallet.turnkey_delegate_user_id &&
+      wallet.turnkey_owner_user_id !== null &&
+      wallet.root_credential_id !== null &&
+      !("problems" in verifyDelegation(state, { ownerUserId: wallet.turnkey_owner_user_id, rootCredentialId: wallet.root_credential_id, delegatePublicKey: deps.delegation.delegatePublicKey, expected: () => policies ?? [] }));
     return {
+      inSync,
+      delegatePolicyIds: delegate ? state.policies.flatMap((entry) => (entry.policyId && entry.consensus.includes(delegate.userId) ? [entry.policyId] : [])) : [],
       subOrganizationId: wallet.turnkey_sub_org_id,
       ownerUserId: wallet.turnkey_owner_user_id,
       ownerCredentialIds,
@@ -204,6 +213,30 @@ export function registerEnclaveRoutes(app: FastifyInstance, deps: EnclaveDeps): 
       policiesInPlace,
       stalePolicyIds,
     };
+  });
+
+  app.post("/api/wallets/:id/enclave/resync", { config: perMinute(10) }, async (request, reply) => {
+    const session = await requireSession(pool, request, reply);
+    if (!session) return reply;
+    if (!deps.turnkey || !deps.delegation) return reply.code(503).send({ error: "enclave_unavailable" });
+    const delegation = deps.delegation;
+    const params = walletParam.safeParse(request.params);
+    const wallet = params.success ? await enclaveWallet(pool, session.accountId, params.data.id) : null;
+    if (!wallet || wallet.status !== "active" || !wallet.turnkey_sub_org_id || !wallet.turnkey_wallet_id || !wallet.turnkey_owner_user_id || !wallet.root_credential_id || !wallet.solana) {
+      return reply.code(404).send({ error: "not_found" });
+    }
+    const { turnkey_wallet_id: turnkeyWalletId, solana } = wallet;
+    const policy = storedPolicySchema.parse(wallet.document);
+    const verdict = verifyDelegation(await deps.turnkey.readSubOrganization(wallet.turnkey_sub_org_id), {
+      ownerUserId: wallet.turnkey_owner_user_id,
+      rootCredentialId: wallet.root_credential_id,
+      delegatePublicKey: delegation.delegatePublicKey,
+      expected: (delegateUserId) => expectedPolicies({ delegateUserId, walletId: turnkeyWalletId, solanaAddress: solana, policy, config: delegation }),
+    });
+    if ("problems" in verdict) return reply.code(409).send({ error: "delegation_not_safe", problems: verdict.problems });
+    if (verdict.delegateUserId !== wallet.turnkey_delegate_user_id) return reply.code(409).send({ error: "delegation_not_safe", problems: ["the delegate must be the one approved at activation"] });
+    await audit(pool, { accountId: session.accountId, walletId: wallet.id, actor: "user", action: "wallet.delegation_resynced", detail: { delegateUserId: verdict.delegateUserId } });
+    return { walletId: wallet.id, inSync: true };
   });
 
   app.post("/api/wallets/:id/enclave/confirm", { config: perMinute(10) }, async (request, reply) => {
