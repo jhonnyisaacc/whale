@@ -64,6 +64,8 @@ test("installs wait a week, keep publisher trust, and run no dependency build sc
     assert.equal(new RegExp(`^${key}:`, "m").test(workspace), false, `${key} weakens the install policy`);
   }
   assert.deepEqual(listSetting(workspace, "trustPolicyExclude"), ["undici-types@6.21.0"], "a new trust exception needs review here");
+  const auditConfig = workspace.match(/^auditConfig:\n((?: .*\n?)*)/m)?.[1] ?? "";
+  assert.equal(auditConfig.trimEnd(), "  ignoreGhsas:\n    - GHSA-fc5q-39xc-vjpf", "a new audit exception needs review here");
 });
 
 test("every package.json pins every dependency, the root pins the package manager, and none runs a lifecycle script", () => {
