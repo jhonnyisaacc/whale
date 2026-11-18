@@ -46,9 +46,9 @@ test("evm addresses still compare without case", () => {
   assert.equal(result.quote?.destination.address, evm);
 });
 
-test("/rebalance refuses a case-variant of an owner solana address", async () => {
-  const token = "0123456789abcdef";
-  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: token, RESOLVER_AUTH_TOKEN: "resolver-token-123456", OWNER_WITHDRAW_ADDRESSES: mint });
+test("/rebalance pairs an owner address only with enabled chains of its family", async () => {
+  const bearer = "a".repeat(16);
+  const config = loadConfig({ EXECUTOR_AUTH_TOKEN: bearer, RESOLVER_AUTH_TOKEN: "resolver-token-123456", OWNER_WITHDRAW_ADDRESSES: `${mint},${evm}` });
   const runtime: ExecutorDeps = {
     config,
     mode: "dry_run",
@@ -58,14 +58,18 @@ test("/rebalance refuses a case-variant of an owner solana address", async () =>
     send: async () => landedSend(),
   };
   const app = await createExecutorApp(config, runtime, null, [], []);
-  const post = (address: string) =>
+  const post = (address: string, chainKey = "solana") =>
     app.inject({
       method: "POST",
       url: "/rebalance",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      payload: { quotes: [{ provider: "lifi", feeUsd: 0.01, amountInUsd: 10, destination: { chainKey: "solana", address } }], ownAddresses: [{ chainKey: "solana", address }] },
+      headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
+      payload: { quotes: [{ provider: "lifi", feeUsd: 0.01, amountInUsd: 10, destination: { chainKey, address } }], ownAddresses: [{ chainKey, address }] },
     });
   assert.equal((await post(lookalike)).json().kind, "skip");
   assert.equal((await post(mint)).json().kind, "would_send");
+  assert.equal((await post(mint.toLowerCase(), "base")).json().kind, "skip");
+  assert.equal((await post(mint, "hypercore")).json().kind, "skip");
+  assert.equal((await post(evm, "ethereum")).json().kind, "skip");
+  assert.equal((await post(evm.toLowerCase(), "base")).json().kind, "would_send");
   await app.close();
 });
