@@ -336,3 +336,15 @@ test("a chain this build dropped from a stored policy still reads, a narrowing a
     await drop();
   }
 });
+
+test("a new wallet lets agents trade inside its USD caps with no owner approval until the owner sets a threshold", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, user, drop } = await harness();
+  try {
+    const listed = (await app.inject({ method: "GET", url: "/api/wallets", headers: user.headers })).json().wallets[0];
+    assert.equal(listed.policy.approvalAboveUsd, null);
+    assert.equal(listed.policy.maxTxUsd, 50);
+    assert.equal(listed.policy.dailyUsd, 100);
+  } finally {
+    await drop();
+  }
+});

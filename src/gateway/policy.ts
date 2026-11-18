@@ -44,14 +44,13 @@ export const walletPolicySchema = z
   });
 export type WalletPolicy = z.infer<typeof walletPolicySchema>;
 
-// Cheap chains first, small caps, and a human above half the per-transaction cap.
 export const DEFAULT_POLICY: WalletPolicy = {
   version: 1,
   chains: ["base", "arbitrum", "solana"],
   actions: ["swap"],
   maxTxUsd: 50,
   dailyUsd: 100,
-  approvalAboveUsd: 25,
+  approvalAboveUsd: null,
   maxSlippageBps: 100,
   destinations: [],
   tokenAllowlist: null,
