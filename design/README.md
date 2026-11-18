@@ -8,6 +8,9 @@ The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `expo
 | `exports/landing-desktop.png` | The 9 landing sections stacked, desktop |
 | `exports/landing-mobile.png` | The 9 landing sections stacked, mobile |
 | `exports/docs-desktop.png` | Docs: chapter 1 Install, chapter 2 Comparison |
+| `exports/auth-browser.png` | Auth: connect chooser, sign-in, consent, connected, device code, agents, passkey approval, Grok connector |
+| `exports/auth-terminal.png` | Auth: `whale init`, `whale login` (device code), Claude Code OAuth, `whale status` |
+| `exports/auth-mobile.png` | Auth: device code entry and passkey approval on a phone |
 | `logos/` | Chain and host logos that the `.pen` file loads as image fills |
 
 ## Canvas layout
@@ -15,6 +18,7 @@ The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `expo
 - Landing, desktop: x = 0. Sections run 01 Nav, 02 Hero, 03 Compare, 04 Networks, 05 Install, 06 Hosts, 07 Safety, 08 Contribute, 09 Footer.
 - Landing, mobile: x = 1640, same order.
 - Docs: x = 2700. Install comes first, then Comparison.
+- Auth: x = 4300 (browser), 5700 (terminal), 6800 (mobile).
 - Components sit above the origin: buttons, network chip, status badge, code card, `InstallBlock`, and the `WhaleBreachSketch` hero drawing.
 - Notes to the right of the mobile stack hold the motion, accessibility and open-item contracts.
 
@@ -56,6 +60,35 @@ Each claim was checked against `origin/main` on 2026-11-18.
 | Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`, starts the executor on port 8788 with an `EXECUTOR_AUTH_TOKEN` (the default port is 8080, and `.mcp.json` points at 8788), then registers the MCP server with the same token, so `wallet_status` can reach it. Hermes stays "planned" because it has no manifest. |
 | License | "MIT License" | #94 adds the `LICENSE` file. Ship the site after #94 merges. |
 | Add a network | "An entry in src/chains.ts plus its fee limits" | A new EVM chain also needs a `DEFAULT_EVM_FEE_LIMITS` entry, or it gets no Turnkey clause (`src/signing-policy/turnkey.ts:83`). |
+
+## Authentication
+
+The production gateway is `https://app.mywhalewallet.com`, and MCP clients connect to `https://app.mywhalewallet.com/mcp`. Each place an agent runs gets one step and its own revocable credential:
+
+| Where the agent runs | Step | Credential |
+| --- | --- | --- |
+| This computer only | `npx whale init` | Executor token in a 0600 file, executor bound to loopback. No account. |
+| Claude Code, Codex, Cursor, VS Code | Add the MCP URL, sign in once | OAuth 2.1, PKCE S256, loopback redirect, 1-hour access token, rotating refresh token |
+| Grok | Add a custom connector with the MCP URL | Same OAuth flow, discovered from `/.well-known/oauth-protected-resource` |
+| VPS, SSH, Hermes | `npx whale login`, then approve on any phone | OAuth device authorization grant (RFC 8628) |
+| A bot with no human | Create an API key in Agents | `whale_<id>_<secret>`, shown once, stored as a hash, scoped to one wallet and its caps |
+
+Owners sign in with a passkey (Google as the first-time fallback) and approve sends above their threshold with a passkey.
+
+### Already on `main`
+
+- MCP OAuth: protected-resource and authorization-server metadata, dynamic client registration, client ID metadata documents, PKCE S256 only, https or loopback redirects, resource-bound tokens, 1-hour access tokens, 30-day refresh tokens with reuse detection, revocation (`src/gateway/routes-oauth.ts`, `src/gateway/oauth-store.ts`).
+- Consent page with wallet and limits (`web/src/pages/Connect.tsx`). Google sign-in (`web/src/pages/Login.tsx`). API keys shown once and hashed, with rotate and revoke (`src/gateway/agents.ts`, `web/src/pages/Agents.tsx`). Passkeys for step-up and approvals (`src/gateway/routes-passkeys.ts`).
+- A stdio forwarder that uses `WHALE_GATEWAY_URL` and `WHALE_API_KEY` (`src/mcp-server.ts:92`).
+
+### Designed here, not built yet
+
+- `whale` CLI: `init`, `login`, `logout`, `status`, `doctor --gateway`, `mcp install <host>`. `package.json` has no `bin`, and `src/cli.ts` only runs wallet commands.
+- Device authorization grant: endpoint, `/device` page, and polling. `grant_types_supported` lists only `authorization_code` and `refresh_token`.
+- Passkey sign-in. Login offers Google only.
+- A "connected" page, a CAN / CANNOT scope list on consent, and the sign-in method in the Agents table.
+- Local setup: the executor listens on `0.0.0.0` (`src/executor-server.ts:246`), and its default port 8080 doesn't match the 8788 in `.mcp.json`.
+- The stdio forwarder can't use OAuth or device tokens yet, only an API key.
 
 ## Logo sources
 

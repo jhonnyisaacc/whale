@@ -29795,7 +29795,7 @@
                       "width": "fill_container",
                       "descendants": {
                         "WySSN": {
-                          "content": "claude mcp add --transport http whale https://<gateway>/mcp",
+                          "content": "claude mcp add --transport http whale https://app.mywhalewallet.com/mcp",
                           "fontSize": 13
                         }
                       }
@@ -60428,7 +60428,7 @@
             "N2AfU": {
               "fontSize": 12,
               "lineHeight": 1.65,
-              "content": "Install the Whale wallet from\nhttps://github.com/jhonnyisaacc/whale\n\n1. Clone it and run:\n   pnpm install --frozen-lockfile\n   && pnpm run build\n2. Register its MCP server\n   (stdio: node dist/src/mcp-server.js)\n   and the skills in skills/ with this host.\n3. Keep WHALE_BROADCAST unset so every\n   swap and transfer stays dry-run.\n\nThen call wallet_status and show me\nthe result."
+              "content": "Install the Whale wallet from\nhttps://github.com/jhonnyisaacc/whale\n\n1. Clone it and run:\n   pnpm install --frozen-lockfile\n   && pnpm run build\n2. Start the executor in the\n   background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token>\n   pnpm run start:executor\n3. Register its MCP server\n   (stdio: node dist/src/mcp-server.js)\n   with EXECUTOR_URL=\n   http://127.0.0.1:8788 and the same\n   EXECUTOR_AUTH_TOKEN, and the skills\n   in skills/, with this host.\n\nThe local MCP is dry-run only:\nnothing signs or broadcasts.\nThen call wallet_status and show me\nthe result."
             }
           }
         },
@@ -60473,7 +60473,7 @@
           "width": "fill_container",
           "descendants": {
             "WySSN": {
-              "content": "claude mcp add --transport http whale https://<gateway>/mcp",
+              "content": "claude mcp add --transport http whale https://app.mywhalewallet.com/mcp",
               "fontSize": 12
             }
           }
@@ -60484,7 +60484,7 @@
       "type": "frame",
       "id": "mKwNy",
       "x": 1640,
-      "y": 5723,
+      "y": 5863,
       "name": "Landing / 06 Hosts / Mobile",
       "clip": true,
       "width": 390,
@@ -61016,7 +61016,7 @@
       "type": "frame",
       "id": "VXZBK",
       "x": 1640,
-      "y": 6610,
+      "y": 6750,
       "name": "Landing / 07 Safety / Mobile",
       "clip": true,
       "width": 390,
@@ -61296,7 +61296,7 @@
       "type": "frame",
       "id": "ukSWw",
       "x": 1640,
-      "y": 7000,
+      "y": 7140,
       "name": "Landing / 08 Contribute / Mobile",
       "clip": true,
       "width": 390,
@@ -61687,7 +61687,7 @@
       "type": "frame",
       "id": "prBYv",
       "x": 1640,
-      "y": 8050,
+      "y": 8190,
       "name": "Landing / 09 Footer / Mobile",
       "clip": true,
       "width": 390,
@@ -62954,7 +62954,7 @@
               "width": "fill_container",
               "descendants": {
                 "WySSN": {
-                  "content": "claude mcp add --transport http whale https://<gateway>/mcp"
+                  "content": "claude mcp add --transport http whale https://app.mywhalewallet.com/mcp"
                 }
               }
             },
@@ -88417,6 +88417,5028 @@
           "fill": "#dad9da",
           "width": 0.9147,
           "height": 0.5641
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "y4cOnn",
+      "x": 4300,
+      "y": -1260,
+      "name": "Auth / Header",
+      "width": 1280,
+      "layout": "vertical",
+      "gap": 10,
+      "children": [
+        {
+          "type": "text",
+          "id": "uUGIi",
+          "fill": "$muted",
+          "content": "AUTH · v1 · 2026-11-18",
+          "fontFamily": "$font-mono",
+          "fontSize": 12,
+          "fontWeight": "normal",
+          "letterSpacing": 1
+        },
+        {
+          "type": "text",
+          "id": "mloV7",
+          "fill": "$ink",
+          "content": "Connect an agent to Whale",
+          "fontFamily": "$font-display",
+          "fontSize": 56,
+          "fontWeight": "300",
+          "letterSpacing": -1.8
+        },
+        {
+          "type": "text",
+          "id": "MSxa4",
+          "fill": "$muted",
+          "textGrowth": "fixed-width",
+          "width": 900,
+          "content": "One command or one click per place an agent runs. OAuth 2.1 with PKCE, passkeys, device flow for headless machines, API keys only as a fallback.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-display",
+          "fontSize": 18,
+          "fontWeight": "300"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "LEDLK",
+      "x": 4300,
+      "y": 0,
+      "name": "Auth / 01 Sign in",
+      "clip": true,
+      "width": 1280,
+      "height": 800,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "E2Jj9",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Szb0O",
+              "name": "Dots",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "i9UeCv",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "kIfzF",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "wcxNp",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "DkWnc",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "xmkFZ",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "Y4qfe",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/login",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "x0Rt3",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "padding": 40,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Wa3qU",
+              "name": "Card",
+              "width": 440,
+              "fill": "$bg",
+              "cornerRadius": 28,
+              "stroke": "$line",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 20,
+              "padding": 36,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "i1kOhP",
+                  "name": "Brand",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "ElmM6",
+                      "fill": "$lavender",
+                      "width": 22,
+                      "height": 22
+                    },
+                    {
+                      "type": "text",
+                      "id": "bM3FN",
+                      "fill": "$ink",
+                      "content": "Whale",
+                      "fontFamily": "$font-display",
+                      "fontSize": 18
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "wSMdq",
+                  "fill": "$ink",
+                  "content": "Sign in to Whale",
+                  "fontFamily": "$font-display",
+                  "fontSize": 32,
+                  "fontWeight": "300",
+                  "letterSpacing": -0.8
+                },
+                {
+                  "type": "text",
+                  "id": "PaO46",
+                  "fill": "$muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Use the passkey on this device. No password, nothing to remember.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-display",
+                  "fontSize": 15,
+                  "fontWeight": "300"
+                },
+                {
+                  "id": "Y26NBQ",
+                  "type": "ref",
+                  "ref": "OLWbW",
+                  "width": "fill_container",
+                  "descendants": {
+                    "uoTZL": {
+                      "content": "Continue with passkey"
+                    }
+                  }
+                },
+                {
+                  "id": "rnk7T",
+                  "type": "ref",
+                  "ref": "zJXcL",
+                  "width": "fill_container",
+                  "descendants": {
+                    "wwQJU": {
+                      "enabled": false
+                    },
+                    "G0DK0U": {
+                      "content": "Continue with Google"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "Aadkx",
+                  "fill": "$muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "First time? Google creates the account, then you add a passkey.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "R0FsE3",
+      "x": 4300,
+      "y": 900,
+      "name": "Auth / 02 Consent",
+      "clip": true,
+      "width": 1280,
+      "height": 1000,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "jGiel",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "u4sex6",
+              "name": "Dots",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "o2r5MW",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "qDgdB",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "M24ZuV",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "mAX2X",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Y7pxk",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "m6ViOw",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/connect?request=…",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "c1dNBc",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "padding": 40,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "RfLq1",
+              "name": "Card",
+              "width": 560,
+              "fill": "$bg",
+              "cornerRadius": 28,
+              "stroke": "$line",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 20,
+              "padding": 36,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Zyk8X",
+                  "name": "Brand",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "djLnP",
+                      "fill": "$lavender",
+                      "width": 22,
+                      "height": 22
+                    },
+                    {
+                      "type": "text",
+                      "id": "BdpS1",
+                      "fill": "$ink",
+                      "content": "Whale",
+                      "fontFamily": "$font-display",
+                      "fontSize": 18
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "LpRwx",
+                  "fill": "$ink",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Connect Claude Code to your wallet",
+                  "fontFamily": "$font-display",
+                  "fontSize": 30,
+                  "fontWeight": "300",
+                  "letterSpacing": -0.8
+                },
+                {
+                  "type": "frame",
+                  "id": "Vbsqh",
+                  "name": "ClientIdentity",
+                  "width": "fill_container",
+                  "fill": "$grid",
+                  "cornerRadius": 16,
+                  "gap": 12,
+                  "padding": 14,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "h2Sk8",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "badge-check",
+                      "library": "lucide",
+                      "fill": "$mint"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Kb2pM",
+                      "fill": "$ink",
+                      "content": "Returns to http://127.0.0.1:53682/callback · this computer",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "JDd95",
+                  "name": "Row Wallet",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Y7HWCv",
+                      "fill": "$muted",
+                      "content": "Wallet",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "PdrrE",
+                      "fill": "$ink",
+                      "content": "Trading · Base, Arbitrum, Solana",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MQbWR",
+                  "name": "Row Agent name",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vXF2n",
+                      "fill": "$muted",
+                      "content": "Agent name",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "I5bMm",
+                      "fill": "$ink",
+                      "content": "claude-code on yoni-mbp",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "F3hLL",
+                  "name": "Row Per trade",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "iHqiI",
+                      "fill": "$muted",
+                      "content": "Per trade",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Pcdvh",
+                      "fill": "$ink",
+                      "content": "$50",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Sdzvs",
+                  "name": "Row Per day",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "XbkbG",
+                      "fill": "$muted",
+                      "content": "Per day",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "pfajt",
+                      "fill": "$ink",
+                      "content": "$100",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "BbCqa",
+                  "name": "Scope",
+                  "width": "fill_container",
+                  "gap": 24,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "hvPg6",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "T2xYnB",
+                          "fill": "$muted",
+                          "content": "CAN",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "lYQNJ",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "jvZc8",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "check",
+                              "library": "lucide",
+                              "fill": "$mint"
+                            },
+                            {
+                              "type": "text",
+                              "id": "V2PaZ",
+                              "fill": "$ink",
+                              "content": "Quote and swap",
+                              "fontFamily": "$font-display",
+                              "fontSize": 14,
+                              "fontWeight": "300"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gmWZs",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "I0H2t",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "check",
+                              "library": "lucide",
+                              "fill": "$mint"
+                            },
+                            {
+                              "type": "text",
+                              "id": "uZ744",
+                              "fill": "$ink",
+                              "content": "Transfer to allowlisted addresses",
+                              "fontFamily": "$font-display",
+                              "fontSize": 14,
+                              "fontWeight": "300"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "kPmDH",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "PMu4K",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "check",
+                              "library": "lucide",
+                              "fill": "$mint"
+                            },
+                            {
+                              "type": "text",
+                              "id": "JaJKb",
+                              "fill": "$ink",
+                              "content": "Read balances",
+                              "fontFamily": "$font-display",
+                              "fontSize": 14,
+                              "fontWeight": "300"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "iJ2EM",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "E4ALTY",
+                          "fill": "$muted",
+                          "content": "CANNOT",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "D92hi",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "N7YO1",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$peach"
+                            },
+                            {
+                              "type": "text",
+                              "id": "HmIpf",
+                              "fill": "$ink",
+                              "content": "Raise its own caps",
+                              "fontFamily": "$font-display",
+                              "fontSize": 14,
+                              "fontWeight": "300"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Px62S",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "HcAyT",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$peach"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Sh9Py",
+                              "fill": "$ink",
+                              "content": "See keys or a seed phrase",
+                              "fontFamily": "$font-display",
+                              "fontSize": 14,
+                              "fontWeight": "300"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "iQc8z",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "g8AWD1",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$peach"
+                            },
+                            {
+                              "type": "text",
+                              "id": "PzERQ",
+                              "fill": "$ink",
+                              "content": "Act after you revoke it",
+                              "fontFamily": "$font-display",
+                              "fontSize": 14,
+                              "fontWeight": "300"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "sy2fn",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "id": "U2bF2",
+                      "type": "ref",
+                      "ref": "zJXcL",
+                      "width": "fill_container",
+                      "descendants": {
+                        "wwQJU": {
+                          "enabled": false
+                        },
+                        "G0DK0U": {
+                          "content": "Deny"
+                        }
+                      }
+                    },
+                    {
+                      "id": "WVsdF",
+                      "type": "ref",
+                      "ref": "OLWbW",
+                      "width": "fill_container",
+                      "descendants": {
+                        "uoTZL": {
+                          "content": "Connect"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "UeQjJ",
+                  "fill": "$muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Access token lasts 1 hour and refreshes on its own. Revoke anytime in Agents.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "e7Q0vh",
+      "x": 4300,
+      "y": 2000,
+      "name": "Auth / 03 Connected",
+      "clip": true,
+      "width": 1280,
+      "height": 800,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "B1CAO",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "kP9Iu",
+              "name": "Dots",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "ouKOT",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "BFx1d",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "vxwob",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SofuU",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "L55Ckp",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "kVw9G",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/connect/done",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "GaXpH",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "padding": 40,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "W9HBUB",
+              "name": "Card",
+              "width": 480,
+              "fill": "$bg",
+              "cornerRadius": 28,
+              "stroke": "$line",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 20,
+              "padding": 36,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "UMaWn",
+                  "name": "Brand",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "XzSw1",
+                      "fill": "$lavender",
+                      "width": 22,
+                      "height": 22
+                    },
+                    {
+                      "type": "text",
+                      "id": "UU6Bo",
+                      "fill": "$ink",
+                      "content": "Whale",
+                      "fontFamily": "$font-display",
+                      "fontSize": 18
+                    }
+                  ]
+                },
+                {
+                  "type": "icon",
+                  "id": "aZlE2",
+                  "width": 40,
+                  "height": 40,
+                  "icon": "circle-check",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "HZhHL",
+                  "fill": "$ink",
+                  "content": "Claude Code is connected",
+                  "fontFamily": "$font-display",
+                  "fontSize": 30,
+                  "fontWeight": "300",
+                  "letterSpacing": -0.8
+                },
+                {
+                  "type": "text",
+                  "id": "xVP9Z",
+                  "fill": "$muted",
+                  "content": "Go back to your terminal. You can close this tab.",
+                  "fontFamily": "$font-display",
+                  "fontSize": 15,
+                  "fontWeight": "300"
+                },
+                {
+                  "type": "frame",
+                  "id": "FshdC",
+                  "name": "Row Agent",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Fdt6X",
+                      "fill": "$muted",
+                      "content": "Agent",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "CMpeH",
+                      "fill": "$ink",
+                      "content": "claude-code on yoni-mbp",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "AJBvR",
+                  "name": "Row Limits",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "CzrZt",
+                      "fill": "$muted",
+                      "content": "Limits",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "bhGdF",
+                      "fill": "$ink",
+                      "content": "$50 per trade · $100 per day",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "CuJZs",
+                  "name": "Row Mode",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "M2Obm",
+                      "fill": "$muted",
+                      "content": "Mode",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "PJShh",
+                      "fill": "$ink",
+                      "content": "Dry-run during beta",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "id": "ZmWx4",
+                  "type": "ref",
+                  "ref": "zJXcL",
+                  "width": "fill_container",
+                  "descendants": {
+                    "wwQJU": {
+                      "enabled": false
+                    },
+                    "G0DK0U": {
+                      "content": "Manage agents"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ObTFe",
+      "x": 4300,
+      "y": 2900,
+      "name": "Auth / 04 Device code",
+      "clip": true,
+      "width": 1280,
+      "height": 800,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "v4WzN",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "jpbdN",
+              "name": "Dots",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "I653Mn",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Zdsh1",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "NFGK6",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "i7zjD8",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "folJ4",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "nDkdD",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/device",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "I0nrr",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "padding": 40,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "uYuT7",
+              "name": "Card",
+              "width": 520,
+              "fill": "$bg",
+              "cornerRadius": 28,
+              "stroke": "$line",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 20,
+              "padding": 36,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "L7cWy",
+                  "name": "Brand",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "xBER6",
+                      "fill": "$lavender",
+                      "width": 22,
+                      "height": 22
+                    },
+                    {
+                      "type": "text",
+                      "id": "TOVdD",
+                      "fill": "$ink",
+                      "content": "Whale",
+                      "fontFamily": "$font-display",
+                      "fontSize": 18
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "Bx3NK",
+                  "fill": "$ink",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Enter the code from your server",
+                  "fontFamily": "$font-display",
+                  "fontSize": 30,
+                  "fontWeight": "300",
+                  "letterSpacing": -0.8
+                },
+                {
+                  "type": "text",
+                  "id": "f2hbH3",
+                  "fill": "$muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Your VPS or SSH session printed it after `whale login`. It expires in 10 minutes.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-display",
+                  "fontSize": 15,
+                  "fontWeight": "300"
+                },
+                {
+                  "type": "frame",
+                  "id": "di7m3",
+                  "name": "CodeInput",
+                  "width": "fill_container",
+                  "gap": 10,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "MeUNP",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zVqBB",
+                          "fill": "$ink",
+                          "content": "W",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "T6YdI",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rYLR7",
+                          "fill": "$ink",
+                          "content": "D",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "hF1Oe",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "a8u98h",
+                          "fill": "$ink",
+                          "content": "J",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tFnYu",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RggEy",
+                          "fill": "$ink",
+                          "content": "B",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "nWAXY",
+                      "fill": "$muted",
+                      "content": "–",
+                      "fontFamily": "$font-display",
+                      "fontSize": 24,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "F7U0E",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "WwVw9",
+                          "fill": "$ink",
+                          "content": "M",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KPntc",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "KYkQY",
+                          "fill": "$ink",
+                          "content": "J",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OPPxb",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "D3EgtE",
+                          "fill": "$ink",
+                          "content": "H",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BuH3I",
+                      "width": 44,
+                      "height": 56,
+                      "cornerRadius": 12,
+                      "stroke": "$ink",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lSvGW",
+                          "fill": "$ink",
+                          "content": "T",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 24
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "iVSC1",
+                  "name": "DeviceIdentity",
+                  "width": "fill_container",
+                  "fill": "$grid",
+                  "cornerRadius": 16,
+                  "gap": 12,
+                  "padding": 14,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "o82vW",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "server",
+                      "library": "lucide",
+                      "fill": "$ink"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Ka1If",
+                      "fill": "$ink",
+                      "content": "whale-cli on vps-01 · 203.0.113.24 · Frankfurt",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "id": "gFzJx",
+                  "type": "ref",
+                  "ref": "OLWbW",
+                  "width": "fill_container",
+                  "descendants": {
+                    "uoTZL": {
+                      "content": "Continue"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "nubR5",
+                  "fill": "$muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Only enter a code you started yourself. Whale never asks for it by email or chat.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "T6A8YX",
+      "x": 4300,
+      "y": 3800,
+      "name": "Auth / 05 Agents",
+      "clip": true,
+      "width": 1280,
+      "height": 860,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "lgVat",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "rrm5L",
+              "name": "Dots",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "fUiRm",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "vMstT",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "SjI0A",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "EfajS",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "W4zuz0",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "eNmQC",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/agents",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "CXFt5",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 28,
+          "padding": [
+            48,
+            64
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "o8SKc",
+              "name": "Top",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "jttfP",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "vtilA",
+                      "fill": "$ink",
+                      "content": "Agents",
+                      "fontFamily": "$font-display",
+                      "fontSize": 40,
+                      "fontWeight": "300",
+                      "letterSpacing": -1.2
+                    },
+                    {
+                      "type": "text",
+                      "id": "G9ruU",
+                      "fill": "$muted",
+                      "content": "Everything that can act on the Trading wallet.",
+                      "fontFamily": "$font-display",
+                      "fontSize": 15,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "id": "ZUkY7",
+                  "type": "ref",
+                  "ref": "zJXcL",
+                  "width": "fit_content",
+                  "descendants": {
+                    "wwQJU": {
+                      "enabled": false
+                    },
+                    "G0DK0U": {
+                      "content": "Create API key"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "sirEx",
+              "name": "AgentTable",
+              "clip": true,
+              "width": "fill_container",
+              "cornerRadius": 20,
+              "stroke": "$line",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "J7cb6",
+                  "name": "Head",
+                  "width": "fill_container",
+                  "fill": "$grid",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    16,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "yUymk",
+                      "width": 260,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "G74MZh",
+                          "fill": "$muted",
+                          "content": "NAME",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XJrLp",
+                      "width": 200,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "UzLXr",
+                          "fill": "$muted",
+                          "content": "SIGN-IN",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "udXm3",
+                      "width": 220,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "P2mqz",
+                          "fill": "$muted",
+                          "content": "LIMITS",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Bps4g",
+                      "width": 240,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RDqkg",
+                          "fill": "$muted",
+                          "content": "LAST USED",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ioQB9",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Aonpb",
+                          "fill": "$muted",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ckcz5",
+                  "name": "Row",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    16,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "YEfGx",
+                      "width": 260,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dI7i6",
+                          "fill": "$ink",
+                          "content": "claude-code on yoni-mbp",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vbOTG",
+                      "width": 200,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "IjLe7",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "OAuth"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "y9r2uY",
+                      "width": 220,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "hljYC",
+                          "fill": "$ink",
+                          "content": "$50 / $100 a day",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "phBoN",
+                      "width": 240,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "JSIp5",
+                          "fill": "$ink",
+                          "content": "2 min ago",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bjFhK",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "oJNxd",
+                          "type": "ref",
+                          "ref": "zJXcL",
+                          "width": "fit_content",
+                          "descendants": {
+                            "wwQJU": {
+                              "enabled": false
+                            },
+                            "G0DK0U": {
+                              "content": "Revoke"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "I6xj8",
+                  "name": "Row",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    16,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "A9rhLb",
+                      "width": 260,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Pay47",
+                          "fill": "$ink",
+                          "content": "vps-01",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "g42Lwz",
+                      "width": 200,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "K1O4oB",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "Device code"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bmsSE",
+                      "width": 220,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "upuBV",
+                          "fill": "$ink",
+                          "content": "$25 / $50 a day",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uzUly",
+                      "width": 240,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "F158O",
+                          "fill": "$ink",
+                          "content": "1 h ago",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "u562PD",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "hKF3C",
+                          "type": "ref",
+                          "ref": "zJXcL",
+                          "width": "fit_content",
+                          "descendants": {
+                            "wwQJU": {
+                              "enabled": false
+                            },
+                            "G0DK0U": {
+                              "content": "Revoke"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "yOsGz",
+                  "name": "Row",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    16,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nosL8",
+                      "width": 260,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "q96sDk",
+                          "fill": "$ink",
+                          "content": "grok",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EdkN6",
+                      "width": 200,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "VrrvA",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "OAuth"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vKDD0",
+                      "width": 220,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EBuX3",
+                          "fill": "$ink",
+                          "content": "$50 / $100 a day",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bqbOy",
+                      "width": 240,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "oU4mm",
+                          "fill": "$ink",
+                          "content": "yesterday",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SQEhQ",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "JL3KP",
+                          "type": "ref",
+                          "ref": "zJXcL",
+                          "width": "fit_content",
+                          "descendants": {
+                            "wwQJU": {
+                              "enabled": false
+                            },
+                            "G0DK0U": {
+                              "content": "Revoke"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "I0c0JQ",
+                  "name": "Row",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    16,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "mVqfl",
+                      "width": 260,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "LHCKB",
+                          "fill": "$ink",
+                          "content": "price-bot",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lwAcK",
+                      "width": 200,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "fuXwD",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "API key · whale_3f9a…"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SO0Pr",
+                      "width": 220,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "m9kbv",
+                          "fill": "$ink",
+                          "content": "$10 / $20 a day",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Afda3",
+                      "width": 240,
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EoR1R",
+                          "fill": "$ink",
+                          "content": "never",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lIlao",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "justifyContent": "end",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "xe8wE",
+                          "type": "ref",
+                          "ref": "zJXcL",
+                          "width": "fit_content",
+                          "descendants": {
+                            "wwQJU": {
+                              "enabled": false
+                            },
+                            "G0DK0U": {
+                              "content": "Revoke"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Ocoqq",
+              "name": "KeyOnce",
+              "width": "fill_container",
+              "cornerRadius": 20,
+              "stroke": "$peach",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 24,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SXt3H",
+                  "fill": "$ink",
+                  "content": "Copy this key now. Whale stores only its hash.",
+                  "fontFamily": "$font-display",
+                  "fontSize": 16
+                },
+                {
+                  "type": "text",
+                  "id": "jAtQS",
+                  "fill": "$ink",
+                  "content": "whale_3f9a1c2e7b40_••••••••••••••••••••••••••••••••••••••••••",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "QoXot",
+                  "fill": "$muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Use a key only where OAuth or a device code can't run. Keys are scoped to one wallet and these limits, and rotate in one click.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Z6s2pF",
+      "x": 4300,
+      "y": 4760,
+      "name": "Auth / 06 Passkey approval",
+      "clip": true,
+      "width": 1280,
+      "height": 800,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "g78A50",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "yXTwG",
+              "name": "Dots",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "lf2wB",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "R5X9J",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Gsauy",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "I0vUvM",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "s1FqAl",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "O1A8O",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/approvals/apr_…",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "t3fqJs",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "padding": 40,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "RDms3",
+              "name": "Card",
+              "width": 480,
+              "fill": "$bg",
+              "cornerRadius": 28,
+              "stroke": "$line",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 20,
+              "padding": 36,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "WID8R",
+                  "name": "Brand",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "o8IHi",
+                      "fill": "$lavender",
+                      "width": 22,
+                      "height": 22
+                    },
+                    {
+                      "type": "text",
+                      "id": "E4fV3",
+                      "fill": "$ink",
+                      "content": "Whale",
+                      "fontFamily": "$font-display",
+                      "fontSize": 18
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "SyMiQ",
+                  "fill": "$ink",
+                  "content": "Approve a $120 swap",
+                  "fontFamily": "$font-display",
+                  "fontSize": 30,
+                  "fontWeight": "300",
+                  "letterSpacing": -0.8
+                },
+                {
+                  "type": "text",
+                  "id": "T10L5",
+                  "fill": "$muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "It is above the $100 approval threshold you set. Below it, agents trade on their own inside their caps.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-display",
+                  "fontSize": 15,
+                  "fontWeight": "300"
+                },
+                {
+                  "type": "frame",
+                  "id": "wFkqQ",
+                  "name": "Row Agent",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Ar4iN",
+                      "fill": "$muted",
+                      "content": "Agent",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "O2W6yZ",
+                      "fill": "$ink",
+                      "content": "claude-code on yoni-mbp",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UAnwl",
+                  "name": "Row Swap",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "G41KJ",
+                      "fill": "$muted",
+                      "content": "Swap",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "QXbJ8",
+                      "fill": "$ink",
+                      "content": "120 USDC → ETH on Base",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "qkqNV",
+                  "name": "Row Expires",
+                  "width": "fill_container",
+                  "stroke": "$line",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "gfD5w",
+                      "fill": "$muted",
+                      "content": "Expires",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Sz3jt",
+                      "fill": "$ink",
+                      "content": "in 58 minutes",
+                      "fontFamily": "$font-display",
+                      "fontSize": 14,
+                      "fontWeight": "300"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "yN7zm",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "id": "LMf1C",
+                      "type": "ref",
+                      "ref": "zJXcL",
+                      "width": "fill_container",
+                      "descendants": {
+                        "wwQJU": {
+                          "enabled": false
+                        },
+                        "G0DK0U": {
+                          "content": "Decline"
+                        }
+                      }
+                    },
+                    {
+                      "id": "m3Q44",
+                      "type": "ref",
+                      "ref": "OLWbW",
+                      "width": "fill_container",
+                      "descendants": {
+                        "uoTZL": {
+                          "content": "Approve with passkey"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "JuiVx",
+                  "fill": "$muted",
+                  "content": "Approves this exact command once. Nothing else.",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "KHkGJ",
+      "x": 5700,
+      "y": 0,
+      "name": "Auth / 07 Local (this machine)",
+      "clip": true,
+      "width": 960,
+      "height": 560,
+      "fill": "$ink",
+      "cornerRadius": 20,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "JWz6O",
+          "name": "TermBar",
+          "width": "fill_container",
+          "height": 42,
+          "gap": 14,
+          "padding": [
+            0,
+            18
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "h9eal1",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "zpRoG",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "MgvHB",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "wb1lZ",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "czj7x",
+              "fill": "$muted",
+              "content": "zsh — ~/whale",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "EnUrM",
+          "name": "Output",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 7,
+          "padding": [
+            18,
+            28
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "HnPdk",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "$ npx whale init",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "BtZAi",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Building Whale ……………………………………… done",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "t7MeX",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Executor token created · ~/.whale/executor.token (0600, never printed)",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "tWXhc",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Executor running on 127.0.0.1:8788 (loopback only)",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "vXa8F",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Registered MCP server with Claude Code, Codex  (found 2 hosts)",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "LjIkI",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ wallet_status → ok · dry-run · 15 networks",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "acDmR",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "xtmmb",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "No account, no sign-in: everything stays on this machine.",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "T7qbP",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Live signing stays off until you run `whale signer setup`.",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "qdP8O",
+      "x": 5700,
+      "y": 620,
+      "name": "Auth / 08 VPS / SSH (device code)",
+      "clip": true,
+      "width": 960,
+      "height": 640,
+      "fill": "$ink",
+      "cornerRadius": 20,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "JJGG6",
+          "name": "TermBar",
+          "width": "fill_container",
+          "height": 42,
+          "gap": 14,
+          "padding": [
+            0,
+            18
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "l7qez",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "ywSfI",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "zWfVd",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "TiURs",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "vSpZF",
+              "fill": "$muted",
+              "content": "ssh vps-01",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "vSZ83",
+          "name": "Output",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 7,
+          "padding": [
+            18,
+            28
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "CPtgQ",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "$ whale login",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "HvUpY",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "No browser here. On any phone or computer, open:",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "I5hWV",
+              "fill": "$sky",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "  https://app.mywhalewallet.com/device",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "lgWqH",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "and enter:",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "TcFgP",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "  WDJB-MJHT",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 30,
+              "fontWeight": "normal",
+              "letterSpacing": 4
+            },
+            {
+              "type": "text",
+              "id": "Rnqeo",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "  code expires in 10:00 · or scan the QR code below",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "q2QUF",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Waiting for approval …",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "yibaj",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Connected as vps-01 · Trading wallet · $25 per trade, $50 a day",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "i0nFf0",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Tokens stored in ~/.config/whale/credentials (0600) · access 1 h, refresh rotates",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "gvj1w",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "$ whale mcp install hermes",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "epnIk",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Hermes now reaches Whale through the gateway",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ZG4Ct",
+      "x": 5700,
+      "y": 1320,
+      "name": "Auth / 09 Claude Code (OAuth)",
+      "clip": true,
+      "width": 960,
+      "height": 560,
+      "fill": "$ink",
+      "cornerRadius": 20,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "dSFM9",
+          "name": "TermBar",
+          "width": "fill_container",
+          "height": 42,
+          "gap": 14,
+          "padding": [
+            0,
+            18
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "OCqcZ",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "wKEPx",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "MckkJ",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Sk9hW",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "p0aUR",
+              "fill": "$muted",
+              "content": "zsh — ~/project",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "eRGV9",
+          "name": "Output",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 7,
+          "padding": [
+            18,
+            28
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "vBb9y",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "$ claude mcp add --transport http whale https://app.mywhalewallet.com/mcp",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "F7FZI",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Added HTTP MCP server whale",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Omf1t",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "$ claude",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Hu6A4",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "> /mcp",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "XnBmF",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "  whale · needs authentication · press Enter to sign in",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "k86Bt9",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "  Opening app.mywhalewallet.com in your browser …",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "NzUMM",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "  ✓ whale · connected · 7 tools",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Q4DRAt",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Ay4dc",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "PKCE + loopback redirect · no secret in config · tokens live in the OS keychain",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "NTngC",
+      "x": 5700,
+      "y": 1960,
+      "name": "Auth / 10 whale status",
+      "clip": true,
+      "width": 960,
+      "height": 600,
+      "fill": "$ink",
+      "cornerRadius": 20,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Ezw04",
+          "name": "TermBar",
+          "width": "fill_container",
+          "height": 42,
+          "gap": 14,
+          "padding": [
+            0,
+            18
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "n8kzqw",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "gxbV4",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "TY2BZ",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "IeXr9",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$muted",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "W788kJ",
+              "fill": "$muted",
+              "content": "zsh",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "i65wrt",
+          "name": "Output",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 7,
+          "padding": [
+            18,
+            28
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "Zhonz",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "$ whale status",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "AynlA",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Mode        hosted gateway · dry-run during beta",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "vV0ff",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Gateway     https://app.mywhalewallet.com",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "vE8U5",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Agent       vps-01 (device code)",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "XLY79",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Wallet      Trading · Base, Arbitrum, Solana",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "aD5Hi",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Caps        $25 per trade · $50 a day · $12.40 used today",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "f5UF9",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Token       access expires in 41 min · refresh rotates on use",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "gEx0J",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Reachable   ✓ gateway 84 ms · ✓ 7 tools listed",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "bpeeB",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "wQEfm",
+              "fill": "$on-ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "$ whale logout",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "WKSSo",
+              "fill": "$mint",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "✓ Tokens revoked on the gateway and deleted here",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "NYn8v",
+      "x": 4300,
+      "y": -1000,
+      "name": "Auth / 00 Connect an agent",
+      "clip": true,
+      "width": 1280,
+      "height": 900,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "wB2IQ",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "E0Ampg",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "djrHv",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "j5fCW",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "o6Nqpz",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Ih7yq",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "ial5U",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "rteBb",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/connect",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "kBSMj",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            48,
+            64
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "N3gkP1",
+              "fill": "$ink",
+              "content": "Where does your agent run?",
+              "fontFamily": "$font-display",
+              "fontSize": 40,
+              "fontWeight": "300",
+              "letterSpacing": -1.2
+            },
+            {
+              "type": "text",
+              "id": "fIJMr",
+              "fill": "$muted",
+              "content": "Pick one. Each path is a single step, and every agent gets its own revocable access with its own caps.",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "300"
+            },
+            {
+              "type": "frame",
+              "id": "KPnoa",
+              "name": "Paths",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "MTatA",
+                  "name": "Path This computer only",
+                  "width": "fill_container",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "gap": 20,
+                  "padding": [
+                    18,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "IlFzd",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$mint",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "Bm49F",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "laptop",
+                          "library": "lucide",
+                          "fill": "$ink"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ugy9h",
+                      "width": 300,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tJLG8",
+                          "fill": "$ink",
+                          "content": "This computer only",
+                          "fontFamily": "$font-display",
+                          "fontSize": 17
+                        },
+                        {
+                          "type": "text",
+                          "id": "YSyos",
+                          "fill": "$muted",
+                          "textGrowth": "fixed-width",
+                          "width": 300,
+                          "content": "No account. Keys and executor stay local.",
+                          "fontFamily": "$font-display",
+                          "fontSize": 13,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "niskp",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "$grid",
+                      "cornerRadius": 12,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "q8JlvX",
+                          "fill": "$ink",
+                          "content": "npx whale init",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "mKbM5",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "copy",
+                          "library": "lucide",
+                          "fill": "$muted"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "ecoTB",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "Executor token, 0600 file"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "CMxFO",
+                  "name": "Path Claude Code · Codex · Cursor",
+                  "width": "fill_container",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "gap": 20,
+                  "padding": [
+                    18,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "G2sji",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$peach",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "UIu7c",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "terminal",
+                          "library": "lucide",
+                          "fill": "$ink"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "K8iBt",
+                      "width": 300,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rU2ru",
+                          "fill": "$ink",
+                          "content": "Claude Code · Codex · Cursor",
+                          "fontFamily": "$font-display",
+                          "fontSize": 17
+                        },
+                        {
+                          "type": "text",
+                          "id": "smREB",
+                          "fill": "$muted",
+                          "textGrowth": "fixed-width",
+                          "width": 300,
+                          "content": "Add the URL, sign in once in the browser.",
+                          "fontFamily": "$font-display",
+                          "fontSize": 13,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dk2W8",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "$grid",
+                      "cornerRadius": 12,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "O49vC",
+                          "fill": "$ink",
+                          "content": "claude mcp add --transport http whale https://app.mywhalewallet.com/mcp",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "v70ibL",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "copy",
+                          "library": "lucide",
+                          "fill": "$muted"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "EhRhg",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "OAuth 2.1 + PKCE"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "AyIaZ",
+                  "name": "Path Grok",
+                  "width": "fill_container",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "gap": 20,
+                  "padding": [
+                    18,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "I9b0ZF",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$sky",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "WKDot",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "bot",
+                          "library": "lucide",
+                          "fill": "$ink"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "yMaiZ",
+                      "width": 300,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "l5FVo",
+                          "fill": "$ink",
+                          "content": "Grok",
+                          "fontFamily": "$font-display",
+                          "fontSize": 17
+                        },
+                        {
+                          "type": "text",
+                          "id": "o48ZW0",
+                          "fill": "$muted",
+                          "textGrowth": "fixed-width",
+                          "width": 300,
+                          "content": "Add Whale as a custom connector and sign in.",
+                          "fontFamily": "$font-display",
+                          "fontSize": 13,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AFwAZ",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "$grid",
+                      "cornerRadius": 12,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "E7zz00",
+                          "fill": "$ink",
+                          "content": "https://app.mywhalewallet.com/mcp",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "ZOOr7",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "copy",
+                          "library": "lucide",
+                          "fill": "$muted"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "lHEuQ",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "OAuth 2.1 + PKCE"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "JqxzO",
+                  "name": "Path VPS · SSH · Hermes",
+                  "width": "fill_container",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "gap": 20,
+                  "padding": [
+                    18,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "qA0kk",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$butter",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "rNzQN",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "server",
+                          "library": "lucide",
+                          "fill": "$ink"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mVGkl",
+                      "width": 300,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Gu8F0",
+                          "fill": "$ink",
+                          "content": "VPS · SSH · Hermes",
+                          "fontFamily": "$font-display",
+                          "fontSize": 17
+                        },
+                        {
+                          "type": "text",
+                          "id": "CJ70k",
+                          "fill": "$muted",
+                          "textGrowth": "fixed-width",
+                          "width": 300,
+                          "content": "No browser on the box. Approve on your phone.",
+                          "fontFamily": "$font-display",
+                          "fontSize": 13,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "A4Baj",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "$grid",
+                      "cornerRadius": 12,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "UrAhj",
+                          "fill": "$ink",
+                          "content": "npx whale login",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "yiO4u",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "copy",
+                          "library": "lucide",
+                          "fill": "$muted"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "HCBUP",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "Device code (RFC 8628)"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "clnxR",
+                  "name": "Path Your own bot",
+                  "width": "fill_container",
+                  "cornerRadius": 20,
+                  "stroke": "$line",
+                  "strokeWidth": 1,
+                  "gap": 20,
+                  "padding": [
+                    18,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "O3UJJS",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$lavender",
+                      "cornerRadius": 22,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "aMu2G",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "code",
+                          "library": "lucide",
+                          "fill": "$ink"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i7DHl",
+                      "width": 300,
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "OFZgR",
+                          "fill": "$ink",
+                          "content": "Your own bot",
+                          "fontFamily": "$font-display",
+                          "fontSize": 17
+                        },
+                        {
+                          "type": "text",
+                          "id": "Y6Ozj",
+                          "fill": "$muted",
+                          "textGrowth": "fixed-width",
+                          "width": 300,
+                          "content": "Server-to-server, no human at runtime.",
+                          "fontFamily": "$font-display",
+                          "fontSize": 13,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Yc6AR",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "$grid",
+                      "cornerRadius": 12,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "P9MNF",
+                          "fill": "$ink",
+                          "content": "Create API key",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "hnuEt",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "copy",
+                          "library": "lucide",
+                          "fill": "$muted"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "UHVpr",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "Scoped API key"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "wsWup",
+      "x": 4300,
+      "y": 5660,
+      "name": "Auth / 11 Grok connector",
+      "clip": true,
+      "width": 1280,
+      "height": 900,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "OQd19",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "j9X6PP",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "g0LQDZ",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "l3a1q6",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                },
+                {
+                  "type": "ellipse",
+                  "id": "HNY3X",
+                  "width": 11,
+                  "height": 11,
+                  "stroke": "$line",
+                  "strokeWidth": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "uCjDD",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "UmlOm",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "hsEts",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "grok · settings › connectors (illustrative)",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "t7jtBh",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            48,
+            64
+          ],
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "keO6T",
+              "name": "Dialog",
+              "width": 520,
+              "cornerRadius": 24,
+              "stroke": "$line",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 18,
+              "padding": 32,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "KVRLi",
+                  "fill": "$ink",
+                  "content": "Add a custom connector",
+                  "fontFamily": "$font-display",
+                  "fontSize": 26,
+                  "fontWeight": "300",
+                  "letterSpacing": -0.6
+                },
+                {
+                  "type": "frame",
+                  "id": "i7XdA",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "o3iYcI",
+                      "fill": "$muted",
+                      "content": "NAME",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KBqZK",
+                      "width": "fill_container",
+                      "height": 44,
+                      "cornerRadius": 12,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "xcB2U",
+                          "fill": "$ink",
+                          "content": "Whale",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Cwx8L",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "CsHtR",
+                      "fill": "$muted",
+                      "content": "MCP SERVER URL",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YiDwF",
+                      "width": "fill_container",
+                      "height": 44,
+                      "cornerRadius": 12,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "HwWqF",
+                          "fill": "$ink",
+                          "content": "https://app.mywhalewallet.com/mcp",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "zhi23",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "oijqE",
+                      "fill": "$muted",
+                      "content": "AUTHENTICATION",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "FHFzZ",
+                      "width": "fill_container",
+                      "height": 44,
+                      "cornerRadius": 12,
+                      "stroke": "$line",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "KUkM3",
+                          "fill": "$ink",
+                          "content": "OAuth (discovered automatically)",
+                          "fontFamily": "$font-display",
+                          "fontSize": 14,
+                          "fontWeight": "300"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "uAr8w",
+                  "type": "ref",
+                  "ref": "OLWbW",
+                  "width": "fill_container",
+                  "descendants": {
+                    "uoTZL": {
+                      "content": "Connect and sign in with Whale"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "OlVEF",
+                  "width": "fill_container",
+                  "fill": "$grid",
+                  "cornerRadius": 14,
+                  "gap": 10,
+                  "padding": 14,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "MBP1F",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "circle-check",
+                      "library": "lucide",
+                      "fill": "$mint"
+                    },
+                    {
+                      "type": "text",
+                      "id": "S3s23",
+                      "fill": "$ink",
+                      "content": "Whale · connected · 7 tools loaded",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "BzuXS",
+                  "width": "fill_container",
+                  "cornerRadius": 14,
+                  "stroke": "$peach",
+                  "strokeWidth": 1,
+                  "gap": 10,
+                  "padding": 14,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "whxR7",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "triangle-alert",
+                      "library": "lucide",
+                      "fill": "$peach"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ChkE1",
+                      "fill": "$ink",
+                      "textGrowth": "fixed-width",
+                      "width": 420,
+                      "content": "If 0 tools load, run `whale doctor --gateway` — it says which step failed.",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "C1FNMf",
+      "x": 6800,
+      "y": 0,
+      "name": "Auth / 04m Device code / Mobile",
+      "clip": true,
+      "width": 390,
+      "height": 780,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "GYLFL",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "SXPpo",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "PnhXA",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "AsaCz",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/device",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "LVHQB",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            28,
+            16
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "LZ19z",
+              "fill": "$ink",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Enter the code from your server",
+              "fontFamily": "$font-display",
+              "fontSize": 26,
+              "fontWeight": "300",
+              "letterSpacing": -0.6
+            },
+            {
+              "type": "frame",
+              "id": "z1mkM",
+              "width": "fill_container",
+              "gap": 6,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "CqCp1",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "VqXvM",
+                      "fill": "$ink",
+                      "content": "W",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SKx1S",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "OFYgq",
+                      "fill": "$ink",
+                      "content": "D",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "g1eh6",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "i1QOU",
+                      "fill": "$ink",
+                      "content": "J",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "P1SQd",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "aSGUu",
+                      "fill": "$ink",
+                      "content": "B",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "VnYXe",
+                  "fill": "$muted",
+                  "content": "–",
+                  "fontFamily": "$font-display",
+                  "fontSize": 20,
+                  "fontWeight": "300"
+                },
+                {
+                  "type": "frame",
+                  "id": "RsrY9",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Yp0AC",
+                      "fill": "$ink",
+                      "content": "M",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Z2QdC",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "S8p3yq",
+                      "fill": "$ink",
+                      "content": "J",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "hZB1W",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "sfKcV",
+                      "fill": "$ink",
+                      "content": "H",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "V5aTV",
+                  "width": 34,
+                  "height": 46,
+                  "cornerRadius": 10,
+                  "stroke": "$ink",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "wJpIG",
+                      "fill": "$ink",
+                      "content": "T",
+                      "fontFamily": "$font-mono",
+                      "fontSize": 20
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "HJAeG",
+              "width": "fill_container",
+              "fill": "$grid",
+              "cornerRadius": 14,
+              "gap": 10,
+              "padding": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "rLzXR",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "server",
+                  "library": "lucide",
+                  "fill": "$ink"
+                },
+                {
+                  "type": "text",
+                  "id": "jXgEt",
+                  "fill": "$ink",
+                  "content": "whale-cli on vps-01 · Frankfurt",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "id": "ot1Ye",
+              "type": "ref",
+              "ref": "OLWbW",
+              "width": "fill_container",
+              "descendants": {
+                "uoTZL": {
+                  "content": "Continue"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "r9LMb",
+      "x": 6800,
+      "y": 860,
+      "name": "Auth / 06m Passkey approval / Mobile",
+      "clip": true,
+      "width": 390,
+      "height": 780,
+      "fill": "$bg",
+      "cornerRadius": 20,
+      "stroke": "$line",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "eWsAJ",
+          "name": "BrowserBar",
+          "width": "fill_container",
+          "height": 48,
+          "stroke": "$line",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 16,
+          "padding": [
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "qdXwH",
+              "name": "Url",
+              "width": "fill_container",
+              "height": 30,
+              "cornerRadius": 15,
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "MZ9d3",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "lock",
+                  "library": "lucide",
+                  "fill": "$mint"
+                },
+                {
+                  "type": "text",
+                  "id": "zIyQz",
+                  "name": "UrlText",
+                  "fill": "$ink",
+                  "content": "app.mywhalewallet.com/approvals/…",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "h6zhel",
+          "name": "Page",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            28,
+            16
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "R4h8HG",
+              "fill": "$ink",
+              "content": "Approve a $120 swap",
+              "fontFamily": "$font-display",
+              "fontSize": 26,
+              "fontWeight": "300",
+              "letterSpacing": -0.6
+            },
+            {
+              "type": "text",
+              "id": "oEGWB",
+              "fill": "$muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Above your $100 threshold. claude-code on yoni-mbp wants to swap 120 USDC → ETH on Base.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-display",
+              "fontSize": 14,
+              "fontWeight": "300"
+            },
+            {
+              "id": "Hgi7L",
+              "type": "ref",
+              "ref": "OLWbW",
+              "width": "fill_container",
+              "descendants": {
+                "uoTZL": {
+                  "content": "Approve with passkey"
+                }
+              }
+            },
+            {
+              "id": "EQDUS",
+              "type": "ref",
+              "ref": "zJXcL",
+              "width": "fill_container",
+              "descendants": {
+                "wwQJU": {
+                  "enabled": false
+                },
+                "G0DK0U": {
+                  "content": "Decline"
+                }
+              }
+            },
+            {
+              "type": "text",
+              "id": "B6Ldd",
+              "fill": "$muted",
+              "content": "Approves this exact command once.",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
         }
       ]
     }
