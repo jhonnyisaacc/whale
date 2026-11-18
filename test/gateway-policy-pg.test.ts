@@ -111,16 +111,21 @@ test("freezing stops every agent at once, and unfreezing takes a passkey", { ski
     const agent = await createAgent(pool, { accountId: user.accountId, walletId: wallet.id, name: "bot", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 10, dailyUsd: 20 } });
     if ("refused" in agent) throw new Error(agent.refused);
     const { apiKey } = agent;
-    assert.ok(await authenticateApiKey(pool, apiKey));
+    const frozen = { frozen: true, agentId: agent.agentId, accountId: user.accountId, walletId: wallet.id };
+    const usable = async () => {
+      const context = await authenticateApiKey(pool, apiKey);
+      return context !== null && !("frozen" in context);
+    };
+    assert.equal(await usable(), true);
     assert.deepEqual((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: user.headers, payload: {} })).json(), { status: "frozen" });
-    assert.equal(await authenticateApiKey(pool, apiKey), null);
+    assert.deepEqual(await authenticateApiKey(pool, apiKey), frozen);
     const forged = await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/unfreeze`, headers: user.headers, payload: { assertion: await approve(unfreezeAction("00000000-0000-4000-8000-000000000000")) } });
     assert.equal(forged.statusCode, 403);
     const thawed = await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/unfreeze`, headers: user.headers, payload: { assertion: await approve(unfreezeAction(wallet.id)) } });
     assert.deepEqual(thawed.json(), { status: "unfrozen" });
-    assert.ok(await authenticateApiKey(pool, apiKey));
+    assert.equal(await usable(), true);
     assert.deepEqual((await app.inject({ method: "POST", url: "/api/account/freeze", headers: user.headers, payload: {} })).json(), { frozen: 1 });
-    assert.equal(await authenticateApiKey(pool, apiKey), null);
+    assert.deepEqual(await authenticateApiKey(pool, apiKey), frozen);
     const other = await signedInAccount(pool);
     assert.equal((await app.inject({ method: "POST", url: `/api/wallets/${wallet.id}/freeze`, headers: other.headers, payload: {} })).statusCode, 404);
   } finally {

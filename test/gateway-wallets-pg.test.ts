@@ -37,8 +37,9 @@ test("a signed-in user creates a wallet with the default policy and an agent wit
     assert.equal(agent.statusCode, 201);
     const { agentId, apiKey } = agent.json();
     const context = await authenticateApiKey(pool, apiKey);
-    assert.equal(context?.agentId, agentId);
-    assert.deepEqual(context?.limits, LIMITS);
+    assert.ok(context && !("frozen" in context));
+    assert.equal(context.agentId, agentId);
+    assert.deepEqual(context.limits, LIMITS);
     assert.equal(await authenticateApiKey(pool, apiKey.slice(0, -1) + (apiKey.endsWith("A") ? "B" : "A")), null);
 
     const stored = await pool.query("SELECT secret_hash FROM agent_credentials");
@@ -81,7 +82,7 @@ test("one account cannot see or touch another account's wallets and agents", { s
     assert.ok(await authenticateApiKey(pool, apiKey));
 
     await pool.query("UPDATE wallets SET status = 'frozen'");
-    assert.equal(await authenticateApiKey(pool, apiKey), null);
+    assert.deepEqual(await authenticateApiKey(pool, apiKey), { frozen: true, agentId, accountId: alice.accountId, walletId: wallet.id });
     await pool.query("UPDATE wallets SET status = 'pending'");
     await pool.query("UPDATE accounts SET status = 'frozen' WHERE id = $1", [alice.accountId]);
     assert.equal(await authenticateApiKey(pool, apiKey), null);
@@ -122,8 +123,9 @@ test("a chain a later build drops is dropped from stored policies and limits, ne
     assert.deepEqual(listed.json().wallets[0].policy.chains, ["base"]);
     assert.deepEqual(listed.json().wallets[0].policy.tokenAllowlist, [kept]);
     const context = await authenticateApiKey(pool, apiKey);
-    assert.deepEqual(context?.limits.chains, ["base"]);
-    assert.deepEqual(context?.policy.chains, ["base"]);
+    assert.ok(context && !("frozen" in context));
+    assert.deepEqual(context.limits.chains, ["base"]);
+    assert.deepEqual(context.policy.chains, ["base"]);
 
     await pool.query("UPDATE policies SET document = document || jsonb_build_object('chains', $1::jsonb, 'tokenAllowlist', $2::jsonb)", [JSON.stringify(["dogechain"]), JSON.stringify([gone])]);
     const emptied = (await app.inject({ method: "GET", url: "/api/wallets", headers })).json().wallets[0].policy;

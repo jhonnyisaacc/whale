@@ -83,10 +83,12 @@ export async function approveRequest(
   pool: pg.Pool,
   input: { requestId: string; accountId: string; walletId: string; name: string; limits: AgentLimits; issuer: string },
   now = Date.now(),
-): Promise<string | null> {
+): Promise<string | null | { refused: "wallet_frozen" }> {
   return inTransaction(pool, async (client) => {
     const request = await pendingRequest(client, input.requestId, now, true);
     if (!request) return null;
+    const wallet = await client.query<{ status: string }>("SELECT status FROM wallets WHERE id = $1 AND account_id = $2 FOR UPDATE", [input.walletId, input.accountId]);
+    if (wallet.rows[0]?.status === "frozen") return { refused: "wallet_frozen" as const };
     const agent = await client.query<{ id: string }>(
       "INSERT INTO agents (account_id, wallet_id, name, limits, oauth_client_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
       [input.accountId, input.walletId, input.name, JSON.stringify(input.limits), request.clientId],

@@ -17,6 +17,9 @@ export type AgentContext = {
   policy: WalletPolicy;
 };
 
+export type FrozenAgent = { frozen: true; agentId: string; accountId: string; walletId: string };
+export type BearerResult = AgentContext | FrozenAgent | null;
+
 export function secretHash(secret: string): Buffer {
   return createHash("sha256").update(secret).digest();
 }
@@ -113,13 +116,13 @@ type CredentialRow = {
   last_used_at: Date | null;
 };
 
-// A credential works only while its agent, wallet, and account are all usable. Revoking any one of them stops it.
-async function contextFor(pool: pg.Pool, id: string, secret: string, kind: "api_key" | "oauth_access", audience: string | null, now: number): Promise<AgentContext | null> {
+// Revoking the credential, its agent, or its account stops it. A frozen wallet keeps it valid but yields no AgentContext, so nothing acts on that wallet.
+async function contextFor(pool: pg.Pool, id: string, secret: string, kind: "api_key" | "oauth_access", audience: string | null, now: number): Promise<BearerResult> {
   const found = await pool.query<CredentialRow>(
     `SELECT c.secret_hash, a.id AS agent_id, a.account_id, a.wallet_id, w.status AS wallet_status, w.live, a.limits, p.document, c.last_used_at
      FROM agent_credentials c
      JOIN agents a ON a.id = c.agent_id AND a.revoked_at IS NULL
-     JOIN wallets w ON w.id = a.wallet_id AND w.status IN ('pending', 'active')
+     JOIN wallets w ON w.id = a.wallet_id AND w.status IN ('pending', 'active', 'frozen')
      JOIN accounts acc ON acc.id = a.account_id AND acc.status = 'active'
      JOIN policies p ON p.wallet_id = w.id
      WHERE c.id = $1 AND c.kind = $2 AND c.revoked_at IS NULL AND (c.expires_at IS NULL OR c.expires_at > $3)
@@ -128,6 +131,7 @@ async function contextFor(pool: pg.Pool, id: string, secret: string, kind: "api_
   );
   const row = found.rows[0];
   if (!row || !timingSafeEqual(row.secret_hash, secretHash(secret))) return null;
+  if (row.wallet_status === "frozen") return { frozen: true, agentId: row.agent_id, accountId: row.account_id, walletId: row.wallet_id };
   const limits = storedLimitsSchema.safeParse(row.limits);
   const policy = storedPolicySchema.safeParse(row.document);
   if (!limits.success || !policy.success) return null;
@@ -146,13 +150,13 @@ async function contextFor(pool: pg.Pool, id: string, secret: string, kind: "api_
   };
 }
 
-export async function authenticateApiKey(pool: pg.Pool, presented: string, now = Date.now()): Promise<AgentContext | null> {
+export async function authenticateApiKey(pool: pg.Pool, presented: string, now = Date.now()): Promise<BearerResult> {
   const match = API_KEY.exec(presented);
   return match ? contextFor(pool, match[1] as string, match[2] as string, "api_key", null, now) : null;
 }
 
 // An access token is bound to the resource it was issued for, so a token minted for another audience never works here.
-export async function authenticateBearer(pool: pg.Pool, presented: string, audience: string, now = Date.now()): Promise<AgentContext | null> {
+export async function authenticateBearer(pool: pg.Pool, presented: string, audience: string, now = Date.now()): Promise<BearerResult> {
   const access = ACCESS_TOKEN.exec(presented);
   if (access) return contextFor(pool, access[1] as string, access[2] as string, "oauth_access", audience, now);
   return authenticateApiKey(pool, presented, now);

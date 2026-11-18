@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { bearerOf } from "../bearer.js";
-import { authenticateBearer, type AgentContext } from "./agents.js";
+import { authenticateBearer, type BearerResult } from "./agents.js";
 import type { GatewayConfig } from "./config.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { knownCredentials } from "./known-credentials.js";
@@ -14,10 +14,16 @@ export const MCP_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-
 const DEFAULT_VERSION = "2025-03-26";
 
 type Rpc = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
-export type BearerAuth = (token: string) => Promise<AgentContext | null>;
+export type BearerAuth = (token: string) => Promise<BearerResult>;
 
 function rpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
+}
+
+function frozenResult(config: GatewayConfig, id: unknown, walletId: string) {
+  const page = new URL(`/wallets/${walletId}`, config.publicUrl).toString();
+  const text = `This wallet is frozen, so no tool runs. Your sign-in is still valid, so do not sign in again. Ask the wallet owner to unfreeze it at ${page} with a passkey, then call the tool again.`;
+  return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text }], isError: true } };
 }
 
 function challenge(config: GatewayConfig, reply: FastifyReply, error?: string) {
@@ -73,7 +79,7 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
       slot = spent.key;
       inFlight.set(slot, pending + 1);
     }
-    let agent: AgentContext | null;
+    let agent: BearerResult;
     try {
       agent = token ? await authenticate(token) : null;
       if (!agent) {
@@ -112,9 +118,11 @@ export function registerMcpRoutes(app: FastifyInstance, deps: { config: GatewayC
     if (body.method === "ping") return { jsonrpc: "2.0", id: body.id, result: {} };
     if (body.method === "tools/list") return { jsonrpc: "2.0", id: body.id, result: { tools: HOSTED_TOOLS } };
     if (body.method !== "tools/call") return rpcError(body.id, -32601, "method not found");
+    if ("frozen" in agent) return frozenResult(config, body.id, agent.walletId);
 
     const wallet = (await listWallets(pool, agent.accountId, agent.walletId))[0];
     if (!wallet) return challenge(config, reply, "invalid_token");
+    if (wallet.status === "frozen") return frozenResult(config, body.id, wallet.id);
     const name = typeof params.name === "string" ? params.name : "";
     try {
       const outcome = await callHostedTool({ pool, agent, wallet, executor: deps.executor, ...(deps.fetch402 ? { fetch402: deps.fetch402 } : {}) }, name, params.arguments ?? {});
