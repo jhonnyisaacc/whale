@@ -140,16 +140,11 @@ test("Whale's own figure is unknown when the lookup fails or the chain has no De
   assert.equal(seen.length, 3);
 });
 
-test("Whale's own figure is cached for the liquidity refresh window", async () => {
+test("Whale's own figure is read fresh for every lookup", async () => {
   const seen: string[] = [];
-  let clock = 0;
-  const liquidityOf = dexscreenerLiquidity(config, dexscreener([pair("base", contract, usdc, 100_000)], seen), () => clock);
+  const liquidityOf = dexscreenerLiquidity(config, dexscreener([pair("base", contract, usdc, 100_000)], seen));
   assert.equal(await liquidityOf({ chainKey: "base", address: contract }), 100_000);
-  clock = config.liquidityRefreshMs;
-  assert.equal(await liquidityOf({ chainKey: "base", address: contract.toUpperCase().replace("0X", "0x") }), 100_000);
-  assert.equal(seen.length, 1);
-  clock = config.liquidityRefreshMs + 1;
-  await liquidityOf({ chainKey: "base", address: contract });
+  assert.equal(await liquidityOf({ chainKey: "base", address: contract }), 100_000);
   assert.equal(seen.length, 2);
 });
 
@@ -163,4 +158,48 @@ test("the executor process checks live liquidity with its own DexScreener lookup
   assert.equal(report.reason, "liquidity below 75000 USD");
   assert.deepEqual(sends, []);
   assert.deepEqual(seen, [`https://api.dexscreener.com/token-pairs/v1/base/${contract}`]);
+});
+
+const hyperliquid = { coin: "TKN", assetIndex: 4, market: "perp" as const, maxLeverage: 5 };
+
+function hyperDeps(sends: string[], enabled: string[], liquidityOf: (token: { chainKey: string }) => Promise<number | null>): ExecutorDeps {
+  const base = deps("live", sends);
+  return Object.assign(base, {
+    config: { ...base.config, enabledChainKeys: new Set(enabled) },
+    markPrice: async () => 1,
+    szDecimals: async () => 2,
+    liquidityOf,
+  });
+}
+
+test("a live intent with a Hyperliquid market is skipped, not sent to Hyperliquid, when Whale's lookup has no figure", async () => {
+  resetExecutorState();
+  const sends: string[] = [];
+  const report = await execute({ ...swap("hl-unknown", pairMap(2_000_000)), hyperliquid }, hyperDeps(sends, ["base", "hypercore"], async () => null));
+  assert.equal(report.decision, "skipped");
+  assert.equal(report.reason, "liquidity unknown");
+  assert.deepEqual(sends, []);
+});
+
+test("a live intent on a disabled chain with a Hyperliquid market stays skipped as a disabled chain", async () => {
+  resetExecutorState();
+  const sends: string[] = [];
+  const onEthereum = swap("hl-disabled", pairMap(2_000_000));
+  onEthereum.token = { ...onEthereum.token, chain: { kind: "evm", chainId: 1 }, chainKey: "ethereum" };
+  const report = await execute({ ...onEthereum, hyperliquid }, hyperDeps(sends, ["base", "hypercore"], async () => 2_000_000));
+  assert.equal(report.decision, "skipped");
+  assert.equal(report.reason, "chain ethereum is disabled");
+  assert.deepEqual(sends, []);
+});
+
+test("a live intent whose primary figure is unknown still sends on a liquid alternate", async () => {
+  resetExecutorState();
+  const sends: string[] = [];
+  const intent = swap("alt-liquid", pairMap(2_000_000));
+  intent.holdings = [...intent.holdings, { ...intent.holdings[0]!, address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", chainKey: "arbitrum" }];
+  intent.alternates = [{ ...intent.token, chain: { kind: "evm", chainId: 42161 }, chainKey: "arbitrum" }];
+  const report = await execute(intent, hyperDeps(sends, ["base", "arbitrum"], async (token) => (token.chainKey === "arbitrum" ? 2_000_000 : null)));
+  assert.equal(report.decision, "sent");
+  assert.equal(report.venue, "arbitrum");
+  assert.equal(sends.length, 1);
 });
