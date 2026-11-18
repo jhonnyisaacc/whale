@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "whale",
+  "version": "0.1.0",
+  "description": "Whale, a multichain wallet for AI agents. Quote, swap, bridge, balance, and transfer. Dry-run is the default.",
+  "author": {
+    "name": "Rocket"
+  },
+  "repository": "https://github.com/jhonnyisaacc/whale",
+  "license": "MIT",
+  "keywords": [
+    "rocket",
+    "agentic wallet",
+    "multichain wallet",
+    "turnkey"
+  ]
+}
