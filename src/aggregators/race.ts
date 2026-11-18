@@ -138,7 +138,12 @@ export function chooseQuote(quotes: readonly HopQuote[]): HopQuote {
   return { ...winner, note: `unsigned ${unsigned.provider} net ${unsigned.netOutputUsd}` };
 }
 
-export async function raceProviderQuotes(config: AppConfig, hop: QuoteHop, reference: Reference | null, fetchImpl: typeof fetch = fetch): Promise<HopQuote> {
+export function chooseLargestOutput(quotes: readonly HopQuote[]): HopQuote {
+  const usable = quotes.filter((quote) => /^[1-9]\d{0,77}$/.test(quote.buyAmount));
+  return usable.reduce<HopQuote | null>((best, quote) => (best === null || BigInt(quote.buyAmount) > BigInt(best.buyAmount) ? quote : best), null) ?? empty();
+}
+
+export async function raceProviderQuotes(config: AppConfig, hop: QuoteHop, reference: Reference | null, fetchImpl: typeof fetch = fetch, choose: (quotes: readonly HopQuote[]) => HopQuote = chooseQuote): Promise<HopQuote> {
   if (!validSellAmount(hop.sellAmount)) return empty();
   const ids = providersFor(hop.chain, config);
   if (ids.length === 0) return empty();
@@ -175,5 +180,5 @@ export async function raceProviderQuotes(config: AppConfig, hop: QuoteHop, refer
     );
     void Promise.allSettled(calls).then(() => clearTimeout(deadlineTimer));
   });
-  return chooseQuote(slots.filter((quote): quote is HopQuote => quote !== undefined));
+  return choose(slots.filter((quote): quote is HopQuote => quote !== undefined));
 }

@@ -12,8 +12,9 @@ export async function quoteHop(
   hop: QuoteHop,
   reference: { spentUsd: number; priceUsd: number; decimals: number } | null,
   fetchImpl: typeof fetch = fetch,
+  choose?: (quotes: readonly HopQuote[]) => HopQuote,
 ): Promise<HopQuote> {
-  return raceProviderQuotes(config, hop, reference, fetchImpl);
+  return raceProviderQuotes(config, hop, reference, fetchImpl, choose);
 }
 
 export async function firmZeroEx(

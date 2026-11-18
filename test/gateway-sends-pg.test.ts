@@ -486,6 +486,23 @@ test("a native-asset transfer over the per-transaction cap is refused, with no a
   }
 });
 
+test("a retry of a send already committed is not priced again, so a quote outage cannot call it unsent", { skip: !TEST_DATABASE_URL }, async () => {
+  let quotes = true;
+  const { pool, sent, quoted, transfer, drop } = await harness({ approvalAboveUsd: null, quoteUsd: (command) => (quotes ? ethAt(3000)(command) : null) });
+  try {
+    assert.equal((await transfer("eth-retry", 0, ETH, eth(0.005))).isError, false);
+    quotes = false;
+    const asked = quoted.length;
+    const retried = await transfer("eth-retry", 0, ETH, eth(0.005));
+    assert.equal(retried.isError, false, retried.text);
+    assert.equal(quoted.length, asked);
+    assert.equal(sent.length, 2);
+    assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key = 'eth-retry'")).rows, [{ usd: 15, state: "committed" }]);
+  } finally {
+    await drop();
+  }
+});
+
 test("with no approval threshold, no send of any kind creates an approval", { skip: !TEST_DATABASE_URL }, async () => {
   const { approvals, swap, transfer, drop } = await harness({ approvalAboveUsd: null, quoteUsd: ethAt(3000) });
   try {

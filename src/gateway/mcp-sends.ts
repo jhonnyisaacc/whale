@@ -89,13 +89,15 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (approval === "expired") return deny("the approval request expired. Ask again with a new idempotencyKey");
   if (approval === "pending") return { ok: true, value: { status: "approval_pending", reason: "the owner has not answered yet. Call again later with the same idempotencyKey" } };
   const approved = approval === "approved";
+  const request = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command };
+  if (recorded === "committed") return { ok: true, value: await executor.run(request) };
   const [what, verb] = command.kind === "swap" ? ["the swap", "sells"] : ["the transfer", "moves"];
   const estimate = await sendUsd(executor, agent, command, taker);
   if (estimate === null) return deny(`${what} ${verb} a token Whale could not price on ${command.chainKey}, so Whale refused it. No approval was requested and nothing was sent`);
   const overCap = perTxRefusal(agent, estimate, `${what} ${verb} about`);
   if (overCap) return deny(overCap);
   const priced: Priced = { usd: estimate, day: today() };
-  const overDaily = recorded !== "committed" ? await dailyRefusal(pool, agent, priced, what) : null;
+  const overDaily = await dailyRefusal(pool, agent, priced, what);
   if (overDaily) return deny(overDaily);
   const overThreshold = approved ? null : thresholdReason(agent, estimate, `${what} ${verb} about`);
   if (overThreshold) return ask(estimate, overThreshold);
@@ -104,7 +106,6 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (reservation.kind === "refused") return deny(reservation.reason);
   if (reservation.kind === "settling") return settling;
   if (reservation.kind === "lapsed") return lapsedApproval(pool, agent, command, deny, settling);
-  const request = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command };
   let value: unknown;
   try {
     value = await executor.run(request);
