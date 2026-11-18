@@ -1,6 +1,6 @@
 import type { ChainRef, ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
 import { addressKey } from "./chains.js";
-import { planRebalance, type BridgeQuote, type ChainAddress, type RebalancePlan } from "./rebalance.js";
+import { bridgeRoute, planRebalance, type BridgePolicy, type BridgeQuote, type BridgeRequest, type BridgeRoute, type RebalancePlan } from "./rebalance.js";
 import { intentSchema } from "./schemas.js";
 
 export type Asset = {
@@ -15,16 +15,7 @@ export type WalletCommand =
   | { kind: "quote"; sell: Asset; buy: Asset; sellAmount: string; taker: string | null; slippageBps: number; purpose?: "price" }
   | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "dry_run" }
   | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "live"; notionalUsd: number }
-  | {
-      kind: "bridge";
-      quotes: readonly BridgeQuote[];
-      maxBridgeUsd: number;
-      maxFeeBps: number;
-      spentBridgeUsd: number;
-      dailyBridgeCap: number;
-      ownAddresses: readonly ChainAddress[];
-      allowlist: readonly ChainAddress[];
-    }
+  | ({ kind: "bridge" } & BridgeRequest)
   | { kind: "balance"; chainKey: string; address: string }
   | { kind: "transfer"; idempotencyKey: string; asset: Asset; to: string; amount: string; mode: "dry_run" | "live" };
 
@@ -32,13 +23,14 @@ export type WalletResult =
   | { kind: "quote"; status: "quoted"; quote: RouteQuote }
   | { kind: "quote"; status: "skipped"; quote: null; reason: string }
   | { kind: "swap"; report: ExecutionReport }
-  | { kind: "bridge"; plan: RebalancePlan }
+  | { kind: "bridge"; plan: RebalancePlan; quotes: BridgeQuote[] }
   | { kind: "balance"; holdings: Holding[]; reason?: string }
   | { kind: "transfer"; status: "would_send" | "skipped"; reason: string };
 
 export type CommandDeps = {
   quote?: (command: Extract<WalletCommand, { kind: "quote" }>) => Promise<RouteQuote | null>;
   execute?: (intent: SwapIntent) => Promise<ExecutionReport>;
+  bridge?: { policy: BridgePolicy; quotes: (route: BridgeRoute) => Promise<BridgeQuote[]> };
   readBalance?: (chainKey: string, address: string) => Promise<{ holdings: Holding[]; reason?: string }>;
   now?: () => number;
 };
@@ -108,8 +100,22 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
     return { kind: "swap", report: await deps.execute(swapIntent(command, now)) };
   }
   if (command.kind === "bridge") {
-    // TODO: real bridge support should request a quote and broadcast the winner. This path only ranks quotes the caller already has, and broadcast stays false.
-    return { kind: "bridge", plan: planRebalance(command) };
+    const skip = (reason: string): WalletResult => ({ kind: "bridge", plan: { kind: "skip", reason, quote: null }, quotes: [] });
+    if (!deps.bridge) return skip("no bridge route provider");
+    const { policy } = deps.bridge;
+    const resolved = bridgeRoute(command, policy);
+    if (resolved.kind === "refused") return skip(resolved.reason);
+    const quotes = [...(await deps.bridge.quotes(resolved.route))].sort((a, b) => a.feeUsd - b.feeUsd);
+    const plan = planRebalance({
+      quotes,
+      maxBridgeUsd: policy.maxBridgeUsd,
+      maxFeeBps: policy.maxFeeBps,
+      spentBridgeUsd: 0,
+      dailyBridgeCap: policy.dailyBridgeCap,
+      ownAddresses: policy.allowlist,
+      allowlist: policy.allowlist,
+    });
+    return { kind: "bridge", plan, quotes };
   }
   if (command.kind === "balance") {
     if (!deps.readBalance) throw new Error(`no balance reader configured for ${command.chainKey}`);

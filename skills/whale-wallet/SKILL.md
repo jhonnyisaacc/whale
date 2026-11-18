@@ -11,7 +11,7 @@ Whale is a multichain wallet. The commands are `quote`, `swap`, `bridge`, `balan
 
 - Call `wallet_status` before a command that can move value. Say the mode and the caps.
 - `swap` is dry-run. It broadcasts nothing.
-- `bridge` only ranks quotes you already have. The plan sets `broadcast` to false.
+- `bridge` fetches routes from LI.FI, Across, and Relay and ranks them by fee. The destination must be an owner address on an enabled chain. The plan sets `broadcast` to false.
 - `transfer` dry-run returns `would_send` and broadcasts nothing. Live transfer is skipped. Local signing is not wired for live sends.
 - Amounts are smallest-unit strings.
 - Never ask for a seed phrase, a private key, a passphrase, or a Turnkey secret. Never print one.

@@ -1,5 +1,6 @@
 import { chainByKey } from "./chains.js";
 import { run, type Asset, type WalletCommand, type WalletResult } from "./commands.js";
+import { SMALLEST_UNIT } from "./schemas.js";
 
 function flag(argv: readonly string[], name: string): string | null {
   const index = argv.indexOf(name);
@@ -53,7 +54,16 @@ export function parseCommand(argv: readonly string[]): WalletCommand {
     return { kind, idempotencyKey, asset: asset(rest, "asset"), to, amount, mode: "dry_run" };
   }
   if (kind === "bridge") {
-    throw new Error("bridge quotes are not fetched yet. pass them to run() from a caller. see the TODO in src/commands.ts");
+    const fromChainKey = flag(rest, "--from-chain");
+    const toChainKey = flag(rest, "--to-chain");
+    const asset = flag(rest, "--asset");
+    const amount = flag(rest, "--amount");
+    const to = flag(rest, "--to");
+    if (!fromChainKey || !toChainKey || !asset || !amount || !to) throw new Error("--from-chain, --to-chain, --asset, --amount, and --to are required");
+    if (!chainByKey(fromChainKey)) throw new Error("--from-chain must name a known chain");
+    if (!chainByKey(toChainKey)) throw new Error("--to-chain must name a known chain");
+    if (!SMALLEST_UNIT.test(amount)) throw new Error("--amount must be a positive whole number in the asset's smallest unit");
+    return { kind, fromChainKey, destination: { chainKey: toChainKey, address: to }, asset, amount };
   }
   throw new Error("usage: quote | swap | bridge | balance | transfer");
 }
@@ -74,7 +84,7 @@ function liveSwapSkipped(command: Extract<WalletCommand, { kind: "swap"; mode: "
 }
 
 async function depsFor(command: WalletCommand) {
-  if (command.kind !== "quote" && command.kind !== "balance" && !(command.kind === "swap" && command.mode === "live")) return {};
+  if (command.kind !== "quote" && command.kind !== "balance" && command.kind !== "bridge" && !(command.kind === "swap" && command.mode === "live")) return {};
   const { commandDeps } = await import("./command-callers.js");
   return commandDeps(process.env, command);
 }

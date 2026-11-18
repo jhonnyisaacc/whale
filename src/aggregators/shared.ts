@@ -103,28 +103,27 @@ export const okxSchema = z
   })
   .loose();
 
+const usdCost = z.object({ amountUsd: z.string() }).loose();
 export const lifiBridgeSchema = z
   .object({
-    estimate: z.object({ toAmount: z.string(), feeCosts: z.array(z.object({ amountUSD: z.string().optional() })).optional() }).optional(),
-    action: z.object({ toAddress: z.string().optional() }).optional(),
+    action: z.object({ fromAmount: z.string(), toAddress: z.string() }).loose(),
+    estimate: z
+      .object({
+        toAmount: z.string(),
+        feeCosts: z.array(z.object({ amountUSD: z.string(), included: z.boolean().optional() }).loose()).optional(),
+        gasCosts: z.array(z.object({ amountUSD: z.string() }).loose()).optional(),
+      })
+      .loose(),
   })
   .loose();
 export const relayBridgeSchema = z
   .object({
-    details: z.object({ recipient: z.string(), currencyOut: z.object({ amountUsd: z.string().optional() }).optional() }),
-    fees: z.record(z.string(), z.object({ amountUsd: z.string().optional() }).loose()),
-  })
-  .loose();
-export const debridgeSchema = z
-  .object({
-    estimation: z.object({
-      srcChainTokenIn: z.object({ approximateUsdValue: z.number().optional() }).optional(),
-      dstChainTokenOut: z.object({ amount: z.string(), approximateUsdValue: z.number().optional() }),
-    }),
+    details: z.object({ recipient: z.string(), currencyIn: z.object({ amount: z.string() }).loose(), currencyOut: z.object({ amount: z.string() }).loose() }).loose(),
+    fees: z.object({ gas: usdCost.optional() }).loose(),
   })
   .loose();
 export const acrossSchema = z
-  .object({ expectedOutputAmount: z.string(), fees: z.object({ total: z.object({ amountUsd: z.string() }) }) })
+  .object({ inputAmount: z.string(), expectedOutputAmount: z.string(), fees: z.object({ originGas: usdCost.optional() }).loose() })
   .loose();
 
 export function empty(): HopQuote {

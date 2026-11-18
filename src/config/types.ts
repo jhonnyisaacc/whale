@@ -41,6 +41,7 @@ export type AppConfig = LimitConfig & {
   quoteTimeoutMs: number;
   quoteDeadlineMs: number;
   firmTimeoutMs: number;
+  bridgeQuoteTimeoutMs: number;
   quoteTtlMs: number;
   raceGraceMs: number;
   raceSlippageBps: number;

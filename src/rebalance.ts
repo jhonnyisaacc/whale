@@ -1,4 +1,5 @@
-import { addressKey } from "./chains.js";
+import { addressFitsChain } from "./balances.js";
+import { CHAINS, addressKey, type QuoteAsset, type QuoteAssets } from "./chains.js";
 
 export const BRIDGE_PROVIDERS = ["lifi", "across", "relay", "debridge"] as const;
 
@@ -12,6 +13,55 @@ export type BridgeQuote = {
   amountInUsd: number;
   destination: ChainAddress;
 };
+
+export type BridgeRequest = { fromChainKey: string; destination: ChainAddress; asset: string; amount: string };
+
+export type BridgePolicy = {
+  enabledChainKeys: ReadonlySet<string>;
+  allowlist: readonly ChainAddress[];
+  senders: readonly ChainAddress[];
+  assets: QuoteAssets;
+  maxBridgeUsd: number;
+  maxFeeBps: number;
+  dailyBridgeCap: number;
+};
+
+export type BridgeRoute = {
+  source: ChainAddress;
+  destination: ChainAddress;
+  sell: QuoteAsset;
+  buy: QuoteAsset;
+  amount: string;
+  amountInUsd: number;
+};
+
+const USD_STABLES: ReadonlySet<string> = new Set(["USDC", "USDT"]);
+
+export function chainAddresses(enabledChainKeys: ReadonlySet<string>, addresses: readonly string[]): ChainAddress[] {
+  return CHAINS.filter((chain) => enabledChainKeys.has(chain.key)).flatMap((chain) =>
+    addresses.filter((address) => addressFitsChain(chain.key, address)).map((address) => ({ chainKey: chain.key, address })),
+  );
+}
+
+export function bridgeRoute(request: BridgeRequest, policy: BridgePolicy): { kind: "route"; route: BridgeRoute } | { kind: "refused"; reason: string } {
+  const refuse = (reason: string) => ({ kind: "refused" as const, reason });
+  const { fromChainKey, destination } = request;
+  for (const chainKey of [fromChainKey, destination.chainKey]) {
+    if (!policy.enabledChainKeys.has(chainKey)) return refuse(`${chainKey} is not enabled`);
+  }
+  if (fromChainKey === destination.chainKey) return refuse("the source and destination chains are the same");
+  if (!addressFitsChain(destination.chainKey, destination.address)) return refuse(`the destination is not a ${destination.chainKey} address`);
+  if (!listed(policy.allowlist, destination)) return refuse("the destination is not on the owner allowlist");
+  const source = policy.senders.find((sender) => sender.chainKey === fromChainKey);
+  if (!source) return refuse(`no hot wallet address is configured for ${fromChainKey}`);
+  if (!USD_STABLES.has(request.asset)) return refuse("bridge plans move USDC or USDT only, because the USD caps need a local price");
+  const sell = policy.assets[fromChainKey]?.find((asset) => asset.symbol === request.asset);
+  const buy = policy.assets[destination.chainKey]?.find((asset) => asset.symbol === request.asset);
+  if (!sell || !buy) return refuse(`${request.asset} is not a quote asset on both ${fromChainKey} and ${destination.chainKey}`);
+  const amountInUsd = Number(request.amount) / 10 ** sell.decimals;
+  if (amountInUsd > policy.maxBridgeUsd) return refuse(`${amountInUsd} USD is over the ${policy.maxBridgeUsd} USD bridge cap`);
+  return { kind: "route", route: { source, destination, sell, buy, amount: request.amount, amountInUsd } };
+}
 
 export type RebalancePlan =
   | { kind: "skip"; reason: string; quote: null }

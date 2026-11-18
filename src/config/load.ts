@@ -150,6 +150,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     quoteTimeoutMs: intEnv(env, "QUOTE_TIMEOUT_MS", 350),
     quoteDeadlineMs: intEnv(env, "QUOTE_DEADLINE_MS", 500),
     firmTimeoutMs: intEnv(env, "FIRM_TIMEOUT_MS", 800),
+    bridgeQuoteTimeoutMs: intEnv(env, "BRIDGE_QUOTE_TIMEOUT_MS", 3_000),
     quoteTtlMs: intEnv(env, "QUOTE_TTL_MS", 2_000),
     raceGraceMs: intEnv(env, "RACE_GRACE_MS", 60),
     raceSlippageBps: Math.min(intEnv(env, "RACE_SLIPPAGE_BPS", 50), maxSlippageBps),

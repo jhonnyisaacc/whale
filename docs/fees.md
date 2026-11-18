@@ -42,14 +42,14 @@ Repeat trades should not pay approve gas. The hot path does not sign `approve` u
 
 `POST /rebalance` plans a move of inventory. It does not broadcast, and nothing else in this service submits a bridge. Destinations must be in both `ownAddresses` and `OWNER_WITHDRAW_ADDRESSES`. Caps are `MAX_BRIDGE_USD` (25), `MAX_BRIDGE_FEE_BPS` (50), and `DAILY_BRIDGE_USD_CAP` (50).
 
+The `bridge` command fetches its own routes for USDC or USDT. The input is priced at one dollar per token. The fee is the input minus the quoted output, plus the source gas each provider reports. Provider USD totals are not trusted. A quote whose echoed input amount or recipient differs from the request is dropped.
+
 | Provider | Call |
 | --- | --- |
-| LI.FI | Same client as swaps, integrator query when set. |
-| Across | `GET https://app.across.to/api/swap/approval` with `Authorization: Bearer` and `integratorId`. Do not cache. Quotes expire. |
-| Relay | `POST https://api.relay.link/quote/v2` with `x-api-key`. `tradeType` is `EXACT_INPUT`. `details.recipient` must be our wallet. |
-| deBridge | `GET https://dln.debridge.finance/v1.0/dln/order/create-tx`. `dstChainTokenOutAmount=auto`. Do not replay the returned amounts into a second call. `accesstoken` only when `DEBRIDGE_ACCESS_TOKEN` is set. |
-
-Checked deBridge source chain ids that overlap this service are 1, 10, 56, 137, 4663, 8453, 42161, and 59144. Solana is not assumed.
+| LI.FI | `GET {LIFI_API_BASE}/quote` with `fromAddress` and `toAddress`, integrator query when set. Solana is chain `1151111081099710`. Quote-only: #67 closed LI.FI signing, not LI.FI quotes. |
+| Across | `GET https://app.across.to/api/swap/approval` with `Authorization: Bearer` and `integratorId`. EVM chains only. Do not cache. Quotes expire. |
+| Relay | `POST https://api.relay.link/quote/v2` with `x-api-key`. `tradeType` is `EXACT_INPUT`. `details.recipient` must be our wallet. Solana is chain `792703809`. |
+| deBridge | Not called. The fixed fee (0.001 ETH on Base) is paid in the native coin outside the quoted output. This path has no native price, so the fee would be understated. |
 
 Keep small USDC and native balances on the chains you actually trade. The targets in config (`TARGET_USDC_USD` 20, `TARGET_NATIVE_USD` 2) are planning hints for the operator. They do not place a bridge.
 
