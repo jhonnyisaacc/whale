@@ -112,7 +112,7 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
     return { kind: "bridge", plan: planRebalance(command) };
   }
   if (command.kind === "balance") {
-    if (!deps.readBalance) return { kind: "balance", holdings: [] };
+    if (!deps.readBalance) throw new Error(`no balance reader configured for ${command.chainKey}`);
     const read = await deps.readBalance(command.chainKey, command.address);
     const address = addressKey(command.chainKey, command.address);
     const holdings = read.holdings.filter((row) => row.chainKey === command.chainKey && addressKey(command.chainKey, row.address) === address);

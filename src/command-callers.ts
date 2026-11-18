@@ -8,6 +8,7 @@ import type { ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.
 import { redactError, urlSecretForms } from "./redact.js";
 import { evmReadClient, solanaConnection } from "./rpc.js";
 
+const SPL_TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"] as const;
 const QUOTE_KEY_NAMES = ["ZEROX_API_KEY", "JUPITER_API_KEY", "LIFI_API_KEY", "ONEINCH_API_KEY", "OKX_API_KEY"] as const;
 
 export function quoteProviderConfigured(env: NodeJS.ProcessEnv): boolean {
@@ -83,10 +84,22 @@ export async function readAddressBalance(
   }
   if (spec.chain.kind === "solana") {
     const { PublicKey } = await import("@solana/web3.js");
-    const lamports = await solanaConnection(url)
-      .getBalance(new PublicKey(address))
-      .catch(() => null);
-    if (lamports === null) return unread;
+    const connection = solanaConnection(url);
+    const owner = new PublicKey(address);
+    const read = await Promise.all([
+      connection.getBalance(owner),
+      Promise.all(SPL_TOKEN_PROGRAMS.map((programId) => connection.getParsedTokenAccountsByOwner(owner, { programId: new PublicKey(programId) }))),
+    ]).catch(() => null);
+    if (read === null) return unread;
+    const [lamports, programs] = read;
+    const tokens = new Map<string, { raw: bigint; decimals: number }>();
+    for (const { value } of programs) {
+      for (const { account } of value) {
+        const { mint, tokenAmount } = account.data.parsed.info as { mint: string; tokenAmount: { amount: string; decimals: number } };
+        const raw = (tokens.get(mint)?.raw ?? 0n) + BigInt(tokenAmount.amount);
+        tokens.set(mint, { raw, decimals: tokenAmount.decimals });
+      }
+    }
     return {
       holdings: [
         {
@@ -98,6 +111,15 @@ export async function readAddressBalance(
           decimals: 9,
           chainKey,
         },
+        ...[...tokens].map(([mint, { raw, decimals }]) => ({
+          symbol: mint,
+          address,
+          amount: Number(formatUnits(raw, decimals)),
+          usd: 0,
+          native: false,
+          decimals,
+          chainKey,
+        })),
       ],
     };
   }
