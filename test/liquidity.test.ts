@@ -114,7 +114,7 @@ function dexscreener(body: unknown, seen: string[], status = 200): typeof fetch 
   };
 }
 
-const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "0123456789abcdef", RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
+const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
 
 test("Whale's own figure counts only pools of the token against a known quote asset on the same chain", async () => {
   const seen: string[] = [];
@@ -152,7 +152,7 @@ test("the executor process checks live liquidity with its own DexScreener lookup
   resetExecutorState();
   const seen: string[] = [];
   t.mock.method(globalThis, "fetch", dexscreener([pair("base", contract, usdc, 100)], seen));
-  const live = loadConfig({ EXECUTOR_AUTH_TOKEN: "0123456789abcdef", RESOLVER_AUTH_TOKEN: "resolver-token-123456", WHALE_BROADCAST: "true", ENABLED_CHAINS: "base", TOKEN_SCREENING: "false" });
+  const live = loadConfig({ EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456", WHALE_BROADCAST: "true", ENABLED_CHAINS: "base", TOKEN_SCREENING: "false" });
   const sends: string[] = [];
   const report = await createExecutor(live, null, null).execute(swap("process", pairMap(1_000_000_000)), { ...deps("live", sends), config: live });
   assert.equal(report.reason, "liquidity below 75000 USD");
