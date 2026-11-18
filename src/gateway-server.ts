@@ -26,7 +26,7 @@ const deliveries = setInterval(() => {
 deliveries.unref();
 const executor = config.executor ? executorClient(config.executor) : null;
 const settlements = setInterval(() => {
-  if (executor) settleStaleSends(pool, executor).catch((error: unknown) => app.log.warn({ err: error }, "send settlement failed"));
+  if (executor) settleStaleSends(pool, executor, undefined, (error: unknown) => app.log.warn({ err: error }, "send report failed")).catch((error: unknown) => app.log.warn({ err: error }, "send settlement failed"));
 }, 30_000);
 settlements.unref();
 

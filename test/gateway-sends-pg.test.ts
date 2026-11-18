@@ -22,12 +22,12 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const sent: HostedRequest[] = [];
   const failures: Error[] = [];
   const during: (() => Promise<unknown>)[] = [];
-  const reports: (SendReport | Error)[] = [];
+  const reports: (SendReport | Error | (() => Promise<SendReport>))[] = [];
   const executor: ExecutorClient = {
     report: async () => {
       const next = reports.shift() ?? { executed: false };
       if (next instanceof Error) throw next;
-      return next;
+      return typeof next === "function" ? next() : next;
     },
     run: async (request) => {
       await during.shift()?.();
@@ -70,7 +70,7 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
     const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "approval.approve", approvalId, command: approval.command } } })).json();
     return app.inject({ method: "POST", url: `/api/approvals/${approvalId}/approve`, headers: user.headers, payload: { assertion: authenticator.assert(stepUp.challenge) } });
   };
-  const sweep = () => settleStaleSends(pool, executor, 0);
+  const sweep = (graceMs = 0) => settleStaleSends(pool, executor, graceMs);
   return { app, pool, user, walletId, sent, failures, during, reports, sweep, call, swap, approve, drop: async () => (await app.close(), await drop()) };
 }
 
@@ -174,6 +174,35 @@ test("a reservation the sweeper cannot confirm stays reserved and still counts t
     assert.equal((await pool.query("SELECT state FROM agent_spends WHERE idempotency_key = 'timed-out'")).rows[0].state, "reserved");
     assert.equal((await swap("after-timeout", 19)).body?.status, "would_swap");
     assert.match((await swap("over-with-reserved", 3)).text, /about 41\.00 USD, above this agent's 40\.00 USD daily cap/);
+  } finally {
+    await drop();
+  }
+});
+
+test("the sweeper leaves a reservation younger than its grace, and one re-reserved after its snapshot, in place", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, failures, reports, sweep, swap, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  const state = async (key: string) => ({
+    spend: (await pool.query("SELECT state FROM agent_spends WHERE idempotency_key = $1", [key])).rows[0]?.state,
+    approval: (await pool.query("SELECT status FROM approvals WHERE idempotency_key = $1", [key])).rows[0]?.status,
+  });
+  try {
+    const asked = await swap("re-reserved", 15);
+    assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
+    failures.push(new Error("executor answered 502"));
+    assert.match((await swap("re-reserved", 15)).text, /may have happened/);
+    reports.push({ executed: false });
+    assert.equal(await sweep(60_000), 0, "a reservation younger than the grace is not asked about");
+    assert.deepEqual(await state("re-reserved"), { spend: "reserved", approval: "claimed" });
+    await pool.query("UPDATE agent_spends SET reserved_at = now() - interval '2 minutes'");
+    await pool.query("UPDATE approvals SET claimed_at = now() - interval '2 minutes'");
+    reports.length = 0;
+    reports.push(async () => {
+      await pool.query("UPDATE agent_spends SET reserved_at = now()");
+      await pool.query("UPDATE approvals SET claimed_at = now()");
+      return { executed: false };
+    });
+    assert.equal(await sweep(60_000), 0, "a send re-reserved while the sweeper waited on the executor is not released from the old snapshot");
+    assert.deepEqual(await state("re-reserved"), { spend: "reserved", approval: "claimed" });
   } finally {
     await drop();
   }
