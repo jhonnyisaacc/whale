@@ -24,6 +24,11 @@ export type CostsCommand = z.infer<typeof costsCommandSchema>;
 export const hostedRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), command: z.union([hostedCommandSchema, costsCommandSchema]) }).strict();
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
 
+export const hostedReportRequestSchema = z.object({ accountId: z.uuid(), walletId: z.uuid(), agentId: z.uuid(), idempotencyKey }).strict();
+export type HostedReportRequest = z.infer<typeof hostedReportRequestSchema>;
+
+export const hostedReportSchema = z.discriminatedUnion("executed", [z.object({ executed: z.literal(false) }), z.object({ executed: z.literal(true), value: z.unknown() })]);
+
 function asset(key: string, tokenAddress: string): Asset {
   const spec = chainByKey(key);
   if (!spec) throw new Error(`unknown chain ${key}`);

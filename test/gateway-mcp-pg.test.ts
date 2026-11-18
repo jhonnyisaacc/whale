@@ -33,6 +33,7 @@ async function harness(options: { approvalAboveUsd?: number | null } = {}) {
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
   const executor: ExecutorClient = {
+    report: async () => ({ executed: false }),
     run: async (request) => (sent.push(request), { kind: "swap", status: "would_swap", quote: { buyAmount: "42" } }),
   };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor, turnkey: null, delegation: null });

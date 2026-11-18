@@ -8,7 +8,7 @@ import { assertionPayload } from "./passkeys.js";
 
 const idParam = z.object({ id: z.uuid() });
 const approveBody = z.object({ assertion: assertionPayload }).strict();
-const approvalsQuery = z.object({ status: z.enum(["pending", "approved", "denied", "used", "expired"]).optional() });
+const approvalsQuery = z.object({ status: z.enum(["pending", "approved", "claimed", "denied", "used", "expired"]).optional() });
 const activityQuery = z.object({ walletId: z.uuid().optional(), before: z.coerce.number().int().positive().optional() });
 const DECISION_STATUS: Record<string, number> = { not_found: 404, not_pending: 409, step_up_required: 428 };
 

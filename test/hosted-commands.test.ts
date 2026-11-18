@@ -4,7 +4,7 @@ import type { CommandDeps, WalletCommand } from "../src/commands.js";
 import { hostedServiceToken, registerHostedRoutes } from "../src/executor-server/hosted.js";
 import { hostedCommandSchema, walletCommandOf } from "../src/hosted-commands.js";
 import { executorFrom } from "../src/gateway/config.js";
-import { executorClient } from "../src/gateway/executor-client.js";
+import { executorClient, ExecutorRefused } from "../src/gateway/executor-client.js";
 import { buildApp } from "../src/http.js";
 
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -116,6 +116,30 @@ test("the gateway reaches the hosted route under any path on HOSTED_EXECUTOR_URL
     await executorClient({ url: new URL(base), token: HOSTED_TOKEN }, fetchImpl).run(request);
   }
   assert.deepEqual(urls, ["http://executor.internal:8080/hosted/commands", "http://executor.internal:8080/whale/hosted/commands", "http://executor.internal:8080/whale/hosted/commands"]);
+});
+
+test("the gateway treats only the executor's own 400, 401, 403, and 429 as definite refusals, and any other failure as an unknown outcome", async () => {
+  const request = { ...IDS, command: { kind: "balance" as const, chainKey: "base", address: WETH } };
+  const answering = (status: number) => executorClient({ url: new URL("http://executor.internal:8080"), token: HOSTED_TOKEN }, (async () => new Response("{}", { status })) as typeof fetch);
+  for (const status of [400, 401, 403, 429]) await assert.rejects(answering(status).run(request), (error: unknown) => error instanceof ExecutorRefused, String(status));
+  for (const status of [404, 408, 421, 499, 500, 502, 503]) await assert.rejects(answering(status).run(request), (error: unknown) => error instanceof Error && !(error instanceof ExecutorRefused), String(status));
+});
+
+test("the executor's report route answers only its own token and reports that a hosted send moved nothing", async () => {
+  const app = await buildApp({ authTokens: ["executor-token-123456"], logger: false });
+  registerHostedRoutes(app, { token: HOSTED_TOKEN });
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    const reply = await app.inject({ method: "POST", url: new URL(String(input)).pathname, headers: init?.headers as Record<string, string>, payload: String(init?.body) });
+    return new Response(reply.body, { status: reply.statusCode });
+  }) as typeof fetch;
+  try {
+    const lookup = { ...IDS, idempotencyKey: "swap-0001" };
+    assert.deepEqual(await executorClient({ url: new URL("http://executor.internal:8080"), token: HOSTED_TOKEN }, fetchImpl).report(lookup), { executed: false });
+    await assert.rejects(executorClient({ url: new URL("http://executor.internal:8080"), token: "executor-token-123456" }, fetchImpl).report(lookup), ExecutorRefused);
+    await assert.rejects(executorClient({ url: new URL("http://executor.internal:8080"), token: HOSTED_TOKEN }, fetchImpl).report({ ...lookup, idempotencyKey: "bad key!" }), ExecutorRefused);
+  } finally {
+    await app.close();
+  }
 });
 
 test("HOSTED_EXECUTOR_URL with a query or fragment is refused at config load", () => {

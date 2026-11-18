@@ -16,7 +16,7 @@ export type Approval = {
   command: HostedCommand;
   estimateUsd: number | null;
   reason: string;
-  status: "pending" | "approved" | "denied" | "used" | "expired";
+  status: "pending" | "approved" | "claimed" | "denied" | "used" | "expired";
   createdAt: string;
   expiresAt: string;
 };
@@ -66,11 +66,6 @@ export async function approvalFor(pool: pg.Pool, agent: AgentContext, idempotenc
   if (!row) return "missing";
   if (bindingOf(row.command) !== bindingOf(command)) return "conflict";
   return statusAt(row, now);
-}
-
-export async function spendApproval(client: pg.ClientBase, agent: AgentContext, idempotencyKey: string, now = Date.now()): Promise<boolean> {
-  const spent = await client.query("UPDATE approvals SET status = 'used' WHERE agent_id = $1 AND idempotency_key = $2 AND status = 'approved' AND expires_at > $3", [agent.agentId, idempotencyKey, new Date(now)]);
-  return (spent.rowCount ?? 0) === 1;
 }
 
 export async function decideApproval(

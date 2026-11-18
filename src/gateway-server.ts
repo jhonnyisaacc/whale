@@ -2,8 +2,10 @@ import pg from "pg";
 import { MIGRATIONS_DIR, migrate } from "./db/migrate.js";
 import { buildGateway } from "./gateway/app.js";
 import { loadGatewayConfig } from "./gateway/config.js";
+import { executorClient } from "./gateway/executor-client.js";
 import { applyDueChanges } from "./gateway/policy-changes.js";
 import { WEB_DIST_DIR } from "./gateway/static.js";
+import { oneAtATime, settleStaleSends } from "./gateway/send-ledger.js";
 import { deliverDue } from "./gateway/webhooks.js";
 
 const config = loadGatewayConfig();
@@ -22,6 +24,14 @@ const deliveries = setInterval(() => {
   deliverDue(pool, config.secret).catch((error: unknown) => app.log.warn({ err: error }, "webhook delivery failed"));
 }, 15_000);
 deliveries.unref();
+const executor = config.executor ? executorClient(config.executor) : null;
+const settle = executor
+  ? oneAtATime(() =>
+      settleStaleSends(pool, executor, undefined, (error: unknown) => app.log.warn({ err: error }, "send report failed")).catch((error: unknown) => app.log.warn({ err: error }, "send settlement failed")),
+    )
+  : null;
+const settlements = setInterval(() => settle?.(), 30_000);
+settlements.unref();
 
 let stopping = false;
 async function stop(): Promise<void> {
@@ -29,6 +39,7 @@ async function stop(): Promise<void> {
   stopping = true;
   clearInterval(sweep);
   clearInterval(deliveries);
+  clearInterval(settlements);
   await Promise.race([app.close(), new Promise((resolve) => setTimeout(resolve, 10_000).unref())]);
   await pool.end();
   process.exit(0);
