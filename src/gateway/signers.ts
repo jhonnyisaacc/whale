@@ -1,15 +1,15 @@
-import { createPublicKey, randomBytes, timingSafeEqual, verify } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
-import { parseTransaction, recoverMessageAddress, recoverTransactionAddress, serializeTransaction, type Hex } from "viem";
+import { recoverMessageAddress, type Hex } from "viem";
 import { z } from "zod";
 import bs58 from "bs58";
 import { audit, inTransaction } from "./accounts.js";
 import { secretHash } from "./agents.js";
+import { verifiedEvmTransaction, verifiesEd25519 } from "../signatures.js";
 
 export const REGISTRATION_TTL_MS = 10 * 60 * 1000;
 export const LEASE_MS = 60 * 1000;
 const SIGNER_TOKEN = /^wsig_([0-9a-f]{16})_([A-Za-z0-9_-]{43})$/;
-const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
 export function registrationMessage(walletId: string, code: string): string {
   return `Whale signer registration\nwallet:${walletId}\ncode:${code}`;
@@ -37,10 +37,7 @@ async function provesEvm(message: string, address: string, signature: string): P
 
 function provesSolana(message: string | Buffer, address: string, signature: string): boolean {
   try {
-    const key = Buffer.from(bs58.decode(address));
-    const sig = Buffer.from(bs58.decode(signature));
-    if (key.byteLength !== 32 || sig.byteLength !== 64) return false;
-    return verify(null, Buffer.from(message), createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, key]), format: "der", type: "spki" }), sig);
+    return verifiesEd25519(Buffer.from(message), address, bs58.decode(signature));
   } catch {
     return false;
   }
@@ -147,20 +144,12 @@ async function signsEvmPayload(payload: unknown, result: unknown, address: strin
   const job = evmPayload.safeParse(payload);
   const signed = evmResult.safeParse(result);
   if (!job.success || !signed.success) return false;
-  const raw = signed.data.signedTransaction.toLowerCase() as Hex;
-  try {
-    const parsed = parseTransaction(raw);
-    if (parsed.type !== "eip1559" || parsed.r === undefined || parsed.s === undefined || parsed.yParity === undefined) return false;
-    const { tx, chainId } = job.data;
-    const expected = serializeTransaction(
-      { type: "eip1559", chainId, nonce: Number(tx.nonce), to: tx.to as Hex, value: tx.value, data: (tx.data ?? "0x") as Hex, gas: tx.gas, maxFeePerGas: tx.maxFeePerGas, maxPriorityFeePerGas: tx.maxPriorityFeePerGas, accessList: [] },
-      { r: parsed.r, s: parsed.s, yParity: parsed.yParity },
-    );
-    if (expected !== raw) return false;
-    return (await recoverTransactionAddress({ serializedTransaction: expected })).toLowerCase() === address.toLowerCase();
-  } catch {
-    return false;
-  }
+  const { tx, chainId } = job.data;
+  const request = { chainId, nonce: Number(tx.nonce), to: tx.to as Hex, value: tx.value, data: (tx.data ?? "0x") as Hex, gas: tx.gas, maxFeePerGas: tx.maxFeePerGas, maxPriorityFeePerGas: tx.maxPriorityFeePerGas };
+  return verifiedEvmTransaction(signed.data.signedTransaction, request, address).then(
+    () => true,
+    () => false,
+  );
 }
 
 function signsSolanaPayload(payload: unknown, result: unknown, address: string): boolean {

@@ -7,6 +7,7 @@ import { actionHash, signL1Action, type HyperliquidAction } from "./hyperliquid.
 import { loadSigner, signerSecrets, solanaSigner, type SignerMaterial } from "./signer.js";
 import { assertEvmFee, assertEvmSigning, assertHyperliquidSigning, assertSolanaSigning, routersForChain, type EvmApproval, type EvmPurpose, type SolanaMessage } from "./signing-policy.js";
 import { assertLiveEdges, drainTimeoutMs, serviceTokens } from "./config.js";
+import { serializeEvmRequest, verifiedEvmTransaction, verifiedSolanaTransaction, type EvmTxRequest } from "./signatures.js";
 
 export type EvmSignInput = {
   chainId: number;
@@ -141,13 +142,14 @@ export function turnkeySigner(api: TurnkeyApi, addresses: { evm: string | null; 
     solanaAddress: () => addresses.solana,
     async signEvm(input) {
       if (!addresses.evm) throw new Error("evm signer is not loaded");
-      const unsigned = await unsignedEvm(input);
-      return api.signEvm(unsigned, addresses.evm);
+      const request = evmRequest(input);
+      const signed = await api.signEvm(serializeEvmRequest(request), addresses.evm);
+      return verifiedEvmTransaction(signed, request, addresses.evm);
     },
     async signSolana(serialized) {
       if (!addresses.solana) throw new Error("solana signer is not loaded");
       const signed = await api.signSolana(Buffer.from(serialized).toString("base64"), addresses.solana);
-      return Buffer.from(signed, "base64");
+      return verifiedSolanaTransaction(Buffer.from(signed, "base64"), serialized, addresses.solana);
     },
     async signHyperliquid(action, nonce, isMainnet) {
       if (!addresses.hyperliquid) throw new Error("hyperliquid agent key is not loaded");
@@ -159,17 +161,16 @@ export function turnkeySigner(api: TurnkeyApi, addresses: { evm: string | null; 
       };
       const raw = await api.signEip712(JSON.stringify(typed), addresses.hyperliquid);
       const signature = { r: word(raw.r), s: word(raw.s), v: recoveryId(raw.v) };
-      const signer = await recoverTypedDataAddress({ ...typed, signature: { r: signature.r, s: signature.s, v: BigInt(signature.v) } });
-      if (signer.toLowerCase() !== addresses.hyperliquid.toLowerCase()) throw new Error("hyperliquid signature does not recover to the agent");
+      if (BigInt(signature.r) === 0n || BigInt(signature.s) === 0n) throw new Error("hyperliquid: signature is zero");
+      const signer = await recoverTypedDataAddress({ ...typed, signature: { r: signature.r, s: signature.s, v: BigInt(signature.v) } }).catch(() => null);
+      if (signer?.toLowerCase() !== addresses.hyperliquid.toLowerCase()) throw new Error("hyperliquid: signature does not recover to the agent");
       return signature;
     },
   };
 }
 
-async function unsignedEvm(input: EvmSignInput): Promise<Hex> {
-  const { serializeTransaction } = await import("viem");
-  return serializeTransaction({
-    type: "eip1559",
+function evmRequest(input: EvmSignInput): EvmTxRequest {
+  return {
     chainId: input.chainId,
     to: input.to,
     data: input.data,
@@ -178,7 +179,7 @@ async function unsignedEvm(input: EvmSignInput): Promise<Hex> {
     nonce: input.nonce,
     maxFeePerGas: input.maxFeePerGas,
     maxPriorityFeePerGas: input.maxPriorityFeePerGas,
-  });
+  };
 }
 
 export function turnkeyApiFromEnv(env: NodeJS.ProcessEnv): TurnkeyApi | null {
@@ -272,7 +273,7 @@ export function tokenMatches(left: string, right: string): boolean {
 
 function word(value: string): Hex {
   const hex = value.replace(/^0x/i, "");
-  if (!/^[0-9a-fA-F]{1,64}$/.test(hex)) throw new Error("turnkey hyperliquid signature is not hex");
+  if (!/^[0-9a-fA-F]{1,64}$/.test(hex)) throw new Error("hyperliquid: signature is not hex");
   return `0x${hex.padStart(64, "0")}`;
 }
 
@@ -280,7 +281,7 @@ function recoveryId(v: string): number {
   const parsed = Number.parseInt(v.replace(/^0x/i, ""), 16);
   if (parsed === 0 || parsed === 1) return parsed + 27;
   if (parsed === 27 || parsed === 28) return parsed;
-  throw new Error("turnkey hyperliquid signature v is not a recovery id");
+  throw new Error("hyperliquid: signature v is not a recovery id");
 }
 
 function assertTokens(name: string, tokens: readonly string[], required: boolean): void {
