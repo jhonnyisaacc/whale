@@ -87,13 +87,23 @@ function checkSkills(root: string, source: SkillSource): string[] {
 function checkSkillFile(root: string, rel: string): string[] {
   const full = path.join(root, rel);
   if (!existsSync(full)) return [`${rel}: missing`];
-  const match = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(readFileSync(full, "utf8"));
+  if (!statSync(full).isFile()) return [`${rel}: not a file`];
+  const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(readFileSync(full, "utf8"));
   if (match === null) return [`${rel}: no frontmatter`];
   const fields = new Map(match[1].split(/\r?\n/).map((line) => /^([a-z-]+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1], m[2].trim()]));
   const errors: string[] = [];
-  for (const key of ["name", "description"]) if (!fields.get(key)) errors.push(`${rel}: frontmatter lacks ${key}`);
+  const values = new Map<string, string>();
+  for (const key of ["name", "description"]) {
+    const raw = fields.get(key) ?? "";
+    const quoted = /^(["'])(.*)\1$/.exec(raw);
+    if (quoted === null && raw.includes(": ")) errors.push(`${rel}: frontmatter ${key} needs quotes because it contains ": "`);
+    const value = quoted === null ? raw : quoted[2];
+    if (value === "") errors.push(`${rel}: frontmatter lacks ${key}`);
+    values.set(key, value);
+  }
   const dirName = path.posix.basename(path.posix.dirname(rel));
-  if (fields.get("name") && fields.get("name") !== dirName) errors.push(`${rel}: frontmatter name ${fields.get("name")} does not match its directory ${dirName}`);
+  const name = values.get("name");
+  if (name && name !== dirName) errors.push(`${rel}: frontmatter name ${name} does not match its directory ${dirName}`);
   return errors;
 }
 
@@ -112,9 +122,10 @@ function checkMcp(root: string, source: McpSource): string[] {
 }
 
 function checkCommand(root: string, id: string, command: unknown): string[] {
-  if (!Array.isArray(command) || command[0] !== "node" || typeof command[1] !== "string") return [`MCP server ${id} must run node with a script path`];
-  const rel = inside(command[1]);
-  if (rel === undefined) return [`MCP server ${id} runs ${command[1]}, which is outside the plugin root`];
+  const script = Array.isArray(command) && command[0] === "node" ? command.slice(1).find((arg) => typeof arg !== "string" || !arg.startsWith("-")) : undefined;
+  if (typeof script !== "string") return [`MCP server ${id} must run node with a script path`];
+  const rel = inside(script.replace(/^\$\{CLAUDE_PLUGIN_ROOT\}\//, ""));
+  if (rel === undefined) return [`MCP server ${id} runs ${script}, which is outside the plugin root`];
   const errors: string[] = [];
   if (!existsSync(path.join(root, rel))) errors.push(`MCP server ${id} runs ${rel}, which does not exist`);
   const built = /^dist\/(.+)\.js$/.exec(rel);
