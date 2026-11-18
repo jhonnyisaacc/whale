@@ -4,6 +4,7 @@ import { addressKey, chainByKey } from "../chains.js";
 import { hostedAmount, type HostedCommand } from "../hosted-commands.js";
 import { audit } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
+import { cancelRequest, openRequests } from "./approvals.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { dailyRefusal, perTxRefusal, planSend, thresholdReason, today } from "./mcp-sends.js";
 import { effectiveLimits, type WalletPolicy } from "./policy.js";
@@ -24,8 +25,11 @@ export const HOSTED_TOOLS = [
   { name: "transfer", description: "Plan a transfer to an address on the wallet's destination list. Checks this agent's chains and actions, its per-transaction and daily USD caps, the wallet's daily USD cap, and the wallet's token list. Whale prices the amount itself, from its own quote into the chain's dollar stablecoin for any token other than a stablecoin, and refuses a transfer it cannot price. Only above an approval threshold the owner set does it return approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, token, to: { type: "string", description: "A destination the wallet owner listed in the dashboard." }, amount, idempotencyKey: key }, required: ["chain", "token", "to", "amount", "idempotencyKey"], additionalProperties: false } },
   { name: "network_costs", description: "Estimate what a swap and a transfer cost right now on each chain this agent may use, cheapest first. Moves no money.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "x402_quote", description: "Read an x402 paid resource's payment challenge and mark each option fits, needs_approval, or refused by the hosted transfer tool's checks for the same payment plus the agent's and the wallet's USD caps. Pays nothing.", inputSchema: { type: "object", properties: { url: { type: "string", description: "The https URL that answers 402 Payment Required." } }, required: ["url"], additionalProperties: false } },
+  { name: "pending_requests", description: "List this agent's approval requests that are still open: waiting for the owner, or approved and not yet sent. A request expires an hour after it is made. Moves no money.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "cancel_request", description: "Cancel one of this agent's open approval requests. The owner sees it as denied. A retry with its idempotencyKey is refused, so use a new idempotencyKey for a new send. Moves no money.", inputSchema: { type: "object", properties: { approvalId: { type: "string", description: "The approvalId from approval_required or pending_requests." } }, required: ["approvalId"], additionalProperties: false } },
 ] as const;
 
+const cancelArgs = z.object({ approvalId: z.uuid() }).strict();
 const x402Args = z.object({ url: z.string().url().max(512) }).strict();
 const swapArgs = z.object({ chain: z.string(), sellToken: z.string(), buyToken: z.string(), sellAmount: hostedAmount, slippageBps: z.number().int().optional(), idempotencyKey: z.string().optional() }).strict();
 const transferArgs = z.object({ chain: z.string(), token: z.string(), to: z.string(), amount: hostedAmount, idempotencyKey: z.string() }).strict();
@@ -121,6 +125,13 @@ export async function callHostedTool(env: ToolEnv, name: string, args: unknown):
     if (!parsed.success) return { ok: false, error: "arguments do not match the tool schema" };
     const address = addressOf(env.wallet, parsed.data.chain);
     return address ? { ok: true, value: { chain: parsed.data.chain, address } } : { ok: false, error: "this wallet has no address on that chain yet. Finish wallet setup in the dashboard" };
+  }
+  if (name === "pending_requests") return { ok: true, value: { requests: await openRequests(env.pool, agent) } };
+  if (name === "cancel_request") {
+    const parsed = cancelArgs.safeParse(args);
+    if (!parsed.success) return { ok: false, error: "arguments do not match the tool schema" };
+    const cancelled = await cancelRequest(env.pool, agent, parsed.data.approvalId);
+    return cancelled === true ? { ok: true, value: { approvalId: parsed.data.approvalId, status: "denied" } } : { ok: false, error: cancelled };
   }
   if (name === "x402_quote") {
     const parsed = x402Args.safeParse(args);

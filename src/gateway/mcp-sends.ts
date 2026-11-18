@@ -61,6 +61,7 @@ export function thresholdReason(agent: AgentContext, estimate: number, lead: str
   return threshold !== null && estimate > threshold ? `${lead} ${usd(estimate)}, above the ${usd(threshold)} approval threshold` : null;
 }
 
+const DENIED = "the owner denied this request, or this agent cancelled it. Ask again with a new idempotencyKey";
 const SETTLING = "a send with this idempotencyKey is still settling. Call again later with the same idempotencyKey";
 
 export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: AgentContext, tool: string, command: Send, taker: string | null): Promise<SendOutcome> {
@@ -92,7 +93,7 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (approval === "conflict") return deny(KEY_REUSED);
   if (approval === "claimed") return settling;
   if (approval === "used") return deny("this approval was already used. Ask again with a new idempotencyKey");
-  if (approval === "denied") return deny("the owner denied this operation");
+  if (approval === "denied") return deny(DENIED);
   if (approval === "expired") return deny("the approval request expired. Ask again with a new idempotencyKey");
   if (approval === "pending") return { ok: true, value: { status: "approval_pending", reason: "the owner has not answered yet. Call again later with the same idempotencyKey" } };
   const approved = approval === "approved";
@@ -130,5 +131,6 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
 async function lapsedApproval(pool: pg.Pool, agent: AgentContext, command: Send, deny: (reason: string) => Promise<SendOutcome>, settling: SendOutcome): Promise<SendOutcome> {
   const now = await approvalFor(pool, agent, command.idempotencyKey, command);
   if (now === "claimed") return settling;
+  if (now === "denied") return deny(DENIED);
   return deny(now === "expired" ? "the approval request expired. Ask again with a new idempotencyKey" : "this approval was already used. Ask again with a new idempotencyKey");
 }
