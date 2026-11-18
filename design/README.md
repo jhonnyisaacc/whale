@@ -25,7 +25,7 @@ The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `expo
 - Card corners are 24 to 28px. Buttons and badges are pills.
 - Pastel accents (lavender, violet, mint, peach, sky, butter) appear only on icons, dots and highlights.
 - Every color is a variable with a light and a dark value.
-- The hero is a static pencil sketch of a southern right whale (ballena franca austral) breaching onto its back.
+- The hero is a static black-and-white graphite sketch of a southern right whale (ballena franca austral) breaching onto its back, drawn from a reference photo: callosities, bowed mouth line, mottled dark back, two raised flippers, spotted belly, splash and choppy water.
 
 ## Install
 
