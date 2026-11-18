@@ -32,9 +32,18 @@ const randomKey = () => `whale_${randomBytes(6).toString("hex")}_${randomBytes(3
 async function harness(options: { approvalAboveUsd?: number | null } = {}) {
   const { pool, drop } = await migratedSchema();
   const sent: HostedRequest[] = [];
+  const journal = new Map<string, unknown>();
   const executor: ExecutorClient = {
-    report: async () => ({ state: "not_started" as const }),
-    run: async (request) => (sent.push(request), { kind: "swap", status: "would_swap", quote: { buyAmount: "42" } }),
+    report: async (lookup) => {
+      const value = journal.get(lookup.idempotencyKey);
+      return value === undefined ? { state: "not_started" as const } : { state: "executed" as const, value };
+    },
+    run: async (request) => {
+      sent.push(request);
+      const value = { kind: "swap", status: "would_swap", quote: { buyAmount: "42" } };
+      if ("idempotencyKey" in request.command) journal.set(request.command.idempotencyKey, value);
+      return value;
+    },
   };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor, turnkey: null, delegation: null });
   const user = await signedInAccount(pool);
@@ -256,8 +265,9 @@ test("sends above the threshold wait for a passkey approval of that exact comman
     assert.equal(JSON.parse(planned.content[0].text).status, "would_swap");
     assert.equal(sent.length, before + 1);
     const reused = await call("swap", swap);
-    assert.equal(reused.isError, true, "an approval is spent once");
-    assert.match(reused.content[0].text, /already used/);
+    assert.equal(reused.isError, false, reused.content[0].text);
+    assert.equal(JSON.parse(reused.content[0].text).status, "would_swap", "a retry of the spent approval gets the stored answer");
+    assert.equal(sent.length, before + 1, "an approval is spent once");
 
     const tooBig = await call("swap", { ...swap, sellAmount: "25000000", idempotencyKey: "swap-big-2" });
     assert.match(tooBig.content[0].text, /above this agent's 20\.00 USD per-transaction cap/);

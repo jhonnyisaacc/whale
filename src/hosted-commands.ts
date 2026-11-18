@@ -14,7 +14,7 @@ const instant = z.iso.datetime();
 export const HOSTED_SEND_GRACE_MS = 60_000;
 
 export const hostedCommandSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("quote"), chainKey, sellToken: address, buyToken: address, sellAmount: hostedAmount, slippageBps, taker: address.nullable() }).strict(),
+  z.object({ kind: z.literal("quote"), chainKey, sellToken: address, buyToken: address, sellAmount: hostedAmount, slippageBps, taker: address.nullable(), purpose: z.literal("price").optional() }).strict(),
   z.object({ kind: z.literal("swap"), chainKey, sellToken: address, buyToken: address, sellAmount: hostedAmount, slippageBps, taker: address.nullable(), idempotencyKey }).strict(),
   z.object({ kind: z.literal("transfer"), chainKey, token: address, to: address, amount: hostedAmount, idempotencyKey }).strict(),
   z.object({ kind: z.literal("balance"), chainKey, address }).strict(),
@@ -47,7 +47,8 @@ function asset(key: string, tokenAddress: string): Asset {
 
 export function walletCommandOf(command: HostedCommand): WalletCommand {
   if (command.kind === "quote" || command.kind === "swap") {
-    return { kind: "quote", sell: asset(command.chainKey, command.sellToken), buy: asset(command.chainKey, command.buyToken), sellAmount: command.sellAmount, taker: command.taker, slippageBps: command.slippageBps };
+    const quote = { kind: "quote" as const, sell: asset(command.chainKey, command.sellToken), buy: asset(command.chainKey, command.buyToken), sellAmount: command.sellAmount, taker: command.taker, slippageBps: command.slippageBps };
+    return command.kind === "quote" && command.purpose ? { ...quote, purpose: command.purpose } : quote;
   }
   if (command.kind === "transfer") {
     return { kind: "transfer", idempotencyKey: command.idempotencyKey, asset: asset(command.chainKey, command.token), to: command.to, amount: command.amount, mode: "dry_run" };

@@ -12,7 +12,7 @@ export type Asset = {
 };
 
 export type WalletCommand =
-  | { kind: "quote"; sell: Asset; buy: Asset; sellAmount: string; taker: string | null; slippageBps: number }
+  | { kind: "quote"; sell: Asset; buy: Asset; sellAmount: string; taker: string | null; slippageBps: number; purpose?: "price" }
   | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "dry_run" }
   | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "live"; notionalUsd: number }
   | {

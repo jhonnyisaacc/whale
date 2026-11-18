@@ -1,6 +1,6 @@
 import { formatUnits } from "viem";
 import { chainByKey } from "./chains.js";
-import { chooseLargestOutput } from "./aggregators.js";
+import { chooseLargestOutput, chooseQuote } from "./aggregators.js";
 import { quoteHop } from "./clients.js";
 import type { CommandDeps, WalletCommand } from "./commands.js";
 import { configSecrets, loadConfig, rpcLists } from "./config.js";
@@ -31,7 +31,7 @@ async function quoteWithHop(env: NodeJS.ProcessEnv, command: Extract<WalletComma
     },
     null,
     fetch,
-    chooseLargestOutput,
+    command.purpose === "price" ? chooseLargestOutput : chooseQuote,
   );
   if (hop.buyAmount === "" || hop.buyAmount === "0") return null;
   return {

@@ -23,7 +23,7 @@ function usd(value: number): string {
 }
 
 async function quotedUsd(executor: ExecutorClient, agent: AgentContext, chainKey: string, sellToken: string, sellAmount: bigint, dollar: QuoteAsset, taker: string | null): Promise<number | null> {
-  const command = { kind: "quote" as const, chainKey, sellToken, buyToken: dollar.address, sellAmount: sellAmount.toString(), slippageBps: PRICE_SLIPPAGE_BPS, taker };
+  const command = { kind: "quote" as const, chainKey, sellToken, buyToken: dollar.address, sellAmount: sellAmount.toString(), slippageBps: PRICE_SLIPPAGE_BPS, taker, purpose: "price" as const };
   const reply = await executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command }).catch(() => null);
   const parsed = quotedReply.safeParse(reply);
   if (!parsed.success) return null;
