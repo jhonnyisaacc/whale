@@ -5,7 +5,7 @@ import { hostedAmount, type HostedCommand } from "../hosted-commands.js";
 import { audit } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
 import type { ExecutorClient } from "./executor-client.js";
-import { dailyRefusal, perTxRefusal, planSend, today, transferApprovalReason } from "./mcp-sends.js";
+import { dailyRefusal, perTxRefusal, planSend, thresholdReason, today } from "./mcp-sends.js";
 import { effectiveLimits, type WalletPolicy } from "./policy.js";
 import { x402Quote, type Fetch402, type X402Payment, type X402Verdict } from "./x402.js";
 import type { WalletView } from "./wallets.js";
@@ -20,8 +20,8 @@ export const HOSTED_TOOLS = [
   { name: "deposit_address", description: "Return the wallet address to fund on a chain. Moves no money.", inputSchema: { type: "object", properties: { chain }, required: ["chain"], additionalProperties: false } },
   { name: "balance", description: "Read the wallet's native balance on a chain. Moves no money.", inputSchema: { type: "object", properties: { chain }, required: ["chain"], additionalProperties: false } },
   { name: "quote", description: "Quote a same-chain swap from the wallet. Moves no money.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 } }, required: ["chain", "sellToken", "buyToken", "sellAmount"], additionalProperties: false } },
-  { name: "swap", description: "Plan a swap and return the route it would take. Checks this agent's chains, actions, and per-transaction and daily USD caps, the wallet's daily USD cap, and the wallet's slippage and token list. Above the owner's approval threshold, or whenever Whale cannot price what it sells, it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 }, idempotencyKey: key }, required: ["chain", "sellToken", "buyToken", "sellAmount", "idempotencyKey"], additionalProperties: false } },
-  { name: "transfer", description: "Plan a transfer to an address on the wallet's destination list. Checks this agent's chains and actions, its per-transaction and daily USD caps, the wallet's daily USD cap, and the wallet's token list. When the owner set an approval threshold, or whenever Whale cannot price the token, it returns approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, token, to: { type: "string", description: "A destination the wallet owner listed in the dashboard." }, amount, idempotencyKey: key }, required: ["chain", "token", "to", "amount", "idempotencyKey"], additionalProperties: false } },
+  { name: "swap", description: "Plan a swap and return the route it would take. Checks this agent's chains, actions, and per-transaction and daily USD caps, the wallet's daily USD cap, and the wallet's slippage and token list. Whale prices what it sells itself, from its own quote into the chain's dollar stablecoin, and refuses a swap it cannot price. Only above an approval threshold the owner set does it return approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 }, idempotencyKey: key }, required: ["chain", "sellToken", "buyToken", "sellAmount", "idempotencyKey"], additionalProperties: false } },
+  { name: "transfer", description: "Plan a transfer to an address on the wallet's destination list. Checks this agent's chains and actions, its per-transaction and daily USD caps, the wallet's daily USD cap, and the wallet's token list. Whale prices the amount itself, from its own quote into the chain's dollar stablecoin for any token other than a stablecoin, and refuses a transfer it cannot price. Only above an approval threshold the owner set does it return approval_required: call again later with the same idempotencyKey. Hosted sends are dry-run: nothing is signed.", inputSchema: { type: "object", properties: { chain, token, to: { type: "string", description: "A destination the wallet owner listed in the dashboard." }, amount, idempotencyKey: key }, required: ["chain", "token", "to", "amount", "idempotencyKey"], additionalProperties: false } },
   { name: "network_costs", description: "Estimate what a swap and a transfer cost right now on each chain this agent may use, cheapest first. Moves no money.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "x402_quote", description: "Read an x402 paid resource's payment challenge and mark each option fits, needs_approval, or refused by the hosted transfer tool's checks for the same payment plus the agent's and the wallet's USD caps. Pays nothing.", inputSchema: { type: "object", properties: { url: { type: "string", description: "The https URL that answers 402 Payment Required." } }, required: ["url"], additionalProperties: false } },
 ] as const;
@@ -74,7 +74,7 @@ async function paymentVerdict(pool: pg.Pool, agent: AgentContext, payment: X402P
   const refusals = [denyReason(agent, command), perTxRefusal(agent, payment.usd, "the payment is about"), await dailyRefusal(pool, agent, { usd: payment.usd, day: today() }, "the payment")];
   const reasons = refusals.filter((reason): reason is string => reason !== null);
   if (reasons.length > 0) return { verdict: "refused", reasons };
-  const approval = transferApprovalReason(agent);
+  const approval = thresholdReason(agent, payment.usd, "the payment is about");
   return approval ? { verdict: "needs_approval", reasons: [approval] } : { verdict: "fits", reasons: [] };
 }
 
@@ -144,6 +144,6 @@ export async function callHostedTool(env: ToolEnv, name: string, args: unknown):
     return { ok: false, error: denied };
   }
   if (!env.executor) return { ok: false, error: "quotes are not configured on this deployment" };
-  if (command.kind === "swap" || command.kind === "transfer") return planSend(env.pool, env.executor, agent, name, command);
+  if (command.kind === "swap" || command.kind === "transfer") return planSend(env.pool, env.executor, agent, name, command, addressOf(env.wallet, command.chainKey));
   return { ok: true, value: await env.executor.run({ accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, command }) };
 }

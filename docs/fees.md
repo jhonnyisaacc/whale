@@ -81,5 +81,5 @@ The hosted tool `x402_quote` fetches a URL through the same guarded client as we
 - The token must be on the wallet's token list, and `payTo` must be on the wallet's destination list.
 - The amount must be within the agent's per-transaction cap, and today's total must stay within the agent's and the wallet's daily caps.
 
-An option that passes is `fits`, or `needs_approval` when the owner set an approval threshold, because a transfer out then waits for a passkey approval. `best` is the cheapest option that fits, or else the cheapest that needs approval. It pays nothing. A live x402 payment would be a send with no simulation step, and the send rules do not allow that path.
+An option that passes is `fits`, or `needs_approval` when the payment is above the owner's approval threshold, because that transfer would wait for a passkey approval. `best` is the cheapest option that fits, or else the cheapest that needs approval. It pays nothing. A live x402 payment would be a send with no simulation step, and the send rules do not allow that path.
 

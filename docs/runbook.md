@@ -149,13 +149,15 @@ An enclave wallet's Turnkey policy can drift from its wallet policy after a chan
 
 ### Approvals and activity
 
-A hosted `swap` is priced by what it sells. A USDC, USDT, or USDB sell counts one dollar per token. Any other sell token cannot be priced yet. The quote's output is never used, because price impact or slippage can make it far smaller than what leaves the wallet.
-- Above the agent's effective per-transaction cap, it is refused, even if approved.
-- A priced swap that would take the agent's total for the UTC day above its effective daily cap is refused, even if approved. So is one that would take the wallet's total, across all its agents, above the wallet's daily cap. A swap counts once it is planned, and a retry with the same `idempotencyKey` does not count again.
-- Above the wallet's `approvalAboveUsd`, it returns `approval_required` with an approval id, and the agent calls again later with the same `idempotencyKey`.
-- When it cannot be priced, it returns `approval_required` even when the wallet has no `approvalAboveUsd`, because no cap can be checked. An approved unpriced swap counts toward no daily total.
+A hosted `swap` is priced by what it sells, and a hosted `transfer` by what it moves. Whale prices the send itself and never uses a price, route, or quote the agent supplies:
+- A USDC, USDT, or USDB amount counts one dollar per token.
+- Any other token, native ETH or SOL included, is priced by two quotes from the executor's aggregator race. Each sells into the chain's dollar asset with a fixed 50 bps slippage and the wallet as taker. One quote sells the whole amount and one sells a thousandth of it. The estimate is the larger of the whole quote and the small quote times 1,000, so price impact on a large amount cannot lower it. The swap's own route quote is never used, because the agent picks its buy token and slippage.
+- A send Whale cannot price is refused with a reason that says so: a chain with no dollar asset, no route, a quote failure, or a token with no market. No approval is created and nothing reaches the executor's send path.
 
-A `transfer` is priced and capped the same way: a stablecoin at par against the agent's per-transaction and daily caps and the wallet's daily cap. It asks for approval whenever the wallet has a threshold, and whenever Whale cannot price the token. An approved transfer counts toward the daily totals. An approved unpriced transfer counts toward none.
+Then the caps apply, the same for swaps and transfers:
+- Above the agent's effective per-transaction cap, it is refused, even if approved.
+- A send that would take the agent's total for the UTC day above its effective daily cap is refused, even if approved. So is one that would take the wallet's total, across all its agents, above the wallet's daily cap. A send counts once it is planned, and a retry with the same `idempotencyKey` does not count again.
+- Only when the wallet has an `approvalAboveUsd` and the estimate is above it does the send return `approval_required` with an approval id. The agent calls again later with the same `idempotencyKey`. With no threshold, no send waits for a human.
 
 The owner sees pending approvals at `GET /api/approvals?status=pending`:
 - Approving needs a passkey step-up for `{ kind: "approval.approve", approvalId, command }`.

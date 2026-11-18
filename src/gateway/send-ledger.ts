@@ -41,14 +41,14 @@ export async function recordedSpend(client: pg.Pool | pg.ClientBase, agent: Agen
   return row.binding === bindingOf(command) ? row.state : "conflict";
 }
 
-export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: Send, priced: Priced | null, approved: boolean, what: string): Promise<Reservation> {
+export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: Send, priced: Priced, approved: boolean, what: string): Promise<Reservation> {
   return inTransaction(pool, async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent_spends:${agent.walletId}`]);
     const recorded = await recordedSpend(client, agent, command);
     if (recorded === "conflict") return { kind: "refused", reason: KEY_REUSED };
     if (recorded === "reserved") return { kind: "settling" };
     if (recorded === "committed") return { kind: "unreserved" };
-    const refused = priced ? await dailyRefusal(client, agent, priced, what) : null;
+    const refused = await dailyRefusal(client, agent, priced, what);
     if (refused) return { kind: "refused", reason: refused };
     if (approved) {
       const claimed = await client.query("UPDATE approvals SET status = 'claimed', claimed_at = now() WHERE agent_id = $1 AND idempotency_key = $2 AND status = 'approved' AND expires_at > now()", [
@@ -57,7 +57,6 @@ export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: S
       ]);
       if ((claimed.rowCount ?? 0) !== 1) return { kind: "lapsed" };
     }
-    if (!priced) return { kind: approved ? "reserved" : "unreserved" };
     await client.query(
       `INSERT INTO agent_spends (agent_id, idempotency_key, binding, account_id, wallet_id, usd, day, state, reserved_at) VALUES ($1, $2, $3, $4, $5, $6, $7::date, 'reserved', now())
        ON CONFLICT (agent_id, idempotency_key) DO UPDATE SET usd = EXCLUDED.usd, day = EXCLUDED.day, state = 'reserved', reserved_at = now()`,
