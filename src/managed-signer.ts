@@ -193,10 +193,10 @@ export function turnkeyApiFromEnv(env: NodeJS.ProcessEnv): TurnkeyApi | null {
         apiPrivateKey: env.TURNKEY_API_PRIVATE_KEY ?? "",
         defaultOrganizationId: env.TURNKEY_ORGANIZATION_ID ?? "",
       }).apiClient();
-      const result = await client.signTransaction({ signWith: address, unsignedTransaction: unsigned, type: "TRANSACTION_TYPE_ETHEREUM" });
+      const result = await client.signTransaction({ signWith: address, unsignedTransaction: unsigned.replace(/^0x/, ""), type: "TRANSACTION_TYPE_ETHEREUM" });
       const signed = "signedTransaction" in result ? result.signedTransaction : "";
       if (!signed) throw new Error("turnkey evm sign returned no transaction");
-      return signed as Hex;
+      return `0x${signed.replace(/^0x/i, "")}`;
     },
     async signSolana(unsignedBase64, address) {
       const { Turnkey } = await import("@turnkey/sdk-server");
@@ -206,10 +206,11 @@ export function turnkeyApiFromEnv(env: NodeJS.ProcessEnv): TurnkeyApi | null {
         apiPrivateKey: env.TURNKEY_API_PRIVATE_KEY ?? "",
         defaultOrganizationId: env.TURNKEY_ORGANIZATION_ID ?? "",
       }).apiClient();
-      const result = await client.signTransaction({ signWith: address, unsignedTransaction: unsignedBase64, type: "TRANSACTION_TYPE_SOLANA" });
+      const unsignedTransaction = Buffer.from(unsignedBase64, "base64").toString("hex");
+      const result = await client.signTransaction({ signWith: address, unsignedTransaction, type: "TRANSACTION_TYPE_SOLANA" });
       const signed = "signedTransaction" in result ? result.signedTransaction : "";
       if (!signed) throw new Error("turnkey solana sign returned no transaction");
-      return signed;
+      return Buffer.from(signed, "hex").toString("base64");
     },
     async signEip712(payload, address) {
       const { Turnkey } = await import("@turnkey/sdk-server");
