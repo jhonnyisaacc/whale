@@ -6,7 +6,7 @@ import type { AgentContext } from "./agents.js";
 import { approvalFor, requestApproval } from "./approvals.js";
 import { ExecutorRefused, type ExecutorClient } from "./executor-client.js";
 import { effectiveLimits } from "./policy.js";
-import { dailyRefusal, issuedNow, KEY_REUSED, recordedSpend, reserveSend, settleSend, type Priced, type Send } from "./send-ledger.js";
+import { dailyRefusal, issuedNow, KEY_REUSED, recordedSpend, reserveSend, settleSend, settlementOf, type Priced, type Send } from "./send-ledger.js";
 
 export { dailyRefusal } from "./send-ledger.js";
 
@@ -122,8 +122,9 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
     return deny(`the executor refused the send (${error.message}). Nothing was spent`);
   }
   await inTransaction(pool, async (client) => {
-    if (reservation.kind === "reserved") await settleSend(client, agent.agentId, command.idempotencyKey, "committed");
-    await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved } });
+    const settlement = settlementOf(value);
+    if (reservation.kind === "reserved") await settleSend(client, agent.agentId, command.idempotencyKey, settlement);
+    await audit(client, { ...scope, action: `mcp.${command.kind}_planned`, detail: { idempotencyKey: command.idempotencyKey, chain: command.chainKey, approved, settlement } });
   });
   return { ok: true, value };
 }
