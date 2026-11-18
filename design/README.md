@@ -41,20 +41,20 @@ The competitor cells and the Known issues block come from public docs and public
 
 The Known issues block lists Whale's own gaps first.
 
-## Claims the code does not back yet
+## Copy claims only what the code backs
 
-The site copy is the target. As of this commit the repo differs as follows.
+Each claim was checked against `origin/main` on 2026-11-18.
 
-| Site says | Repo today |
-| --- | --- |
-| Quote, swap, bridge, balance, transfer | `bridge` ranks quotes the caller supplies. It fetches nothing and executes nothing. The CLI refuses `bridge`. |
-| Swap and transfer | The MCP `swap` and `transfer` tools are dry-run only. Live transfer is skipped because local signing is not wired. |
-| 15 networks | Ethereum and Monad are off until `ENABLED_CHAINS` names them, and Monad ships no router. zkSync and Scroll have no live send (`src/config/guard.ts`). HyperCore signs orders only. |
-| Approval modes: autonomous / ask / always approve | The modes are `autonomous`, `iframe` and `always_approve`. The MCP server does not call `approvalGate`. |
-| Hosted gateway | Hosted sends stay dry-run until hosted live opens. |
-| Self-hosted signer | `whale-signer` signs EVM and Solana, not HyperCore. It is not connected to the MCP transfer path. |
-| Hermes host | No Hermes manifest yet. The design marks it "planned". |
-| Open source, MIT | The manifests say MIT. The repo has no `LICENSE` file. |
+| Topic | Site copy | Why |
+| --- | --- | --- |
+| Verbs | "Quote, swap and transfer (dry-run during beta), plus bridge quotes" | `bridge` ranks quotes the caller supplies. The CLI refuses it. |
+| Swap and transfer | Labelled dry-run | Nothing signs live yet, in the local MCP or the hosted path. |
+| Networks | "15 networks", with a badge on each limited chain | Ethereum: opt-in. Monad: opt-in, no router yet. zkSync: quotes only. Scroll: quotes only (`src/config/guard.ts:94`). HyperCore: orders only. |
+| Approval | "Trades on its own inside per-trade and daily USD caps" | The approval-mode module is unused, and #95 removes it. Add "You can require approval above an amount you choose" once #88 merges. |
+| Hosted gateway | "Sends are dry-run during beta" | Hosted live is not open. |
+| Signer | "Self-hosted signer, for EVM and Solana" | `whale-signer` does not sign HyperCore, and it is not wired to the MCP send path. |
+| Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`. Hermes stays "planned" because it has no manifest. |
+| License | "MIT License" | #94 adds the `LICENSE` file. Ship the site after #94 merges. |
 
 ## Logo sources
 

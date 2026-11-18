@@ -886,7 +886,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": 560,
-                  "content": "Quote, swap, bridge, check balances and transfer across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape. Dry-run by default.",
+                  "content": "Quote, swap and transfer (dry-run during beta), plus bridge quotes, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-display",
                   "fontSize": 20,
@@ -3311,7 +3311,7 @@
       "type": "frame",
       "id": "UIHuv",
       "x": 0,
-      "y": 1021,
+      "y": 1051,
       "name": "Landing / 03 Compare / Desktop",
       "context": "Comparison table. Checkmarks pop in one by one on scroll (scale .6→1, 60ms stagger). Competitor cells are editable placeholders; values must be verified before publishing.",
       "theme": {
@@ -4412,7 +4412,7 @@
                       "id": "K0xWgY",
                       "name": "Label",
                       "fill": "$ink",
-                      "content": "Self-hosted signer option",
+                      "content": "Self-hosted signer",
                       "fontFamily": "$font-display",
                       "fontSize": 19,
                       "fontWeight": "300"
@@ -4422,7 +4422,7 @@
                       "id": "AWiYY",
                       "name": "Sub",
                       "fill": "$muted",
-                      "content": "Your machine checks every tx",
+                      "content": "For EVM and Solana",
                       "fontFamily": "$font-mono",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -4740,7 +4740,7 @@
                       "id": "i853DG",
                       "name": "Label",
                       "fill": "$ink",
-                      "content": "Approval modes",
+                      "content": "Approval",
                       "fontFamily": "$font-display",
                       "fontSize": 19,
                       "fontWeight": "300"
@@ -4767,7 +4767,7 @@
                       "fill": "$ink",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "autonomous / ask / always approve",
+                      "content": "Trades on its own inside per-trade and daily USD caps",
                       "lineHeight": 1.4,
                       "textAlign": "center",
                       "fontFamily": "$font-mono",
@@ -5692,7 +5692,7 @@
       "type": "frame",
       "id": "cmDHw",
       "x": 0,
-      "y": 2803,
+      "y": 2833,
       "name": "Landing / 04 Networks / Desktop",
       "context": "Networks grid sourced from src/chains.ts. Chips draw outlines in sequence on scroll; glyphs bob 3px on 4s loops, offset per chip.",
       "clip": true,
@@ -5752,7 +5752,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 520,
-              "content": "Same verbs everywhere: quote, swap, bridge, balance, transfer. Ethereum stays off unless ENABLED_CHAINS names it.",
+              "content": "Same verbs everywhere: quote, swap and transfer (dry-run during beta), plus bridge quotes. Tagged networks have limits today.",
               "lineHeight": 1.5,
               "fontFamily": "$font-display",
               "fontSize": 17,
@@ -5818,6 +5818,17 @@
                         },
                         "as2Tg": {
                           "content": "Ethereum"
+                        }
+                      }
+                    },
+                    {
+                      "id": "exptL",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "name": "Badge opt-in",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "opt-in"
                         }
                       }
                     },
@@ -5985,6 +5996,17 @@
                       }
                     },
                     {
+                      "id": "ZdPAn",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "name": "Badge quotes only",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "quotes only"
+                        }
+                      }
+                    },
+                    {
                       "id": "JTaP9",
                       "type": "ref",
                       "ref": "RoI5s",
@@ -6039,13 +6061,13 @@
                           }
                         },
                         {
-                          "id": "HbZ8W",
+                          "id": "RQCOi",
                           "type": "ref",
                           "ref": "UM68F",
-                          "name": "Badge send disabled",
+                          "name": "Badge quotes only",
                           "descendants": {
                             "k7RLXp": {
-                              "content": "send disabled"
+                              "content": "quotes only"
                             }
                           }
                         }
@@ -6137,13 +6159,13 @@
                           }
                         },
                         {
-                          "id": "Relbo",
+                          "id": "kti8u",
                           "type": "ref",
                           "ref": "UM68F",
-                          "name": "Badge opt-in",
+                          "name": "Badge opt-in, no router yet",
                           "descendants": {
                             "k7RLXp": {
-                              "content": "opt-in"
+                              "content": "opt-in, no router yet"
                             }
                           }
                         }
@@ -6227,6 +6249,17 @@
                           "content": "HyperCore (Hyperliquid)"
                         }
                       }
+                    },
+                    {
+                      "id": "Wqs03",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "name": "Badge orders only",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "orders only"
+                        }
+                      }
                     }
                   ]
                 }
@@ -6250,7 +6283,7 @@
       "type": "frame",
       "id": "nXRC7",
       "x": 0,
-      "y": 4031,
+      "y": 4061,
       "name": "Landing / 05 Install / Desktop",
       "context": "Install. Host tabs swap only the host name in the block (role=tablist, arrow keys move focus). Block lines fade in one by one on enter.",
       "clip": true,
@@ -6313,7 +6346,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 380,
-              "content": "Copy one block into your agent. It clones, builds and registers Whale's MCP server and skills — then checks the wallet.",
+              "content": "Copy one block into any agent that can run shell commands. It clones, builds and registers Whale's MCP server and skills — then checks the wallet.",
               "lineHeight": 1.5,
               "fontFamily": "$font-display",
               "fontSize": 17,
@@ -6788,7 +6821,7 @@
                               "id": "idngF",
                               "name": "Body",
                               "fill": "$muted",
-                              "content": "No clone. Sign in with OAuth or an agent key.",
+                              "content": "No clone. Sign in with OAuth or an agent key. Sends are dry-run during beta.",
                               "fontFamily": "$font-display",
                               "fontSize": 14,
                               "fontWeight": "300"
@@ -6822,7 +6855,7 @@
       "type": "frame",
       "id": "gYwnN",
       "x": 0,
-      "y": 5110,
+      "y": 5140,
       "name": "Landing / 06 Hosts / Desktop",
       "context": "Host integrations. Cards link to each host's setup doc; icons float 6px on staggered 5s loops.",
       "clip": true,
@@ -7442,7 +7475,7 @@
       "type": "frame",
       "id": "L8h4P",
       "x": 0,
-      "y": 6121,
+      "y": 6151,
       "name": "Landing / 07 Safety / Desktop",
       "context": "Safety strip, static. Icons draw their strokes on enter.",
       "clip": true,
@@ -7528,7 +7561,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Every swap, bridge and transfer previews first. Nothing broadcasts until you say so.",
+                  "content": "Every swap and transfer is a dry-run during beta. Nothing signs live yet.",
                   "lineHeight": 1.55,
                   "fontFamily": "$font-display",
                   "fontSize": 15,
@@ -7694,7 +7727,7 @@
       "type": "frame",
       "id": "tmsXd",
       "x": 0,
-      "y": 6406,
+      "y": 6436,
       "name": "Landing / 08 Contribute / Desktop",
       "context": "Contribute. Cards link to GitHub issues filtered by label, the chains doc, and AGENTS.md. Avatar row pulls top contributors from the GitHub API at build time.",
       "clip": true,
@@ -8187,7 +8220,7 @@
       "type": "frame",
       "id": "Mfdzi",
       "x": 0,
-      "y": 7362,
+      "y": 7392,
       "name": "Landing / 09 Footer / Desktop",
       "context": "Footer.",
       "clip": true,
@@ -10862,7 +10895,7 @@
           "fill": "$muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Quote, swap, bridge, check balances and transfer across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape. Dry-run by default.",
+          "content": "Quote, swap and transfer (dry-run during beta), plus bridge quotes, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
           "lineHeight": 1.5,
           "fontFamily": "$font-display",
           "fontSize": 17,
@@ -10898,7 +10931,7 @@
       "type": "frame",
       "id": "dY4z3",
       "x": 1640,
-      "y": 1031,
+      "y": 1005,
       "name": "Landing / 03 Compare / Mobile",
       "context": "Mobile table scrolls horizontally inside its container; label column stays sticky.",
       "clip": true,
@@ -13278,7 +13311,7 @@
       "type": "frame",
       "id": "T84Wl",
       "x": 1640,
-      "y": 3354,
+      "y": 3328,
       "name": "Landing / 04 Networks / Mobile",
       "clip": true,
       "width": 390,
@@ -13376,6 +13409,18 @@
                     "as2Tg": {
                       "content": "Ethereum",
                       "fontSize": 15
+                    }
+                  }
+                },
+                {
+                  "id": "DqihK",
+                  "type": "ref",
+                  "ref": "UM68F",
+                  "name": "Badge opt-in",
+                  "descendants": {
+                    "k7RLXp": {
+                      "content": "opt-in",
+                      "fontSize": 11
                     }
                   }
                 },
@@ -13601,7 +13646,7 @@
             },
             {
               "type": "frame",
-              "id": "BMjyV",
+              "id": "HNSDJ",
               "name": "ChipRow",
               "gap": 8,
               "alignItems": "center",
@@ -13647,6 +13692,55 @@
                   }
                 },
                 {
+                  "id": "MOyZm",
+                  "type": "ref",
+                  "ref": "RoI5s",
+                  "name": "Chip Blast",
+                  "height": 48,
+                  "padding": [
+                    10,
+                    16,
+                    10,
+                    10
+                  ],
+                  "descendants": {
+                    "me4NY": {
+                      "width": 26,
+                      "height": 26
+                    },
+                    "pgTvz": {
+                      "fill": {
+                        "type": "image",
+                        "enabled": true,
+                        "url": "logos/c-blast.webp",
+                        "mode": "cover"
+                      },
+                      "x": 0,
+                      "y": 0,
+                      "width": 26,
+                      "height": 26
+                    },
+                    "CvhT2": {
+                      "icon": "hexagon",
+                      "width": 24,
+                      "height": 24
+                    },
+                    "as2Tg": {
+                      "content": "Blast",
+                      "fontSize": 15
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "BMjyV",
+              "name": "ChipRow",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
                   "id": "QWn9P",
                   "type": "ref",
                   "ref": "RoI5s",
@@ -13687,42 +13781,14 @@
                   }
                 },
                 {
-                  "id": "MOyZm",
+                  "id": "BNR91",
                   "type": "ref",
-                  "ref": "RoI5s",
-                  "name": "Chip Blast",
-                  "height": 48,
-                  "padding": [
-                    10,
-                    16,
-                    10,
-                    10
-                  ],
+                  "ref": "UM68F",
+                  "name": "Badge quotes only",
                   "descendants": {
-                    "me4NY": {
-                      "width": 26,
-                      "height": 26
-                    },
-                    "pgTvz": {
-                      "fill": {
-                        "type": "image",
-                        "enabled": true,
-                        "url": "logos/c-blast.webp",
-                        "mode": "cover"
-                      },
-                      "x": 0,
-                      "y": 0,
-                      "width": 26,
-                      "height": 26
-                    },
-                    "CvhT2": {
-                      "icon": "hexagon",
-                      "width": 24,
-                      "height": 24
-                    },
-                    "as2Tg": {
-                      "content": "Blast",
-                      "fontSize": 15
+                    "k7RLXp": {
+                      "content": "quotes only",
+                      "fontSize": 11
                     }
                   }
                 }
@@ -13779,13 +13845,13 @@
                   }
                 },
                 {
-                  "id": "h1l82G",
+                  "id": "OS0C9",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge send disabled",
+                  "name": "Badge quotes only",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "send disabled",
+                      "content": "quotes only",
                       "fontSize": 11
                     }
                   }
@@ -13838,16 +13904,7 @@
                       "fontSize": 15
                     }
                   }
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "puQNp",
-              "name": "ChipRow",
-              "gap": 8,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "id": "t3IyIV",
                   "type": "ref",
@@ -13887,7 +13944,16 @@
                       "fontSize": 15
                     }
                   }
-                },
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "puQNp",
+              "name": "ChipRow",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
                 {
                   "id": "XATbG",
                   "type": "ref",
@@ -13932,13 +13998,13 @@
                   }
                 },
                 {
-                  "id": "l9R6E",
+                  "id": "TBzre",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge opt-in",
+                  "name": "Badge opt-in, no router yet",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "opt-in",
+                      "content": "opt-in, no router yet",
                       "fontSize": 11
                     }
                   }
@@ -14050,6 +14116,18 @@
                       "fontSize": 15
                     }
                   }
+                },
+                {
+                  "id": "qKnNu",
+                  "type": "ref",
+                  "ref": "UM68F",
+                  "name": "Badge orders only",
+                  "descendants": {
+                    "k7RLXp": {
+                      "content": "orders only",
+                      "fontSize": 11
+                    }
+                  }
                 }
               ]
             }
@@ -14074,7 +14152,7 @@
       "type": "frame",
       "id": "gIPbr",
       "x": 1640,
-      "y": 4417,
+      "y": 4449,
       "name": "Landing / 05 Install / Mobile",
       "clip": true,
       "width": 390,
@@ -14121,7 +14199,7 @@
           "fill": "$muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Copy one block into your agent. It clones, builds and registers Whale's MCP server and skills.",
+          "content": "Copy one block into any agent that can run shell commands. It clones, builds and registers Whale's MCP server and skills.",
           "lineHeight": 1.5,
           "fontFamily": "$font-display",
           "fontSize": 16,
@@ -14456,7 +14534,7 @@
           "id": "wMFPQ",
           "name": "AsideLabel",
           "fill": "$muted",
-          "content": "Hosted gateway",
+          "content": "Hosted gateway · sends are dry-run during beta",
           "fontFamily": "$font-mono",
           "fontSize": 12,
           "fontWeight": "normal"
@@ -14480,7 +14558,7 @@
       "type": "frame",
       "id": "mKwNy",
       "x": 1640,
-      "y": 5617,
+      "y": 5673,
       "name": "Landing / 06 Hosts / Mobile",
       "clip": true,
       "width": 390,
@@ -15012,7 +15090,7 @@
       "type": "frame",
       "id": "VXZBK",
       "x": 1640,
-      "y": 6504,
+      "y": 6560,
       "name": "Landing / 07 Safety / Mobile",
       "clip": true,
       "width": 390,
@@ -15106,7 +15184,7 @@
                       "fill": "$muted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Every swap, bridge and transfer previews first.",
+                      "content": "Every swap and transfer is a dry-run during beta. Nothing signs live yet.",
                       "lineHeight": 1.5,
                       "fontFamily": "$font-display",
                       "fontSize": 14,
@@ -15292,7 +15370,7 @@
       "type": "frame",
       "id": "ukSWw",
       "x": 1640,
-      "y": 6873,
+      "y": 6950,
       "name": "Landing / 08 Contribute / Mobile",
       "clip": true,
       "width": 390,
@@ -15683,7 +15761,7 @@
       "type": "frame",
       "id": "prBYv",
       "x": 1640,
-      "y": 7923,
+      "y": 8000,
       "name": "Landing / 09 Footer / Mobile",
       "clip": true,
       "width": 390,
@@ -16329,7 +16407,7 @@
               "id": "EsUuj",
               "name": "H2",
               "fill": "$ink",
-              "content": "1.1  One paste, any agent",
+              "content": "1.1  One paste, any agent with a shell",
               "fontFamily": "$font-display",
               "fontSize": 26,
               "fontWeight": "300",
@@ -16936,7 +17014,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 640,
-              "content": "No clone. A client with MCP OAuth needs only the URL; others send an agent key as Authorization: Bearer whale_…",
+              "content": "No clone. A client with MCP OAuth needs only the URL; others send an agent key as Authorization: Bearer whale_… Sends through the gateway are dry-run during beta.",
               "lineHeight": 1.6,
               "fontFamily": "$font-display",
               "fontSize": 16,
@@ -18107,7 +18185,7 @@
                           "id": "FcBCq",
                           "name": "Label",
                           "fill": "$ink",
-                          "content": "Self-hosted signer option",
+                          "content": "Self-hosted signer",
                           "fontFamily": "$font-display",
                           "fontSize": 16,
                           "fontWeight": "300"
@@ -18117,7 +18195,7 @@
                           "id": "wTwVM",
                           "name": "Sub",
                           "fill": "$muted",
-                          "content": "Your machine checks every tx",
+                          "content": "For EVM and Solana",
                           "fontFamily": "$font-mono",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -18435,7 +18513,7 @@
                           "id": "U6Cri",
                           "name": "Label",
                           "fill": "$ink",
-                          "content": "Approval modes",
+                          "content": "Approval",
                           "fontFamily": "$font-display",
                           "fontSize": 16,
                           "fontWeight": "300"
@@ -18462,7 +18540,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "autonomous / ask / always approve",
+                          "content": "Trades on its own inside per-trade and daily USD caps",
                           "lineHeight": 1.4,
                           "textAlign": "center",
                           "fontFamily": "$font-mono",
