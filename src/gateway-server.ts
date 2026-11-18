@@ -5,7 +5,7 @@ import { loadGatewayConfig } from "./gateway/config.js";
 import { executorClient } from "./gateway/executor-client.js";
 import { applyDueChanges } from "./gateway/policy-changes.js";
 import { WEB_DIST_DIR } from "./gateway/static.js";
-import { settleStaleSends } from "./gateway/send-ledger.js";
+import { oneAtATime, settleStaleSends } from "./gateway/send-ledger.js";
 import { deliverDue } from "./gateway/webhooks.js";
 
 const config = loadGatewayConfig();
@@ -25,9 +25,12 @@ const deliveries = setInterval(() => {
 }, 15_000);
 deliveries.unref();
 const executor = config.executor ? executorClient(config.executor) : null;
-const settlements = setInterval(() => {
-  if (executor) settleStaleSends(pool, executor, undefined, (error: unknown) => app.log.warn({ err: error }, "send report failed")).catch((error: unknown) => app.log.warn({ err: error }, "send settlement failed"));
-}, 30_000);
+const settle = executor
+  ? oneAtATime(() =>
+      settleStaleSends(pool, executor, undefined, (error: unknown) => app.log.warn({ err: error }, "send report failed")).catch((error: unknown) => app.log.warn({ err: error }, "send settlement failed")),
+    )
+  : null;
+const settlements = setInterval(() => settle?.(), 30_000);
 settlements.unref();
 
 let stopping = false;
