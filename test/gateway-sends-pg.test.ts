@@ -66,7 +66,7 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   };
   const swap = (key: string, dollars: number, sellToken = USDC, apiKey = agent.apiKey) =>
     call("swap", { chain: "base", sellToken, buyToken: sellToken === USDC ? WETH : USDC, sellAmount: sellToken === USDC ? usdc(dollars) : "1000000000000000000", idempotencyKey: key }, apiKey);
-  const transfer = (key: string, dollars: number, token = USDC) => call("transfer", { chain: "base", token, to: COLD, amount: token === USDC ? usdc(dollars) : "1000000000000000000", idempotencyKey: key });
+  const transfer = (key: string, dollars: number, token = USDC, amount = token.toLowerCase() === USDC.toLowerCase() ? usdc(dollars) : "1000000000000000000") => call("transfer", { chain: "base", token, to: COLD, amount, idempotencyKey: key });
   const approve = async (approvalId: string) => {
     const approval = (await app.inject({ method: "GET", url: "/api/approvals", headers: user.headers })).json().approvals.find((entry: { id: string }) => entry.id === approvalId);
     const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "approval.approve", approvalId, command: approval.command } } })).json();
@@ -419,6 +419,24 @@ test("a transfer Whale cannot price waits for the owner even with no approval th
     assert.equal(unpriced.body?.status, "approval_required");
     assert.equal(unpriced.body?.estimateUsd, null);
     assert.match(String(unpriced.body?.reason), /the transfer moves a token Whale cannot price/);
+    assert.equal(sent.length, 0);
+  } finally {
+    await drop();
+  }
+});
+
+test("a transfer over the per-transaction cap is refused before the owner is asked, and a lowercase stablecoin address is priced the same", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, transfer, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    assert.match((await transfer("xfer-over-threshold-wallet", 25)).text, /the transfer moves about 25\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM approvals")).rows[0].n, 0);
+    assert.match((await transfer("xfer-lowercase", 25, USDC.toLowerCase())).text, /per-transaction cap/);
+    for (const amount of ["1.5", "-5000000", "0", "abc"]) {
+      const bad = await transfer(`xfer-bad-${amount.length}`, 0, USDC, amount);
+      assert.equal(bad.isError, true, amount);
+      assert.match(bad.text, /arguments do not match/, amount);
+    }
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM approvals")).rows[0].n, 0);
     assert.equal(sent.length, 0);
   } finally {
     await drop();

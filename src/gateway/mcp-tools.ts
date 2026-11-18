@@ -1,7 +1,7 @@
 import type pg from "pg";
 import { z } from "zod";
 import { addressKey, chainByKey } from "../chains.js";
-import type { HostedCommand } from "../hosted-commands.js";
+import { hostedAmount, type HostedCommand } from "../hosted-commands.js";
 import { audit } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
 import type { ExecutorClient } from "./executor-client.js";
@@ -27,8 +27,8 @@ export const HOSTED_TOOLS = [
 ] as const;
 
 const x402Args = z.object({ url: z.string().url().max(512) }).strict();
-const swapArgs = z.object({ chain: z.string(), sellToken: z.string(), buyToken: z.string(), sellAmount: z.string(), slippageBps: z.number().int().optional(), idempotencyKey: z.string().optional() }).strict();
-const transferArgs = z.object({ chain: z.string(), token: z.string(), to: z.string(), amount: z.string(), idempotencyKey: z.string() }).strict();
+const swapArgs = z.object({ chain: z.string(), sellToken: z.string(), buyToken: z.string(), sellAmount: hostedAmount, slippageBps: z.number().int().optional(), idempotencyKey: z.string().optional() }).strict();
+const transferArgs = z.object({ chain: z.string(), token: z.string(), to: z.string(), amount: hostedAmount, idempotencyKey: z.string() }).strict();
 const chainArgs = z.object({ chain: z.string() }).strict();
 
 export type ToolEnv = { pool: pg.Pool; agent: AgentContext; wallet: WalletView; executor: ExecutorClient | null; fetch402?: Fetch402 };
