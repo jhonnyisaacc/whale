@@ -13,6 +13,7 @@ import { softAuthenticator } from "./webauthn-fixtures.js";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
 const OWN = "0x9999999999999999999999999999999999999999";
+const COLD = "0x1111111111111111111111111111111111111111";
 const usdc = (dollars: number) => String(Math.round(dollars * 1_000_000));
 
 type Reply = { isError: boolean; text: string; body: Record<string, unknown> | null };
@@ -43,7 +44,7 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   const walletId = "walletId" in created ? created.walletId : "";
   await pool.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2)", [walletId, OWN]);
   const policy = await pool.query("SELECT document FROM policies WHERE wallet_id = $1", [walletId]);
-  await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify({ ...policy.rows[0].document, actions: ["swap", "transfer"], approvalAboveUsd: options.approvalAboveUsd, ...(options.walletDailyUsd ? { dailyUsd: options.walletDailyUsd } : {}) })]);
+  await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify({ ...policy.rows[0].document, actions: ["swap", "transfer"], destinations: [{ family: "evm", address: COLD, label: "cold" }], approvalAboveUsd: options.approvalAboveUsd, ...(options.walletDailyUsd ? { dailyUsd: options.walletDailyUsd } : {}) })]);
   const agent = await createAgent(pool, { accountId: user.accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap", "transfer"], maxTxUsd: 20, dailyUsd: 40 } });
   if ("refused" in agent) throw new Error(agent.refused);
   const authenticator = softAuthenticator({ rpId: "whale.example", origin: ORIGIN });
@@ -65,13 +66,14 @@ async function harness(options: { approvalAboveUsd: number | null; netOutputUsd?
   };
   const swap = (key: string, dollars: number, sellToken = USDC, apiKey = agent.apiKey) =>
     call("swap", { chain: "base", sellToken, buyToken: sellToken === USDC ? WETH : USDC, sellAmount: sellToken === USDC ? usdc(dollars) : "1000000000000000000", idempotencyKey: key }, apiKey);
+  const transfer = (key: string, dollars: number, token = USDC) => call("transfer", { chain: "base", token, to: COLD, amount: token === USDC ? usdc(dollars) : "1000000000000000000", idempotencyKey: key });
   const approve = async (approvalId: string) => {
     const approval = (await app.inject({ method: "GET", url: "/api/approvals", headers: user.headers })).json().approvals.find((entry: { id: string }) => entry.id === approvalId);
     const stepUp = (await app.inject({ method: "POST", url: "/api/passkeys/step-up", headers: user.headers, payload: { action: { kind: "approval.approve", approvalId, command: approval.command } } })).json();
     return app.inject({ method: "POST", url: `/api/approvals/${approvalId}/approve`, headers: user.headers, payload: { assertion: authenticator.assert(stepUp.challenge) } });
   };
   const sweep = () => settleStaleSends(pool, executor, 0);
-  return { app, pool, user, walletId, sent, failures, during, reports, sweep, call, swap, approve, drop: async () => (await app.close(), await drop()) };
+  return { app, pool, user, walletId, sent, failures, during, reports, sweep, call, swap, transfer, approve, drop: async () => (await app.close(), await drop()) };
 }
 
 test("a swap is priced by what it sells, so a bad quote cannot slip a large sell past the cap or the threshold", { skip: !TEST_DATABASE_URL }, async () => {
@@ -345,6 +347,50 @@ test("two concurrent swaps that each fit the daily cap but not together execute 
     assert.match(replies.find((reply) => reply.isError)?.text ?? "", /above this agent's 40\.00 USD daily cap/);
     const total = await pool.query("SELECT sum(usd)::float8 AS usd FROM agent_spends");
     assert.equal(total.rows[0].usd, 30);
+  } finally {
+    await drop();
+  }
+});
+
+test("a transfer with no approval threshold is refused over the per-transaction cap and over the daily cap", { skip: !TEST_DATABASE_URL }, async () => {
+  const { sent, transfer, drop } = await harness({ approvalAboveUsd: null });
+  try {
+    assert.match((await transfer("xfer-huge", 25)).text, /the transfer moves about 25\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
+    assert.equal((await transfer("xfer-1", 19)).isError, false);
+    assert.equal((await transfer("xfer-2", 19)).isError, false);
+    assert.match((await transfer("xfer-3", 3)).text, /the transfer would take today's total to about 41\.00 USD, above this agent's 40\.00 USD daily cap/);
+    assert.equal(sent.length, 2);
+  } finally {
+    await drop();
+  }
+});
+
+test("an approved transfer counts toward the daily total, so a later swap gets no headroom it should not have", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, swap, transfer, approve, drop } = await harness({ approvalAboveUsd: 10 });
+  try {
+    const asked = await transfer("xfer-approved", 15);
+    assert.equal(asked.body?.status, "approval_required");
+    assert.equal(asked.body?.estimateUsd, 15);
+    assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
+    assert.equal((await transfer("xfer-approved", 15)).isError, false);
+    assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key = 'xfer-approved'")).rows, [{ usd: 15, state: "committed" }]);
+    assert.equal((await swap("swap-after-transfer", 10)).body?.status, "would_swap");
+    assert.equal((await swap("swap-after-transfer-2", 9)).body?.status, "would_swap");
+    assert.match((await swap("swap-over", 7)).text, /about 41\.00 USD, above this agent's 40\.00 USD daily cap/);
+    assert.equal(sent.length, 3);
+  } finally {
+    await drop();
+  }
+});
+
+test("a transfer Whale cannot price waits for the owner even with no approval threshold", { skip: !TEST_DATABASE_URL }, async () => {
+  const { sent, transfer, drop } = await harness({ approvalAboveUsd: null });
+  try {
+    const unpriced = await transfer("xfer-weth", 0, WETH);
+    assert.equal(unpriced.body?.status, "approval_required");
+    assert.equal(unpriced.body?.estimateUsd, null);
+    assert.match(String(unpriced.body?.reason), /the transfer moves a token Whale cannot price/);
+    assert.equal(sent.length, 0);
   } finally {
     await drop();
   }
