@@ -270,3 +270,27 @@ test("a burst of retries of one approval answers every caller and leaves the poo
     await drop();
   }
 });
+
+test("two concurrent swaps that each fit the daily cap but not together execute exactly once", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, during, swap, drop } = await harness({ approvalAboveUsd: null });
+  try {
+    assert.equal((await swap("race-0", 15)).body?.status, "would_swap");
+    let arrived = 0;
+    let release: () => void = () => undefined;
+    const both = new Promise<void>((resolve) => (release = resolve));
+    const hold = async () => {
+      arrived += 1;
+      if (arrived === 2) release();
+      await Promise.race([both, new Promise((resolve) => setTimeout(resolve, 1000))]);
+    };
+    during.push(hold, hold);
+    const replies = await Promise.all([swap("race-a", 15), swap("race-b", 15)]);
+    assert.equal(sent.length, 2, "the first swap and exactly one of the racing pair reached the executor");
+    assert.equal(replies.filter((reply) => !reply.isError).length, 1);
+    assert.match(replies.find((reply) => reply.isError)?.text ?? "", /above this agent's 40\.00 USD daily cap/);
+    const total = await pool.query("SELECT sum(usd)::float8 AS usd FROM agent_spends");
+    assert.equal(total.rows[0].usd, 30);
+  } finally {
+    await drop();
+  }
+});
