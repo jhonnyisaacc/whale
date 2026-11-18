@@ -9,13 +9,16 @@ import { executorClient, ExecutorRefused } from "../src/gateway/executor-client.
 import { settleStaleSends } from "../src/gateway/send-ledger.js";
 import { createWallet } from "../src/gateway/wallets.js";
 import { buildApp } from "../src/http.js";
-import { closeSpendPools } from "../src/spend.js";
+import { closeSpendPools, poolFor } from "../src/spend.js";
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
 
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
 const OWN = "0x9999999999999999999999999999999999999999";
+const COLD = "0x1111111111111111111111111111111111111111";
+const ETH = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const USD_PER_ETH = 3000;
 const HOSTED_TOKEN = "h".repeat(40);
 
 after(() => closeSpendPools());
@@ -35,8 +38,15 @@ async function harness(options: { executorNow?: () => number } = {}) {
   const quotes: string[] = [];
   const gates: Gate[] = [];
   const quoteFailures: Error[] = [];
+  const pricing = { quotes: 0, up: true };
   const depsFor = async (): Promise<CommandDeps> => ({
     quote: async (item) => {
+      if (item.sell.address === ETH && item.buy.address === USDC) {
+        pricing.quotes += 1;
+        if (!pricing.up) return null;
+        const buyAmount = String((BigInt(item.sellAmount) * BigInt(USD_PER_ETH * 1_000_000)) / 10n ** 18n);
+        return { planId: "zeroex", kind: "aggregator", hops: [], priceImpactPct: 0.1, feeUsd: 0, buyAmount, chain: item.sell.chain, chainKey: item.sell.chainKey };
+      }
       quotes.push(item.sellAmount);
       await gates.shift()?.wait();
       const failure = quoteFailures.shift();
@@ -55,7 +65,8 @@ async function harness(options: { executorNow?: () => number } = {}) {
   };
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
-    if (holdNext[0] === path) {
+    const kind = (JSON.parse(String(init?.body)) as { command?: { kind?: string } }).command?.kind;
+    if (holdNext[0] === path && kind !== "quote") {
       holdNext.shift();
       held.push({ path, init: init as RequestInit });
       throw new Error("The operation was aborted due to timeout");
@@ -69,7 +80,7 @@ async function harness(options: { executorNow?: () => number } = {}) {
   const walletId = "walletId" in created ? created.walletId : "";
   await pool.query("INSERT INTO wallet_addresses (wallet_id, family, address) VALUES ($1, 'evm', $2)", [walletId, OWN]);
   const policy = await pool.query("SELECT document FROM policies WHERE wallet_id = $1", [walletId]);
-  await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify({ ...policy.rows[0].document, actions: ["swap", "transfer"], approvalAboveUsd: null })]);
+  await pool.query("UPDATE policies SET document = $2 WHERE wallet_id = $1", [walletId, JSON.stringify({ ...policy.rows[0].document, actions: ["swap", "transfer"], destinations: [{ family: "evm", address: COLD, label: "cold" }], approvalAboveUsd: null })]);
   const agent = await createAgent(pool, { accountId: user.accountId, walletId, name: "bot", limits: { chains: ["base"], actions: ["swap", "transfer"], maxTxUsd: 20, dailyUsd: 40 } });
   if ("refused" in agent) throw new Error(agent.refused);
   const swap = async (key: string, dollars: number) => {
@@ -82,10 +93,24 @@ async function harness(options: { executorNow?: () => number } = {}) {
     const result = response.json().result as { isError: boolean; content: { text: string }[] };
     return { isError: result.isError, text: result.content[0]?.text ?? "" };
   };
+  const transfer = async (key: string, amount: string) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers: { authorization: `Bearer ${agent.apiKey}`, accept: "application/json, text/event-stream" },
+      payload: { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "transfer", arguments: { chain: "base", token: ETH, to: COLD, amount, idempotencyKey: key } } },
+    });
+    const result = response.json().result as { isError: boolean; content: { text: string }[] };
+    return { isError: result.isError, text: result.content[0]?.text ?? "" };
+  };
+  const journaled = async (key: string) =>
+    (await (await poolFor(TEST_DATABASE_URL as string)).query<{ state: string }>("SELECT state FROM hosted_sends WHERE agent_id = $1 AND idempotency_key = $2", [agent.agentId, key])).rows.map((row) => row.state);
+  const spent = async (key: string) => (await pool.query<{ usd: number; state: string }>("SELECT usd, state FROM agent_spends WHERE idempotency_key = $1", [key])).rows;
   const spend = async (key: string) => (await pool.query<{ state: string }>("SELECT state FROM agent_spends WHERE idempotency_key = $1", [key])).rows[0]?.state;
   const sweep = () => settleStaleSends(pool, executor, 0);
   const ids = { accountId: user.accountId, walletId, agentId: agent.agentId };
-  return { pool, ids, executorApp, quotes, gates, quoteFailures, held, holdNext, deliver, executor, swap, spend, sweep, drop: async () => (await app.close(), await executorApp.close(), await drop()) };
+  const forget = async (key: string) => (await poolFor(TEST_DATABASE_URL as string)).query("DELETE FROM hosted_sends WHERE agent_id = $1 AND idempotency_key = $2", [agent.agentId, key]);
+  return { forget, pool, ids, executorApp, quotes, gates, quoteFailures, pricing, held, holdNext, deliver, executor, swap, transfer, journaled, spent, spend, sweep, drop: async () => (await app.close(), await executorApp.close(), await drop()) };
 }
 
 test("the sweeper keeps a reservation the executor has recorded as started, so a slow send is still counted when it lands", { skip: !TEST_DATABASE_URL }, async () => {
@@ -166,6 +191,80 @@ test("a hosted send that fails before it moves anything is reported as not start
     assert.equal((await swap("failed-send", 15)).isError, false, "the retry runs as a new request");
     assert.equal(await spend("failed-send"), "committed");
     assert.deepEqual(quotes, ["15000000", "15000000"]);
+  } finally {
+    await drop();
+  }
+});
+
+const halfCent = String(5n * 10n ** 15n);
+
+test("a native-asset transfer priced from Whale's own quote is journaled, held by the sweeper as one send, and counted once at that price", { skip: !TEST_DATABASE_URL }, async () => {
+  const { held, holdNext, deliver, transfer, journaled, spent, sweep, drop } = await harness();
+  try {
+    holdNext.push("/hosted/commands");
+    assert.match((await transfer("eth-late", halfCent)).text, /may have happened/);
+    assert.deepEqual(await spent("eth-late"), [{ usd: 15, state: "reserved" }], "the transfer is reserved at Whale's price before it runs");
+    assert.deepEqual(await journaled("eth-late"), [], "the held request never reached the executor");
+    assert.equal(await sweep(), 1);
+    assert.deepEqual(await spent("eth-late"), [{ usd: 15, state: "released" }]);
+    const late = held[0] as { path: string; init: RequestInit };
+    assert.equal((await deliver(late.path, late.init)).status, 403, "the request the sweeper released never runs");
+    assert.deepEqual(await journaled("eth-late"), ["refused"]);
+    const retry = await transfer("eth-late", halfCent);
+    assert.equal(retry.isError, false, retry.text);
+    assert.deepEqual(await journaled("eth-late"), ["executed"]);
+    assert.deepEqual(await spent("eth-late"), [{ usd: 15, state: "committed" }]);
+    assert.match((await transfer("eth-over", String(10n ** 16n))).text, /the transfer moves about 30\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
+    assert.deepEqual(await journaled("eth-over"), [], "a transfer over the cap never reaches the journal");
+  } finally {
+    await drop();
+  }
+});
+
+test("a send Whale cannot price never reaches the executor's journal or the ledger", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pricing, transfer, journaled, spent, drop } = await harness();
+  try {
+    pricing.up = false;
+    const refused = await transfer("eth-unpriced", halfCent);
+    assert.match(refused.text, /could not price on base, so Whale refused it/);
+    assert.equal(pricing.quotes, 2);
+    assert.deepEqual(await journaled("eth-unpriced"), []);
+    assert.deepEqual(await spent("eth-unpriced"), []);
+  } finally {
+    await drop();
+  }
+});
+
+test("a retry of a committed transfer gets the journal's stored reply and is not priced or run again", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pricing, transfer, journaled, spent, drop } = await harness();
+  try {
+    const first = await transfer("eth-again", halfCent);
+    assert.equal(first.isError, false, first.text);
+    pricing.up = false;
+    const asked = pricing.quotes;
+    const retry = await transfer("eth-again", halfCent);
+    assert.equal(retry.isError, false, retry.text);
+    assert.deepEqual(JSON.parse(retry.text), JSON.parse(first.text), "the retry answers with the stored reply");
+    assert.equal(pricing.quotes, asked, "the committed retry is not priced again");
+    assert.deepEqual(await journaled("eth-again"), ["executed"]);
+    assert.deepEqual(await spent("eth-again"), [{ usd: 15, state: "committed" }]);
+  } finally {
+    await drop();
+  }
+});
+
+test("a retry of a committed send the executor has no record of is refused and never runs again", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pricing, forget, transfer, journaled, spent, drop } = await harness();
+  try {
+    assert.equal((await transfer("eth-forgotten", halfCent)).isError, false);
+    await forget("eth-forgotten");
+    const asked = pricing.quotes;
+    const retry = await transfer("eth-forgotten", halfCent);
+    assert.equal(retry.isError, true);
+    assert.match(retry.text, /the executor has no record of it, so Whale did not run it again/);
+    assert.equal(pricing.quotes, asked);
+    assert.deepEqual(await journaled("eth-forgotten"), ["refused"], "the executor never started the send again");
+    assert.deepEqual(await spent("eth-forgotten"), [{ usd: 15, state: "committed" }]);
   } finally {
     await drop();
   }

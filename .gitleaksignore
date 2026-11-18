@@ -3,5 +3,6 @@
 1e0949767ab303ef82522e4e26c64571a936c82c:test/custody.test.ts:generic-api-key:16
 56be9ab76be0f99ac6676be2d2531fcccbaea39f:test/controls.test.ts:generic-api-key:34
 f7b0fbd984bf7e6036c1a64339c0ed3904913adb:test/security-review.test.ts:generic-api-key:25
+f5689a7cc8ee8bdf63bfff8b4cfcf7d279ee31a9:test/gateway-sends-pg.test.ts:generic-api-key:270
 8eacc402d5099728be12686e39c7140527f436e8:test/liquidity.test.ts:generic-api-key:117
 8eacc402d5099728be12686e39c7140527f436e8:test/liquidity.test.ts:generic-api-key:160

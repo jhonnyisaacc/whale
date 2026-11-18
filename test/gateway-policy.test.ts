@@ -31,7 +31,7 @@ test("a policy refuses unknown chains, repeats, a daily cap under the per-tx cap
 });
 
 test("any loosening is a widening, and only tightening is a narrowing", () => {
-  const base = policy({ destinations: [{ family: "evm", address: EVM, label: "cold" }], tokenAllowlist: [{ chain: "base", address: EVM }] });
+  const base = policy({ approvalAboveUsd: 25, destinations: [{ family: "evm", address: EVM, label: "cold" }], tokenAllowlist: [{ chain: "base", address: EVM }] });
   assert.equal(changeDirection(base, base), "same");
   const widened: Partial<WalletPolicy>[] = [
     { chains: [...base.chains, "optimism"] },

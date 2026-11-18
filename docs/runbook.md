@@ -68,7 +68,7 @@ Sessions are a `__Host-` cookie that is `HttpOnly`, `Secure`, and `SameSite=Lax`
 
 ### Wallets and agents
 
-`POST /api/wallets` with `{ "label", "level" }` creates a wallet in `pending` with the default policy: Base, Arbitrum, and Solana, swaps only, USD 50 per transaction, USD 100 a day, approval above USD 25, 100 bps slippage. Only `enclave` is offered. `self_hosted` and `smart_account` answer `level_unavailable` until their signers land. An account holds ten wallets.
+`POST /api/wallets` with `{ "label", "level" }` creates a wallet in `pending` with the default policy: Base, Arbitrum, and Solana, swaps only, USD 50 per transaction, USD 100 a day, no owner approval until the owner sets a threshold, 100 bps slippage. Only `enclave` is offered. `self_hosted` and `smart_account` answer `level_unavailable` until their signers land. An account holds ten wallets.
 
 `POST /api/wallets/:id/agents` with `{ "name", "limits" }` creates an agent and returns its API key once, as `whale_<id>_<secret>`. Postgres keeps the SHA-256 of the secret. The limits must sit inside the wallet policy. The limit that applies at send time is the intersection, because the policy can narrow later. `POST /api/agents/:id/rotate` replaces the key. `POST /api/agents/:id/revoke` stops the agent and every credential it holds.
 
@@ -149,18 +149,20 @@ An enclave wallet's Turnkey policy can drift from its wallet policy after a chan
 
 ### Approvals and activity
 
-A hosted `swap` is priced by what it sells. A USDC, USDT, or USDB sell counts one dollar per token. Any other sell token cannot be priced yet. The quote's output is never used, because price impact or slippage can make it far smaller than what leaves the wallet.
-- Above the agent's effective per-transaction cap, it is refused, even if approved.
-- A priced swap that would take the agent's total for the UTC day above its effective daily cap is refused, even if approved. So is one that would take the wallet's total, across all its agents, above the wallet's daily cap. A swap counts once it is planned, and a retry with the same `idempotencyKey` does not count again.
-- Above the wallet's `approvalAboveUsd`, it returns `approval_required` with an approval id, and the agent calls again later with the same `idempotencyKey`.
-- When it cannot be priced, it returns `approval_required` even when the wallet has no `approvalAboveUsd`, because no cap can be checked. An approved unpriced swap counts toward no daily total.
+A hosted `swap` is priced by what it sells, and a hosted `transfer` by what it moves. Whale prices the send itself and never uses a price, route, or quote the agent supplies:
+- A USDC, USDT, or USDB amount counts one dollar per token.
+- Any other token, native ETH or SOL included, is priced by two quotes from the executor's aggregator race. Each sells into the chain's dollar asset with the wallet as taker and ignores the agent's slippage. For these pricing quotes only, the race keeps every provider's answer and takes the largest output. Every other quote, the hosted swap's route included, keeps the race's usual choice. One quote sells the whole amount and one sells a thousandth of it. The estimate is the larger of the whole quote and the small quote times 1,000, so price impact on a large amount cannot lower it. The swap's own route quote is never used, because the agent picks its buy token and slippage.
+- A send Whale cannot price is refused with a reason that says so: a chain with no dollar asset, no route, a quote failure, or a token with no market. No approval is created and nothing reaches the executor's send path.
 
-A `transfer` asks for approval whenever the wallet has a threshold, because it has no quote to price it.
+Then the caps apply, the same for swaps and transfers:
+- Above the agent's effective per-transaction cap, it is refused, even if approved.
+- A send that would take the agent's total for the UTC day above its effective daily cap is refused, even if approved. So is one that would take the wallet's total, across all its agents, above the wallet's daily cap. A send counts once it is planned. A retry with the same `idempotencyKey` of a send already counted does not count again, is not priced again, and does not run again. It gets the answer stored in the executor's journal, even when quotes fail and even when its approval is spent. If the journal has no record of the send, the retry is refused and nothing runs.
+- Only when the wallet has an `approvalAboveUsd` and the estimate is above it does the send return `approval_required` with an approval id. The agent calls again later with the same `idempotencyKey`. With no threshold, no send waits for a human.
 
 The owner sees pending approvals at `GET /api/approvals?status=pending`:
 - Approving needs a passkey step-up for `{ kind: "approval.approve", approvalId, command }`.
 - Denying needs none.
-- An approval lasts an hour, approved or not. One retry of the exact command claims it before the executor runs. A claimed approval does not expire. It becomes spent when the executor answers, and returns to approved when the executor answers 4xx. A spent approval is refused, and the agent asks again with a new `idempotencyKey`. The same `idempotencyKey` with a different command is refused.
+- An approval lasts an hour, approved or not. One retry of the exact command claims it before the executor runs. A claimed approval does not expire. It becomes spent when the executor answers, and returns to approved when the executor answers 4xx. A retry of a spent approval gets the send's stored answer. A new send needs a new `idempotencyKey`. The same `idempotencyKey` with a different command is refused.
 
 Each priced send reserves its USD amount before the executor runs, under the wallet's lock, so two sends cannot both fit the same headroom. The daily totals count reserved and committed rows. An executor answer commits the reservation. A 4xx from the executor releases it. A timeout, a 5xx, or a crash leaves the reservation and the claim in place, and a retry of that key answers `settling`. Every 30 seconds the gateway asks the executor's `/hosted/reports` route about each reservation older than a minute, and settles it from the report. If the executor does not answer, nothing is released.
 

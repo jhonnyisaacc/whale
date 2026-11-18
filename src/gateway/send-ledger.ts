@@ -18,6 +18,10 @@ function usd(value: number): string {
   return `${value.toFixed(2)} USD`;
 }
 
+export async function issuedNow(client: pg.Pool | pg.ClientBase): Promise<string> {
+  return (await client.query<{ at: string }>(`SELECT ${instant("now()")} AS at`)).rows[0]?.at as string;
+}
+
 export async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, priced: Priced, what = "the swap"): Promise<string | null> {
   const totals = await client.query<{ agent: number; wallet: number }>(
     `SELECT COALESCE(SUM(usd) FILTER (WHERE agent_id = $2), 0)::float8 AS agent, COALESCE(SUM(usd), 0)::float8 AS wallet
@@ -41,15 +45,15 @@ export async function recordedSpend(client: pg.Pool | pg.ClientBase, agent: Agen
   return row.binding === bindingOf(command) ? row.state : "conflict";
 }
 
-export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: Send, priced: Priced | null, approved: boolean): Promise<Reservation> {
+export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: Send, priced: Priced, approved: boolean, what: string): Promise<Reservation> {
   return inTransaction(pool, async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent_spends:${agent.walletId}`]);
-    const issuedAt = (await client.query<{ at: string }>(`SELECT ${instant("now()")} AS at`)).rows[0]?.at as string;
+    const issuedAt = await issuedNow(client);
     const recorded = await recordedSpend(client, agent, command);
     if (recorded === "conflict") return { kind: "refused", reason: KEY_REUSED };
     if (recorded === "reserved") return { kind: "settling" };
     if (recorded === "committed") return { kind: "unreserved", issuedAt };
-    const refused = priced ? await dailyRefusal(client, agent, priced) : null;
+    const refused = await dailyRefusal(client, agent, priced, what);
     if (refused) return { kind: "refused", reason: refused };
     if (approved) {
       const claimed = await client.query("UPDATE approvals SET status = 'claimed', claimed_at = now() WHERE agent_id = $1 AND idempotency_key = $2 AND status = 'approved' AND expires_at > now()", [
@@ -58,7 +62,6 @@ export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: S
       ]);
       if ((claimed.rowCount ?? 0) !== 1) return { kind: "lapsed" };
     }
-    if (!priced) return { kind: approved ? "reserved" : "unreserved", issuedAt };
     await client.query(
       `INSERT INTO agent_spends (agent_id, idempotency_key, binding, account_id, wallet_id, usd, day, state, reserved_at) VALUES ($1, $2, $3, $4, $5, $6, $7::date, 'reserved', now())
        ON CONFLICT (agent_id, idempotency_key) DO UPDATE SET usd = EXCLUDED.usd, day = EXCLUDED.day, state = 'reserved', reserved_at = now()`,
