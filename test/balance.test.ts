@@ -81,6 +81,7 @@ test("an imported Solana key reports its SOL and its SPL tokens from both token 
     [TOKEN]: [
       { mint: USDC, amount: "1234567", decimals: 6 },
       { mint: USDC, amount: "1000000", decimals: 6 },
+      { mint: Keypair.generate().publicKey.toBase58(), amount: "0", decimals: 6 },
     ],
     [TOKEN_2022]: [{ mint: PYUSD, amount: "5000000000", decimals: 9 }],
   });
@@ -90,9 +91,9 @@ test("an imported Solana key reports its SOL and its SPL tokens from both token 
     assert.deepEqual(result, {
       kind: "balance",
       holdings: [
-        { symbol: "SOL", address: owner, amount: 2.5, usd: 0, native: true, decimals: 9, chainKey: "solana" },
-        { symbol: USDC, address: owner, amount: 2.234567, usd: 0, native: false, decimals: 6, chainKey: "solana" },
-        { symbol: PYUSD, address: owner, amount: 5, usd: 0, native: false, decimals: 9, chainKey: "solana" },
+        { symbol: "SOL", address: owner, amount: 2.5, raw: "2500000000", usd: 0, native: true, decimals: 9, chainKey: "solana" },
+        { symbol: USDC, address: owner, amount: 2.234567, raw: "2234567", usd: 0, native: false, decimals: 6, chainKey: "solana" },
+        { symbol: PYUSD, address: owner, amount: 5, raw: "5000000000", usd: 0, native: false, decimals: 9, chainKey: "solana" },
       ],
     });
   } finally {
@@ -111,3 +112,21 @@ test("a Solana balance whose token read fails reports a reason, not SOL alone", 
     await rpc.close();
   }
 });
+
+for (const [name, account] of [
+  ["an empty amount", { mint: USDC, amount: "", decimals: 6 }],
+  ["a fractional amount", { mint: USDC, amount: "1.5", decimals: 6 }],
+  ["out-of-range decimals", { mint: USDC, amount: "1", decimals: 2 ** 31 }],
+] as const) {
+  test(`a Solana token account with ${name} reports a reason, not a zero or a crash`, async () => {
+    const owner = importedSolanaAddress();
+    const rpc = await solanaRpc(owner, 2_500_000_000, { [TOKEN]: [account] });
+    try {
+      const command: WalletCommand = { kind: "balance", chainKey: "solana", address: owner };
+      const result = await run(command, commandDeps({ SOLANA_RPC_URL: rpc.url }, command));
+      assert.deepEqual(result, { kind: "balance", holdings: [], reason: "the solana RPC did not return a balance" });
+    } finally {
+      await rpc.close();
+    }
+  });
+}
