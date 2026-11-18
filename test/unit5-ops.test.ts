@@ -118,6 +118,7 @@ test("a dry-run preview does not answer for a live trade with the same key", asy
   const live = runtime(config, {
     state,
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     readBalance: async () => 20,
     priceOf: () => 1,
     send: async () => {

@@ -35,6 +35,8 @@ The Turnkey Solana policy allows native transfers only to the hot wallet, its wr
 
 Pre-sign simulation is viem `simulateCalls` on EVM and `simulateTransaction` on Solana. A revert is `simulation rejected the transaction` and `broadcast` is false, so the spend reservation is released.
 
+In live mode the `MIN_LIQUIDITY_USD` check ignores the `pairMap` the caller sends. The executor reads the token's pools from DexScreener (`DEXSCREENER_API_BASE`) and counts only pools on the same chain that pair the token with a quote asset from `QUOTE_ASSET_ALLOWLIST_JSON` or the defaults. The deepest such pool is the figure. A failed or timed-out lookup is `liquidity unknown` and the trade is skipped. A figure is cached for `LIQUIDITY_REFRESH_MS`. Dry-run still uses the caller's `pairMap`, so a quote works for a token with no pair data.
+
 `TOKEN_SCREENING=true` rejects a live-lookup token when GoPlus or Blockaid fails, times out, or reports a honeypot, `cannot_sell_all`, or a result other than `Benign`. That path is the unlisted fallback only.
 
 ## Repudiation

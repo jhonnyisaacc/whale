@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execute, resetExecutorState, type ExecutorDeps } from "../src/executor.js";
+import { dexscreenerLiquidity } from "../src/executor/liquidity.js";
+import { createExecutor } from "../src/executor-server.js";
+import { loadConfig } from "../src/config.js";
 import { buildPairMap } from "../src/pairs.js";
 import type { PairMap, SwapIntent } from "../src/domain.js";
 
@@ -95,4 +98,69 @@ test("a dry-run intent with no pair data still quotes", async () => {
   const report = await execute(swap("dry-no-pairs", { pools: [], top: null }), deps("dry_run", sends));
   assert.equal(report.decision, "would_send");
   assert.deepEqual(sends, []);
+});
+
+const weth = "0x4200000000000000000000000000000000000006";
+const fake = "0xffffffffffffffffffffffffffffffffffffffff";
+
+function pair(chainId: string, base: string, quote: string, usd: number | undefined) {
+  return { chainId, pairAddress: `${base}-${quote}-${usd}`, baseToken: { address: base, symbol: "B" }, quoteToken: { address: quote, symbol: "Q" }, ...(usd === undefined ? {} : { liquidity: { usd } }) };
+}
+
+function dexscreener(body: unknown, seen: string[], status = 200): typeof fetch {
+  return async (input) => {
+    seen.push(String(input));
+    return new Response(JSON.stringify(body), { status });
+  };
+}
+
+const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "0123456789abcdef", RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
+
+test("Whale's own figure counts only pools of the token against a known quote asset on the same chain", async () => {
+  const seen: string[] = [];
+  const pairs = [
+    pair("base", contract, fake, 900_000_000),
+    pair("ethereum", contract, usdc, 800_000_000),
+    pair("base", fake, usdc, 700_000_000),
+    pair("base", contract, usdc, 40_000),
+    pair("base", weth, contract.toUpperCase().replace("0X", "0x"), 60_000),
+    pair("base", contract, weth, undefined),
+  ];
+  const liquidityOf = dexscreenerLiquidity(config, dexscreener(pairs, seen));
+  assert.equal(await liquidityOf({ chainKey: "base", address: contract }), 60_000);
+  assert.deepEqual(seen, [`https://api.dexscreener.com/token-pairs/v1/base/${contract}`]);
+});
+
+test("Whale's own figure is unknown when the lookup fails or the chain has no DexScreener slug", async () => {
+  const seen: string[] = [];
+  assert.equal(await dexscreenerLiquidity(config, dexscreener({ error: "rate limited" }, seen, 429))({ chainKey: "base", address: contract }), null);
+  assert.equal(await dexscreenerLiquidity(config, dexscreener({ not: "a list" }, seen))({ chainKey: "base", address: contract }), null);
+  assert.equal(await dexscreenerLiquidity(config, dexscreener([], seen))({ chainKey: "monad", address: contract }), null);
+  assert.equal(await dexscreenerLiquidity(config, dexscreener([], seen))({ chainKey: "base", address: contract }), 0);
+  assert.equal(seen.length, 3);
+});
+
+test("Whale's own figure is cached for the liquidity refresh window", async () => {
+  const seen: string[] = [];
+  let clock = 0;
+  const liquidityOf = dexscreenerLiquidity(config, dexscreener([pair("base", contract, usdc, 100_000)], seen), () => clock);
+  assert.equal(await liquidityOf({ chainKey: "base", address: contract }), 100_000);
+  clock = config.liquidityRefreshMs;
+  assert.equal(await liquidityOf({ chainKey: "base", address: contract.toUpperCase().replace("0X", "0x") }), 100_000);
+  assert.equal(seen.length, 1);
+  clock = config.liquidityRefreshMs + 1;
+  await liquidityOf({ chainKey: "base", address: contract });
+  assert.equal(seen.length, 2);
+});
+
+test("the executor process checks live liquidity with its own DexScreener lookup", async (t) => {
+  resetExecutorState();
+  const seen: string[] = [];
+  t.mock.method(globalThis, "fetch", dexscreener([pair("base", contract, usdc, 100)], seen));
+  const live = loadConfig({ EXECUTOR_AUTH_TOKEN: "0123456789abcdef", RESOLVER_AUTH_TOKEN: "resolver-token-123456", WHALE_BROADCAST: "true", ENABLED_CHAINS: "base", TOKEN_SCREENING: "false" });
+  const sends: string[] = [];
+  const report = await createExecutor(live, null, null).execute(swap("process", pairMap(1_000_000_000)), { ...deps("live", sends), config: live });
+  assert.equal(report.reason, "liquidity below 75000 USD");
+  assert.deepEqual(sends, []);
+  assert.deepEqual(seen, [`https://api.dexscreener.com/token-pairs/v1/base/${contract}`]);
 });
