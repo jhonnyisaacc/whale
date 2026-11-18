@@ -162,7 +162,16 @@ The owner sees pending approvals at `GET /api/approvals?status=pending`:
 - Denying needs none.
 - An approval lasts an hour, approved or not. One retry of the exact command claims it before the executor runs. A claimed approval does not expire. It becomes spent when the executor answers, and returns to approved when the executor answers 4xx. A spent approval is refused, and the agent asks again with a new `idempotencyKey`. The same `idempotencyKey` with a different command is refused.
 
-Each priced send reserves its USD amount before the executor runs, under the wallet's lock, so two sends cannot both fit the same headroom. The daily totals count reserved and committed rows. An executor answer commits the reservation. A 4xx from the executor releases it. A timeout, a 5xx, or a crash leaves the reservation and the claim in place, and a retry of that key answers `settling`. Every 30 seconds the gateway asks the executor's `/hosted/reports` route about each reservation older than a minute, and settles it from the report. If the executor does not answer, nothing is released. Deploy the executor before the gateway, because a gateway without the executor's `/hosted/reports` route keeps every unsettled reservation until that UTC day ends.
+Each priced send reserves its USD amount before the executor runs, under the wallet's lock, so two sends cannot both fit the same headroom. The daily totals count reserved and committed rows. An executor answer commits the reservation. A 4xx from the executor releases it. A timeout, a 5xx, or a crash leaves the reservation and the claim in place, and a retry of that key answers `settling`. Every 30 seconds the gateway asks the executor's `/hosted/reports` route about each reservation older than a minute, and settles it from the report. If the executor does not answer, nothing is released.
+
+The executor records each hosted send in its `hosted_sends` table, keyed by agent and `idempotencyKey`, before it runs the send. The table lives in the executor's `DATABASE_URL`, so an executor without one refuses hosted sends with 403 and answers reports with 503. A report answers from that record:
+- `executed` commits the reservation.
+- `in_progress` leaves it reserved.
+- `not_started` releases it. The executor first records that the key is settled for every request issued before the sweep, so a request that arrives later is refused with 403 and never runs.
+
+Each send carries `issuedAt`, the gateway's reservation time. The executor refuses a send older than the same one-minute grace with 403, which releases the reservation once. A send that fails before it moves anything is recorded as not started.
+
+Deploy the executor before the gateway. A gateway on this version sends `issuedAt`, which an older executor refuses with 400, and reads report states an older executor does not send, so it keeps every unsettled reservation until that UTC day ends.
 
 `GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else.
 

@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import type { CommandDeps, WalletCommand, WalletResult } from "../commands.js";
 import { run } from "../commands.js";
-import { hostedReportRequestSchema, hostedRequestSchema, walletCommandOf, type HostedRequest } from "../hosted-commands.js";
+import { HOSTED_SEND_GRACE_MS, hostedReportRequestSchema, hostedRequestSchema, walletCommandOf, type HostedCommand, type HostedRequest } from "../hosted-commands.js";
 import { bearerOf } from "../bearer.js";
 import { anyTokenMatches } from "../http.js";
+import { hostedJournal } from "./hosted-journal.js";
 import { cachedNetworkCosts, envCostReaders, skippedNetworks, type CostReaders } from "../network-costs.js";
 
 export const HOSTED_TOKEN_ENV = "HOSTED_SERVICE_TOKEN";
@@ -30,9 +31,23 @@ async function defaultDeps(command: WalletCommand): Promise<CommandDeps> {
 
 // Only quote and balance readers reach run(). A hosted swap is a quote reported as the swap that would happen,
 // so nothing on this route can sign or post.
-export function registerHostedRoutes(app: FastifyInstance, options: { token: string; depsFor?: (command: WalletCommand) => Promise<CommandDeps>; costReaders?: CostReaders }): void {
+export function registerHostedRoutes(
+  app: FastifyInstance,
+  options: { token: string; databaseUrl?: string | null; now?: () => number; depsFor?: (command: WalletCommand) => Promise<CommandDeps>; costReaders?: CostReaders },
+): void {
   const depsFor = options.depsFor ?? defaultDeps;
   const costReaders = options.costReaders ?? envCostReaders(process.env);
+  const journal = options.databaseUrl ? hostedJournal(options.databaseUrl) : null;
+  const now = options.now ?? Date.now;
+  const answer = async (hosted: HostedCommand): Promise<HostedReply> => {
+    const command = walletCommandOf(hosted);
+    const deps = await depsFor(command);
+    const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });
+    if (hosted.kind !== "swap" || result.kind !== "quote") return result;
+    return result.status === "quoted"
+      ? { kind: "swap", status: "would_swap", quote: result.quote, reason: "dry-run: this is the route a live swap would take. nothing was signed" }
+      : { kind: "swap", status: "skipped", quote: null, reason: result.reason };
+  };
   const perAccount = app.createRateLimit({ max: 600, timeWindow: "1 minute", keyGenerator: (request) => (request.body as HostedRequest).accountId });
   app.post("/hosted/commands", { config: { rateLimit: false } }, async (request, reply) => {
     if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });
@@ -40,20 +55,30 @@ export function registerHostedRoutes(app: FastifyInstance, options: { token: str
     if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
     const limit = await perAccount(request);
     if (!limit.isAllowed && limit.isExceeded) return reply.code(429).header("retry-after", limit.ttlInSeconds).send({ error: "rate limit" });
-    if (parsed.data.command.kind === "costs") return { kind: "costs", networks: await cachedNetworkCosts(parsed.data.command.chainKeys, costReaders), skipped: skippedNetworks(parsed.data.command.chainKeys) };
-    const command = walletCommandOf(parsed.data.command);
-    const deps = await depsFor(command);
-    const result = await run(command, { ...(deps.quote ? { quote: deps.quote } : {}), ...(deps.readBalance ? { readBalance: deps.readBalance } : {}) });
-    if (parsed.data.command.kind !== "swap" || result.kind !== "quote") return result satisfies HostedReply;
-    const plan: HostedReply =
-      result.status === "quoted"
-        ? { kind: "swap", status: "would_swap", quote: result.quote, reason: "dry-run: this is the route a live swap would take. nothing was signed" }
-        : { kind: "swap", status: "skipped", quote: null, reason: result.reason };
-    return plan;
+    const { command, issuedAt, ...scope } = parsed.data;
+    if (command.kind === "costs") return { kind: "costs", networks: await cachedNetworkCosts(command.chainKeys, costReaders), skipped: skippedNetworks(command.chainKeys) };
+    if (command.kind !== "swap" && command.kind !== "transfer") return answer(command);
+    if (issuedAt === undefined) return reply.code(400).send({ error: "a hosted send needs issuedAt" });
+    if (now() - Date.parse(issuedAt) > HOSTED_SEND_GRACE_MS) return reply.code(403).send({ error: "the request is older than the gateway waits for it" });
+    if (!journal) return reply.code(403).send({ error: "hosted sends need the executor's DATABASE_URL" });
+    const key = { ...scope, idempotencyKey: command.idempotencyKey };
+    const started = await journal.start(key, command, issuedAt);
+    if (started.kind === "executed") return started.value;
+    if (started.kind === "in_progress") return reply.code(409).send({ error: "this send is still running" });
+    if (started.kind === "refused") return reply.code(403).send({ error: "the gateway already settled this request" });
+    if (started.kind === "conflict") return reply.code(400).send({ error: "this idempotencyKey was used for a different command" });
+    const value = await answer(command).catch(async (error: unknown) => {
+      await journal.abandon(key);
+      throw error;
+    });
+    await journal.finish(key, value);
+    return value;
   });
   app.post("/hosted/reports", { config: { rateLimit: false } }, async (request, reply) => {
     if (!anyTokenMatches(bearerOf(request), [options.token])) return reply.code(401).send({ error: "unauthorized" });
-    if (!hostedReportRequestSchema.safeParse(request.body).success) return reply.code(400).send({ error: "invalid request" });
-    return { executed: false };
+    const parsed = hostedReportRequestSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+    if (!journal) return reply.code(503).send({ error: "this executor keeps no hosted send journal" });
+    return journal.report(parsed.data);
   });
 }

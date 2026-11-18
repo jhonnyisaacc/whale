@@ -34,10 +34,13 @@ async function harness(options: { executorNow?: () => number } = {}) {
   const { pool, drop } = await migratedSchema();
   const quotes: string[] = [];
   const gates: Gate[] = [];
+  const quoteFailures: Error[] = [];
   const depsFor = async (): Promise<CommandDeps> => ({
     quote: async (item) => {
       quotes.push(item.sellAmount);
       await gates.shift()?.wait();
+      const failure = quoteFailures.shift();
+      if (failure) throw failure;
       return { planId: "zeroex", kind: "aggregator", hops: [], priceImpactPct: 0.1, feeUsd: 0, buyAmount: "42", chain: item.sell.chain, chainKey: item.sell.chainKey };
     },
   });
@@ -82,7 +85,7 @@ async function harness(options: { executorNow?: () => number } = {}) {
   const spend = async (key: string) => (await pool.query<{ state: string }>("SELECT state FROM agent_spends WHERE idempotency_key = $1", [key])).rows[0]?.state;
   const sweep = () => settleStaleSends(pool, executor, 0);
   const ids = { accountId: user.accountId, walletId, agentId: agent.agentId };
-  return { pool, ids, quotes, gates, held, holdNext, deliver, executor, swap, spend, sweep, drop: async () => (await app.close(), await executorApp.close(), await drop()) };
+  return { pool, ids, quotes, gates, quoteFailures, held, holdNext, deliver, executor, swap, spend, sweep, drop: async () => (await app.close(), await executorApp.close(), await drop()) };
 }
 
 test("the sweeper keeps a reservation the executor has recorded as started, so a slow send is still counted when it lands", { skip: !TEST_DATABASE_URL }, async () => {
@@ -146,6 +149,22 @@ test("the executor refuses a hosted send issued longer ago than the sweeper's gr
     assert.deepEqual(quotes, ["1000000"]);
     assert.equal(await swap("stale-send", 15).then((reply) => reply.isError), false, "the released key can run once the clock agrees");
     assert.equal(await spend("stale-send"), "committed");
+  } finally {
+    await drop();
+  }
+});
+
+test("a hosted send that fails before it moves anything is reported as not started, so the sweeper releases it", { skip: !TEST_DATABASE_URL }, async () => {
+  const { quotes, quoteFailures, swap, spend, sweep, drop } = await harness();
+  try {
+    quoteFailures.push(new Error("no route"));
+    assert.match((await swap("failed-send", 15)).text, /may have happened/);
+    assert.equal(await spend("failed-send"), "reserved");
+    assert.equal(await sweep(), 1);
+    assert.equal(await spend("failed-send"), "released");
+    assert.equal((await swap("failed-send", 15)).isError, false, "the retry runs as a new request");
+    assert.equal(await spend("failed-send"), "committed");
+    assert.deepEqual(quotes, ["15000000", "15000000"]);
   } finally {
     await drop();
   }

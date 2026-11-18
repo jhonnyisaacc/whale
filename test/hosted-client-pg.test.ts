@@ -27,7 +27,7 @@ test("the gateway URL must be https outside localhost", () => {
 
 test("the hosted client and the stdio bridge reach the same tools under the same limits", { skip: !TEST_DATABASE_URL }, async () => {
   const { pool, drop } = await migratedSchema();
-  const executor: ExecutorClient = { report: async () => ({ executed: false }), run: async () => ({ kind: "quote", status: "quoted" }) };
+  const executor: ExecutorClient = { report: async () => ({ state: "not_started" as const }), run: async () => ({ kind: "quote", status: "quoted" }) };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor, turnkey: null, delegation: null });
   try {
     const { accountId } = await signedInAccount(pool);

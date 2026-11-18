@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { HostedCommand } from "../hosted-commands.js";
+import { HOSTED_SEND_GRACE_MS, type HostedCommand } from "../hosted-commands.js";
 import { audit, inTransaction } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
 import type { ExecutorClient } from "./executor-client.js";
@@ -8,11 +8,11 @@ import { effectiveLimits } from "./policy.js";
 
 export type Send = Extract<HostedCommand, { kind: "swap" | "transfer" }>;
 export type Priced = { usd: number; day: string };
-export type Reservation = { kind: "reserved" } | { kind: "unreserved" } | { kind: "settling" } | { kind: "lapsed" } | { kind: "refused"; reason: string };
+export type Reservation = { kind: "reserved"; issuedAt: string } | { kind: "unreserved"; issuedAt: string } | { kind: "settling" } | { kind: "lapsed" } | { kind: "refused"; reason: string };
 type Settlement = "committed" | "released";
 
 export const KEY_REUSED = "this idempotencyKey was already used for a different command";
-export const SETTLE_GRACE_MS = 60_000;
+const instant = (sql: string) => `to_char((${sql}) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 function usd(value: number): string {
   return `${value.toFixed(2)} USD`;
@@ -44,10 +44,11 @@ export async function recordedSpend(client: pg.Pool | pg.ClientBase, agent: Agen
 export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: Send, priced: Priced | null, approved: boolean): Promise<Reservation> {
   return inTransaction(pool, async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent_spends:${agent.walletId}`]);
+    const issuedAt = (await client.query<{ at: string }>(`SELECT ${instant("now()")} AS at`)).rows[0]?.at as string;
     const recorded = await recordedSpend(client, agent, command);
     if (recorded === "conflict") return { kind: "refused", reason: KEY_REUSED };
     if (recorded === "reserved") return { kind: "settling" };
-    if (recorded === "committed") return { kind: "unreserved" };
+    if (recorded === "committed") return { kind: "unreserved", issuedAt };
     const refused = priced ? await dailyRefusal(client, agent, priced) : null;
     if (refused) return { kind: "refused", reason: refused };
     if (approved) {
@@ -57,17 +58,17 @@ export async function reserveSend(pool: pg.Pool, agent: AgentContext, command: S
       ]);
       if ((claimed.rowCount ?? 0) !== 1) return { kind: "lapsed" };
     }
-    if (!priced) return { kind: approved ? "reserved" : "unreserved" };
+    if (!priced) return { kind: approved ? "reserved" : "unreserved", issuedAt };
     await client.query(
       `INSERT INTO agent_spends (agent_id, idempotency_key, binding, account_id, wallet_id, usd, day, state, reserved_at) VALUES ($1, $2, $3, $4, $5, $6, $7::date, 'reserved', now())
        ON CONFLICT (agent_id, idempotency_key) DO UPDATE SET usd = EXCLUDED.usd, day = EXCLUDED.day, state = 'reserved', reserved_at = now()`,
       [agent.agentId, command.idempotencyKey, bindingOf(command), agent.accountId, agent.walletId, priced.usd, priced.day],
     );
-    return { kind: "reserved" };
+    return { kind: "reserved", issuedAt };
   });
 }
 
-export async function settleSend(client: pg.ClientBase, agentId: string, idempotencyKey: string, settlement: Settlement, reservedBefore: Date | null = null): Promise<boolean> {
+export async function settleSend(client: pg.ClientBase, agentId: string, idempotencyKey: string, settlement: Settlement, reservedBefore: string | null = null): Promise<boolean> {
   const spend = await client.query("UPDATE agent_spends SET state = $3 WHERE agent_id = $1 AND idempotency_key = $2 AND state = 'reserved' AND ($4::timestamptz IS NULL OR reserved_at < $4)", [
     agentId,
     idempotencyKey,
@@ -83,8 +84,8 @@ export async function settleSend(client: pg.ClientBase, agentId: string, idempot
   return (spend.rowCount ?? 0) + (approval.rowCount ?? 0) > 0;
 }
 
-export async function settleStaleSends(pool: pg.Pool, executor: ExecutorClient, graceMs = SETTLE_GRACE_MS, onError: (error: unknown) => void = () => undefined): Promise<number> {
-  const cutoff = (await pool.query<{ cutoff: Date }>("SELECT now() - $1 * interval '1 millisecond' AS cutoff", [graceMs])).rows[0]?.cutoff as Date;
+export async function settleStaleSends(pool: pg.Pool, executor: ExecutorClient, graceMs = HOSTED_SEND_GRACE_MS, onError: (error: unknown) => void = () => undefined): Promise<number> {
+  const cutoff = (await pool.query<{ cutoff: string }>(`SELECT ${instant("now() - $1 * interval '1 millisecond'")} AS cutoff`, [graceMs])).rows[0]?.cutoff as string;
   const stale = await pool.query<{ agent_id: string; idempotency_key: string; account_id: string; wallet_id: string }>(
     `SELECT agent_id, idempotency_key, account_id, wallet_id FROM agent_spends WHERE state = 'reserved' AND reserved_at < $1
      UNION SELECT agent_id, idempotency_key, account_id, wallet_id FROM approvals WHERE status = 'claimed' AND claimed_at < $1`,
@@ -92,9 +93,10 @@ export async function settleStaleSends(pool: pg.Pool, executor: ExecutorClient, 
   );
   let settled = 0;
   for (const row of stale.rows) {
-    const report = await executor.report({ accountId: row.account_id, walletId: row.wallet_id, agentId: row.agent_id, idempotencyKey: row.idempotency_key }).catch((error: unknown) => (onError(error), null));
-    if (!report) continue;
-    const settlement: Settlement = report.executed ? "committed" : "released";
+    const lookup = { accountId: row.account_id, walletId: row.wallet_id, agentId: row.agent_id, idempotencyKey: row.idempotency_key, issuedBefore: cutoff };
+    const report = await executor.report(lookup).catch((error: unknown) => (onError(error), null));
+    if (!report || report.state === "in_progress") continue;
+    const settlement: Settlement = report.state === "executed" ? "committed" : "released";
     const changed = await inTransaction(pool, async (client) => {
       if (!(await settleSend(client, row.agent_id, row.idempotency_key, settlement, cutoff))) return false;
       await audit(client, { accountId: row.account_id, walletId: row.wallet_id, agentId: row.agent_id, actor: "system", action: "mcp.send_settled", detail: { idempotencyKey: row.idempotency_key, settlement } });
