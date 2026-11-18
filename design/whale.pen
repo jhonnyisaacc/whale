@@ -88427,8 +88427,15 @@
       "y": -1260,
       "name": "Auth / Header",
       "width": 1280,
+      "fill": "$bg",
       "layout": "vertical",
       "gap": 10,
+      "padding": [
+        0,
+        0,
+        32,
+        0
+      ],
       "children": [
         {
           "type": "text",
@@ -92111,6 +92118,17 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "id": "Nafy1",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet · chooser page"
+                }
+              }
             }
           ]
         },
@@ -93159,17 +93177,6 @@
                   "fontWeight": "normal"
                 }
               ]
-            },
-            {
-              "id": "y9kAUo",
-              "type": "ref",
-              "ref": "UM68F",
-              "name": "NotBuilt",
-              "descendants": {
-                "k7RLXp": {
-                  "content": "Not built yet"
-                }
-              }
             }
           ]
         },
@@ -93186,6 +93193,17 @@
             16
           ],
           "children": [
+            {
+              "id": "y9kAUo",
+              "type": "ref",
+              "ref": "UM68F",
+              "name": "NotBuilt",
+              "descendants": {
+                "k7RLXp": {
+                  "content": "Not built yet"
+                }
+              }
+            },
             {
               "type": "text",
               "id": "LZ19z",
