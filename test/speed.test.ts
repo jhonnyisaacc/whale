@@ -644,6 +644,7 @@ test("screening runs alongside quoting and a deny blocks the send", async () => 
   const live = (verdict: "allow" | "deny"): ExecutorDeps => ({
     config: { ...quoteConfig, enabledChainKeys: new Set(["base"]) },
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: async () => {
       events.push("quote");

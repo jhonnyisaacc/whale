@@ -21,7 +21,7 @@ test("a trade above 5 USD is rejected", () => {
     spentTodayUsd: 0,
     chain: { kind: "solana" },
     chainKey: "solana",
-    liquidityUsd: 100_000,
+    liquidity: { source: "caller", usd: 100_000 },
   });
   assert.equal(decision.ok, false);
 });
@@ -34,22 +34,22 @@ test("the daily cap rejects the next trade", () => {
     spentTodayUsd: 21,
     chain: { kind: "evm", chainId: 8453 },
     chainKey: "base",
-    liquidityUsd: 100_000,
+    liquidity: { source: "caller", usd: 100_000 },
   });
   assert.equal(decision.ok, false);
 });
 
 test("kill switch, disabled chain, slippage, and leverage all reject", () => {
   assert.equal(checkLimits({ ...config, killSwitch: true }, {
-    notionalUsd: 1, slippageBps: 1, leverage: 1, spentTodayUsd: 0, chain: { kind: "solana" }, chainKey: "solana", liquidityUsd: 100_000,
+    notionalUsd: 1, slippageBps: 1, leverage: 1, spentTodayUsd: 0, chain: { kind: "solana" }, chainKey: "solana", liquidity: { source: "caller", usd: 100_000 },
   }).ok, false);
   assert.equal(checkLimits(config, {
-    notionalUsd: 1, slippageBps: 1, leverage: 1, spentTodayUsd: 0, chain: { kind: "evm", chainId: 1 }, chainKey: "ethereum", liquidityUsd: 100_000,
+    notionalUsd: 1, slippageBps: 1, leverage: 1, spentTodayUsd: 0, chain: { kind: "evm", chainId: 1 }, chainKey: "ethereum", liquidity: { source: "caller", usd: 100_000 },
   }).ok, false);
   assert.equal(checkLimits(config, {
-    notionalUsd: 1, slippageBps: 250, leverage: 1, spentTodayUsd: 0, chain: { kind: "solana" }, chainKey: "solana", liquidityUsd: 100_000,
+    notionalUsd: 1, slippageBps: 250, leverage: 1, spentTodayUsd: 0, chain: { kind: "solana" }, chainKey: "solana", liquidity: { source: "caller", usd: 100_000 },
   }).ok, false);
   assert.equal(checkLimits(config, {
-    notionalUsd: 1, slippageBps: 10, leverage: 3, spentTodayUsd: 0, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", liquidityUsd: null,
+    notionalUsd: 1, slippageBps: 10, leverage: 3, spentTodayUsd: 0, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", liquidity: { source: "caller", usd: null },
   }).ok, false);
 });
