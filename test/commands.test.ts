@@ -28,7 +28,7 @@ test("a quote with no provider skips and does not call out", async () => {
 
 const swapArgs = ["swap", "--sell-chain", "base", "--sell-address", sell.address, "--sell-symbol", "USDC", "--sell-decimals", "6", "--buy-chain", "base", "--buy-address", buy.address, "--buy-symbol", "WETH", "--buy-decimals", "18", "--sell-amount", "1000000", "--slippage-bps", "50", "--idempotency-key", "s1"];
 
-test("a dry-run swap says nothing was broadcast and does not call execute", async () => {
+test("a dry-run swap with no quote deps skips and does not call execute", async () => {
   let called = 0;
   const result = await run(
     { kind: "swap", idempotencyKey: "s1", sell, buy, sellAmount: "1000000", slippageBps: 50, mode: "dry_run" },
@@ -40,12 +40,7 @@ test("a dry-run swap says nothing was broadcast and does not call execute", asyn
     },
   );
   assert.equal(called, 0);
-  assert.equal(result.kind, "swap");
-  if (result.kind !== "swap") return;
-  assert.equal(result.report.decision, "skipped");
-  assert.equal(result.report.mode, "dry_run");
-  assert.match(result.report.reason, /nothing was broadcast/);
-  assert.equal(result.report.txs, undefined);
+  assert.deepEqual(result, { kind: "swap", status: "skipped", quote: null, reason: "no swap limits configured" });
 });
 
 test("a live swap calls execute once with a positive notional and the stub does not send", async () => {
@@ -72,7 +67,7 @@ test("a live swap calls execute once with a positive notional and the stub does 
   );
   assert.equal(called, 1);
   assert.equal(result.kind, "swap");
-  if (result.kind === "swap") assert.equal(result.report.reason, "stub");
+  assert.equal(result.kind === "swap" && "report" in result ? result.report.reason : null, "stub");
 });
 
 test("an intent cannot authorize one chain key and sign on another chain", () => {

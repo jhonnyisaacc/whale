@@ -25,7 +25,7 @@ const assetSchema = {
 export const TOOLS = [
   { name: "wallet_status", description: "Read executor status. It shows the mode, the enabled chains, and the caps. It moves no money.", inputSchema: { type: "object", properties: {} } },
   { name: "quote", description: "Quote a swap. With no provider this skips and does not hit the network.", inputSchema: { type: "object", properties: { sell: assetSchema, buy: assetSchema, sellAmount: { type: "string" }, taker: { type: ["string", "null"] }, slippageBps: { type: "number" } }, required: ["sell", "buy", "sellAmount", "slippageBps"] } },
-  { name: "swap", description: "Dry-run a swap. It broadcasts nothing.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, sell: assetSchema, buy: assetSchema, sellAmount: { type: "string" }, slippageBps: { type: "number" } }, required: ["idempotencyKey", "sell", "buy", "sellAmount", "slippageBps"] } },
+  { name: "swap", description: "Dry-run a swap. It quotes the best signable route and returns would_swap, or skipped with the reason. A live swap quotes again with a price check. It signs and broadcasts nothing.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, sell: assetSchema, buy: assetSchema, sellAmount: { type: "string" }, slippageBps: { type: "number" } }, required: ["idempotencyKey", "sell", "buy", "sellAmount", "slippageBps"] } },
   { name: "bridge", description: "Fetch bridge routes from LI.FI, Across, and Relay and rank them by fee. amount is in the asset's smallest unit. The destination must be an owner address on an enabled chain. The plan never broadcasts.", inputSchema: z.toJSONSchema(bridgeRequestSchema) },
   { name: "balance", description: "Read holdings for one chain and address. On Solana this includes SPL tokens. With no reader this fails.", inputSchema: { type: "object", properties: { chainKey: { type: "string" }, address: { type: "string" } }, required: ["chainKey", "address"] } },
   { name: "transfer", description: "Dry-run a transfer. Live mode is skipped because local signing is not wired for live sends.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, asset: assetSchema, to: { type: "string" }, amount: { type: "string" }, mode: { type: "string" } }, required: ["idempotencyKey", "asset", "to", "amount"] } },
@@ -45,10 +45,10 @@ async function callHttp(deps: McpDeps, route: string): Promise<unknown> {
 }
 
 function commandFrom(name: string, args: Record<string, unknown>): WalletCommand {
-  if (name === "swap") return { kind: "swap", ...args, mode: "dry_run" } as WalletCommand;
+  if (name === "swap") return { ...args, kind: "swap", mode: "dry_run" } as WalletCommand;
   if (name === "bridge") return { kind: "bridge", ...bridgeRequestSchema.parse(args) };
   if (name === "quote" || name === "balance" || name === "transfer") {
-    return { kind: name, ...args } as WalletCommand;
+    return { ...args, kind: name } as WalletCommand;
   }
   throw new Error(`unknown tool ${name}`);
 }
@@ -57,7 +57,7 @@ export async function callTool(deps: McpDeps, name: string, args: Record<string,
   if (name === "wallet_status") return callHttp(deps, "/status");
   const execute = deps.runCommand ?? run;
   const command = commandFrom(name, args);
-  if (command.kind !== "quote" && command.kind !== "balance" && command.kind !== "bridge") return execute(command);
+  if (command.kind === "transfer" || (command.kind === "swap" && command.mode !== "dry_run")) return execute(command);
   const { commandDeps } = await import("./command-callers.js");
   return execute(command, commandDeps(process.env, command));
 }
