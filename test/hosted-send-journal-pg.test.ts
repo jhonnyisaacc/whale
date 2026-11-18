@@ -235,17 +235,18 @@ test("a send Whale cannot price never reaches the executor's journal or the ledg
   }
 });
 
-test("a retry of a released dry-run transfer is priced again but gets the journal's stored reply, so the executor runs it once", { skip: !TEST_DATABASE_URL }, async () => {
+test("a retry of a released dry-run transfer gets the journal's stored reply and is not priced or run again", { skip: !TEST_DATABASE_URL }, async () => {
   const { pricing, transfer, journaled, spent, drop } = await harness();
   try {
     const first = await transfer("eth-again", halfCent);
     assert.equal(first.isError, false, first.text);
     assert.deepEqual(await spent("eth-again"), [{ usd: 15, state: "released" }]);
+    pricing.up = false;
     const asked = pricing.quotes;
     const retry = await transfer("eth-again", halfCent);
     assert.equal(retry.isError, false, retry.text);
     assert.deepEqual(JSON.parse(retry.text), JSON.parse(first.text), "the retry answers with the stored reply");
-    assert.ok(pricing.quotes > asked, "the released key is priced again");
+    assert.equal(pricing.quotes, asked, "the released retry is not priced again");
     assert.deepEqual(await journaled("eth-again"), ["executed"]);
     assert.deepEqual(await spent("eth-again"), [{ usd: 15, state: "released" }]);
   } finally {

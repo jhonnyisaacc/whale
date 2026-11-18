@@ -83,10 +83,12 @@ export async function planSend(pool: pg.Pool, executor: ExecutorClient, agent: A
   if (recorded === "conflict") return deny(KEY_REUSED);
   if (recorded === "reserved") return settling;
   const ids = { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId };
-  if (recorded === "committed") {
+  if (recorded === "committed" || recorded === "released") {
     const report = await executor.report({ ...ids, idempotencyKey: command.idempotencyKey, issuedBefore: await issuedNow(pool) });
     if (report.state === "executed") return { ok: true, value: report.value };
     if (report.state === "in_progress") return settling;
+  }
+  if (recorded === "committed") {
     return deny("Whale counted this send as done but the executor has no record of it, so Whale did not run it again. Use a new idempotencyKey for a new send");
   }
   const approval = await approvalFor(pool, agent, command.idempotencyKey, command);

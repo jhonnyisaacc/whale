@@ -648,25 +648,30 @@ test("a send the executor does not confirm stays reserved until the executor's r
   }
 });
 
-test("a replay of a key released after a skipped send is priced and run again, counted once, and still bound to its command", { skip: !TEST_DATABASE_URL }, async () => {
-  const { pool, sent, replies, approve, swap, drop } = await harness({ approvalAboveUsd: 10 });
+test("a replay of a key released after a skipped send gets the executor's stored answer, is not priced or asked again, and stays bound to its command", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, sent, quoted, replies, approve, approvals, swap, call, drop } = await harness({ approvalAboveUsd: 10, quoteUsd: ethAt(3000) });
   try {
     replies.push(skipped);
     assert.equal((await swap("replay-small", 9)).body?.status, "skipped");
-    assert.equal((await swap("replay-small", 9)).body?.status, "sent", "the released key runs again");
-    assert.equal((await swap("replay-small", 9)).body?.status, "sent", "a retry of the committed send gets the stored answer");
-    assert.equal(sent.length, 2);
+    const asked = quoted.length;
+    assert.equal((await swap("replay-small", 9)).body?.status, "skipped", "the replay answers from the executor's record");
+    assert.equal(sent.length, 1, "the replay does not run the send again");
+    assert.equal(quoted.length, asked, "the replay is not priced again");
     assert.match((await swap("replay-small", 5)).text, /already used for a different command/);
-    assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key = 'replay-small'")).rows, [{ usd: 9, state: "committed" }]);
+    assert.deepEqual((await pool.query("SELECT usd, state FROM agent_spends WHERE idempotency_key = 'replay-small'")).rows, [{ usd: 9, state: "released" }]);
 
-    const asked = await swap("replay-approved", 15);
-    assert.equal((await approve(String(asked.body?.approvalId))).statusCode, 200);
+    const held = await swap("replay-approved", 15);
+    assert.equal((await approve(String(held.body?.approvalId))).statusCode, 200);
     replies.push(skipped);
     assert.equal((await swap("replay-approved", 15)).body?.status, "skipped");
     const approval = async () => (await pool.query("SELECT status FROM approvals WHERE idempotency_key = 'replay-approved'")).rows[0]?.status;
-    assert.deepEqual([await spendState(pool, "replay-approved"), await approval()], ["released", "approved"]);
-    assert.equal((await swap("replay-approved", 15)).body?.status, "sent", "a released approval can still be used");
-    assert.deepEqual([await spendState(pool, "replay-approved"), await approval()], ["committed", "used"]);
+    assert.deepEqual([await spendState(pool, "replay-approved"), await approval()], ["released", "used"], "an approval the executor ran is spent even when nothing was sent");
+    const open = await call("pending_requests", {});
+    assert.equal(open.isError, false, open.text);
+    assert.doesNotMatch(open.text, /replay-approved/, "a spent approval is not listed as open");
+    assert.equal((await swap("replay-approved", 15)).body?.status, "skipped", "a retry gets the stored answer");
+    assert.equal(sent.length, 2);
+    assert.equal(await approvals(), 1, "the retry does not ask the owner again");
   } finally {
     await drop();
   }
