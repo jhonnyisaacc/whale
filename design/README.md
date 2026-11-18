@@ -25,11 +25,11 @@ The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `expo
 - Card corners are 24 to 28px. Buttons and badges are pills.
 - Pastel accents (lavender, violet, mint, peach, sky, butter) appear only on icons, dots and highlights.
 - Every color is a variable with a light and a dark value.
-- The hero is a static black-and-white graphite sketch of a southern right whale (ballena franca austral) breaching onto its back, drawn from a reference photo: callosities, bowed mouth line, mottled dark back, two raised flippers, spotted belly, splash and choppy water.
+- The hero is a static line-art pencil sketch of a southern right whale (ballena franca austral) breaching onto its back, drawn from a reference photo. Black lines on white with hatching for tone, no filled areas.
 
 ## Install
 
-One block that a user pastes into any agent host. The agent clones the repo, builds it, and registers the MCP server and skills. `WHALE_BROADCAST` stays unset, and the agent then calls `wallet_status`. The block is the `InstallBlock` component, so its text changes in one place.
+One block that a user pastes into any agent host that can run shell commands. The agent clones and builds the repo, starts the executor, registers the MCP server and skills, and then calls `wallet_status`. The local MCP is dry-run only. The block is the `InstallBlock` component, so its text changes in one place.
 
 ## Comparison
 
@@ -47,14 +47,15 @@ Each claim was checked against `origin/main` on 2026-11-18.
 
 | Topic | Site copy | Why |
 | --- | --- | --- |
-| Verbs | "Quote, swap and transfer (dry-run during beta), plus bridge quotes" | `bridge` ranks quotes the caller supplies. The CLI refuses it. |
-| Swap and transfer | Labelled dry-run | Nothing signs live yet, in the local MCP or the hosted path. |
-| Networks | "15 networks", with a badge on each limited chain | Ethereum: opt-in. Monad: opt-in, no router yet. zkSync: quotes only. Scroll: quotes only (`src/config/guard.ts:94`). HyperCore: orders only. |
-| Approval | "Trades on its own inside per-trade and daily USD caps" | The approval-mode module is unused, and #95 removes it. Add "You can require approval above an amount you choose" once #88 merges. |
+| Verbs | "Quote, swap and transfer (dry-run during beta), plus bridge-quote ranking" | `bridge` ranks quotes the caller supplies and never broadcasts (`src/commands.ts:110`). The CLI refuses it. |
+| Swap and transfer | Labelled dry-run | The local MCP forces dry-run (`src/mcp-server.ts:47`). Hosted sends stay dry-run until hosted live opens. |
+| Networks | "15 networks", with a badge on each limited chain | Ethereum: opt-in. Monad: opt-in, no router yet. zkSync: quotes only. Base, Optimism, Blast and Scroll: quotes only, because live mode refuses chains with an unbounded L1 data fee (`L1_DATA_FEE_CHAIN_IDS` at `src/chains.ts:287`, enforced at `src/config/guard.ts:94`). HyperCore: orders only. |
+| Approval | "Trades on its own inside per-trade and daily USD caps" | Holds only after #88: on `main` today each new hosted wallet asks the owner above $25, and hosted transfers are not USD-capped. #88 makes the owner threshold off by default and prices and caps transfers. Merge this design after #88. The unused approval-mode module goes in #95. |
 | Hosted gateway | "Sends are dry-run during beta" | Hosted live is not open. |
 | Signer | "Self-hosted signer, for EVM and Solana" | `whale-signer` does not sign HyperCore, and it is not wired to the MCP send path. |
-| Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`. Hermes stays "planned" because it has no manifest. |
+| Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`, starts the executor on port 8788 with an `EXECUTOR_AUTH_TOKEN` (the default port is 8080, and `.mcp.json` points at 8788), then registers the MCP server with the same token, so `wallet_status` can reach it. Hermes stays "planned" because it has no manifest. |
 | License | "MIT License" | #94 adds the `LICENSE` file. Ship the site after #94 merges. |
+| Add a network | "An entry in src/chains.ts plus its fee limits" | A new EVM chain also needs a `DEFAULT_EVM_FEE_LIMITS` entry, or it gets no Turnkey clause (`src/signing-policy/turnkey.ts:83`). |
 
 ## Logo sources
 
