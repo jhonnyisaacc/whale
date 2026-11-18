@@ -110,6 +110,7 @@ function liveDeps(overrides: Partial<ExecutorDeps>, sold: string[]): ExecutorDep
   return {
     config: { ...config, enabledChainKeys: new Set(["base"]), minExecutionSlippageBps: 0 },
     mode: "live",
+    liquidityOf: async () => 2_000_000,
     spentTodayUsd: 0,
     quoteHop: async (hop) => {
       if (hop.buyAddress === TOKEN && hop.sellAddress === BASE_USDC) sold.push(hop.sellAmount);

@@ -15,6 +15,8 @@ export type LimitConfig = {
   spendTimezone?: string;
 };
 
+export type Liquidity = { source: "caller" | "whale"; usd: number | null };
+
 export type LimitInput = {
   notionalUsd: number;
   slippageBps: number;
@@ -22,7 +24,7 @@ export type LimitInput = {
   spentTodayUsd: number;
   chain: ChainRef;
   chainKey: string;
-  liquidityUsd: number | null;
+  liquidity: Liquidity;
 };
 
 export type LimitDecision = { ok: true } | { ok: false; reason: string };
@@ -47,8 +49,10 @@ export function checkLimits(config: LimitConfig, input: LimitInput): LimitDecisi
   if (input.chain.kind === "hypercore" && input.leverage > config.maxLeverage) {
     return { ok: false, reason: `leverage exceeds ${config.maxLeverage}` };
   }
-  if (input.liquidityUsd !== null && input.liquidityUsd < config.minLiquidityUsd && input.chain.kind !== "hypercore") {
-    return { ok: false, reason: `liquidity below ${config.minLiquidityUsd} USD` };
+  if (input.chain.kind !== "hypercore") {
+    const { source, usd } = input.liquidity;
+    if (usd === null && source === "whale") return { ok: false, reason: "liquidity unknown" };
+    if (usd !== null && usd < config.minLiquidityUsd) return { ok: false, reason: `liquidity below ${config.minLiquidityUsd} USD` };
   }
   return { ok: true };
 }
