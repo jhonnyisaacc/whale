@@ -74,7 +74,7 @@ async function hosted(command: Record<string, unknown>, extra: Record<string, un
       app.inject({ method: "POST", url: "/hosted/commands", headers: { authorization: `Bearer ${HOSTED_TOKEN}` }, payload: { ...IDS, ...extra, command } }),
     );
     assert.equal(response.statusCode, 200, response.body);
-    return response.json() as { status: string; quote: { provider: string; buyAmount: string; signable: boolean } | null };
+    return response.json() as { status: string; reason?: string; quote: { provider: string; buyAmount: string; signable: boolean } | null };
   } finally {
     await app.close();
     if (databaseUrl) await closeSpendPools();
@@ -94,6 +94,7 @@ test("the hosted MCP quote on Base with no price reference returns the largest s
 test("the hosted dry-run swap on Base reports the largest signable route as the one a live swap would take", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const body = await hosted({ ...HOSTED_QUOTE, kind: "swap", idempotencyKey: "i109-swap-0001" }, { agentId: randomUUID(), issuedAt: new Date().toISOString() });
   assert.equal(body.status, "would_swap", JSON.stringify(body));
+  assert.match(body.reason ?? "", /a live swap quotes again with a price check/);
   assert.equal(body.quote?.provider, "kyberswap");
   assert.equal(body.quote?.signable, true);
 });
