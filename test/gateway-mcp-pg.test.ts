@@ -40,7 +40,7 @@ async function harness(options: { approvalAboveUsd?: number | null } = {}) {
     },
     run: async (request) => {
       sent.push(request);
-      const value = { kind: "swap", status: "would_swap", quote: { buyAmount: "42" } };
+      const value = { kind: "swap", status: "sent", quote: { buyAmount: "42" } };
       if ("idempotencyKey" in request.command) journal.set(request.command.idempotencyKey, value);
       return value;
     },
@@ -262,11 +262,11 @@ test("sends above the threshold wait for a passkey approval of that exact comman
     const before = sent.length;
     const planned = await call("swap", swap);
     assert.equal(planned.isError, false);
-    assert.equal(JSON.parse(planned.content[0].text).status, "would_swap");
+    assert.equal(JSON.parse(planned.content[0].text).status, "sent");
     assert.equal(sent.length, before + 1);
     const reused = await call("swap", swap);
     assert.equal(reused.isError, false, reused.content[0].text);
-    assert.equal(JSON.parse(reused.content[0].text).status, "would_swap", "a retry of the spent approval gets the stored answer");
+    assert.equal(JSON.parse(reused.content[0].text).status, "sent", "a retry of the spent approval gets the stored answer");
     assert.equal(sent.length, before + 1, "an approval is spent once");
 
     const tooBig = await call("swap", { ...swap, sellAmount: "25000000", idempotencyKey: "swap-big-2" });

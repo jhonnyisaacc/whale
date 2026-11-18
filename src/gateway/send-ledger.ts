@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { z } from "zod";
 import { HOSTED_SEND_GRACE_MS, type HostedCommand } from "../hosted-commands.js";
 import { audit, inTransaction } from "./accounts.js";
 import type { AgentContext } from "./agents.js";
@@ -9,7 +10,13 @@ import { effectiveLimits } from "./policy.js";
 export type Send = Extract<HostedCommand, { kind: "swap" | "transfer" }>;
 export type Priced = { usd: number; day: string };
 export type Reservation = { kind: "reserved"; issuedAt: string } | { kind: "unreserved"; issuedAt: string } | { kind: "settling" } | { kind: "lapsed" } | { kind: "refused"; reason: string };
-type Settlement = "committed" | "released";
+type Settlement = "committed" | "unsent" | "released";
+
+const unsentReply = z.object({ status: z.enum(["skipped", "would_swap", "would_send"]) }).loose();
+
+export function settlementOf(reply: unknown): "committed" | "unsent" {
+  return unsentReply.safeParse(reply).success ? "unsent" : "committed";
+}
 
 export const KEY_REUSED = "this idempotencyKey was already used for a different command";
 const instant = (sql: string) => `to_char((${sql}) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
@@ -75,13 +82,13 @@ export async function settleSend(client: pg.ClientBase, agentId: string, idempot
   const spend = await client.query("UPDATE agent_spends SET state = $3 WHERE agent_id = $1 AND idempotency_key = $2 AND state = 'reserved' AND ($4::timestamptz IS NULL OR reserved_at < $4)", [
     agentId,
     idempotencyKey,
-    settlement,
+    settlement === "committed" ? "committed" : "released",
     reservedBefore,
   ]);
   const approval = await client.query("UPDATE approvals SET status = $3, claimed_at = NULL WHERE agent_id = $1 AND idempotency_key = $2 AND status = 'claimed' AND ($4::timestamptz IS NULL OR claimed_at < $4)", [
     agentId,
     idempotencyKey,
-    settlement === "committed" ? "used" : "approved",
+    settlement === "released" ? "approved" : "used",
     reservedBefore,
   ]);
   return (spend.rowCount ?? 0) + (approval.rowCount ?? 0) > 0;
@@ -111,7 +118,7 @@ export async function settleStaleSends(pool: pg.Pool, executor: ExecutorClient, 
     const lookup = { accountId: row.account_id, walletId: row.wallet_id, agentId: row.agent_id, idempotencyKey: row.idempotency_key, issuedBefore: cutoff };
     const report = await executor.report(lookup).catch((error: unknown) => (onError(error), null));
     if (!report || report.state === "in_progress") continue;
-    const settlement: Settlement = report.state === "executed" ? "committed" : "released";
+    const settlement = report.state === "executed" ? settlementOf(report.value) : "released";
     const changed = await inTransaction(pool, async (client) => {
       if (!(await settleSend(client, row.agent_id, row.idempotency_key, settlement, cutoff))) return false;
       await audit(client, { accountId: row.account_id, walletId: row.wallet_id, agentId: row.agent_id, actor: "system", action: "mcp.send_settled", detail: { idempotencyKey: row.idempotency_key, settlement } });

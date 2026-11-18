@@ -31,7 +31,7 @@ async function harness() {
       }
       await during.shift()?.();
       sent.push(request);
-      return { kind: "swap", status: "would_swap", quote: { buyAmount: "42", feeUsd: 0 } };
+      return { kind: "swap", status: "sent", quote: { buyAmount: "42", feeUsd: 0 } };
     },
   };
   const app = await buildGateway({ config: gatewayConfig(), pool, logger: false, keys: { key: async () => null }, executor, turnkey: null, delegation: null });
@@ -151,7 +151,7 @@ test("cancel_request refuses a request whose send is already running, and the se
     during.push(async () => {
       refused = await cancel(first, approvalId);
     });
-    assert.equal((await swap(first, "cancel-in-flight", 15)).body?.status, "would_swap");
+    assert.equal((await swap(first, "cancel-in-flight", 15)).body?.status, "sent");
     assert.equal(refused!.isError, true);
     assert.match(refused!.text, /already running/);
     assert.equal(sent.length, 1);

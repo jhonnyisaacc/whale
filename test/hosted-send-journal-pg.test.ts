@@ -113,7 +113,7 @@ async function harness(options: { executorNow?: () => number } = {}) {
   return { forget, pool, ids, executorApp, quotes, gates, quoteFailures, pricing, held, holdNext, deliver, executor, swap, transfer, journaled, spent, spend, sweep, drop: async () => (await app.close(), await executorApp.close(), await drop()) };
 }
 
-test("the sweeper keeps a reservation the executor has recorded as started, so a slow send is still counted when it lands", { skip: !TEST_DATABASE_URL }, async () => {
+test("the sweeper keeps a reservation the executor has recorded as started, so a slow send counts until it lands as a dry run and is released", { skip: !TEST_DATABASE_URL }, async () => {
   const { executorApp, quotes, gates, swap, spend, sweep, drop } = await harness();
   try {
     const slow = gate();
@@ -127,7 +127,7 @@ test("the sweeper keeps a reservation the executor has recorded as started, so a
     slow.open();
     const reply = await running;
     assert.equal(reply.isError, false, reply.text);
-    assert.equal(await spend("slow-send"), "committed", "the send that landed is counted against the caps");
+    assert.equal(await spend("slow-send"), "released", "a dry run that landed sent nothing, so it is not counted");
     assert.deepEqual(quotes, ["15000000"]);
   } finally {
     await drop();
@@ -148,7 +148,7 @@ test("a request that reaches the executor after the sweeper released its reserva
     assert.deepEqual(quotes, [], "the late request reached no quote or sender");
     const retry = await swap("late-send", 15);
     assert.equal(retry.isError, false, retry.text);
-    assert.equal(await spend("late-send"), "committed", "a retry after the release is a new request and runs once");
+    assert.equal(await spend("late-send"), "released", "a retry after the release is a new request, runs once, and sends nothing");
     assert.deepEqual(quotes, ["15000000"]);
   } finally {
     await drop();
@@ -174,7 +174,7 @@ test("the executor refuses a hosted send issued longer ago than the sweeper's gr
     await assert.rejects(executor.run(unstamped), ExecutorRefused);
     assert.deepEqual(quotes, ["1000000"]);
     assert.equal(await swap("stale-send", 15).then((reply) => reply.isError), false, "the released key can run once the clock agrees");
-    assert.equal(await spend("stale-send"), "committed");
+    assert.equal(await spend("stale-send"), "released");
   } finally {
     await drop();
   }
@@ -189,7 +189,7 @@ test("a hosted send that fails before it moves anything is reported as not start
     assert.equal(await sweep(), 1);
     assert.equal(await spend("failed-send"), "released");
     assert.equal((await swap("failed-send", 15)).isError, false, "the retry runs as a new request");
-    assert.equal(await spend("failed-send"), "committed");
+    assert.equal(await spend("failed-send"), "released");
     assert.deepEqual(quotes, ["15000000", "15000000"]);
   } finally {
     await drop();
@@ -198,7 +198,7 @@ test("a hosted send that fails before it moves anything is reported as not start
 
 const halfCent = String(5n * 10n ** 15n);
 
-test("a native-asset transfer priced from Whale's own quote is journaled, held by the sweeper as one send, and counted once at that price", { skip: !TEST_DATABASE_URL }, async () => {
+test("a native-asset transfer priced from Whale's own quote is journaled, held by the sweeper as one send, and released once it lands as a dry run", { skip: !TEST_DATABASE_URL }, async () => {
   const { held, holdNext, deliver, transfer, journaled, spent, sweep, drop } = await harness();
   try {
     holdNext.push("/hosted/commands");
@@ -213,7 +213,7 @@ test("a native-asset transfer priced from Whale's own quote is journaled, held b
     const retry = await transfer("eth-late", halfCent);
     assert.equal(retry.isError, false, retry.text);
     assert.deepEqual(await journaled("eth-late"), ["executed"]);
-    assert.deepEqual(await spent("eth-late"), [{ usd: 15, state: "committed" }]);
+    assert.deepEqual(await spent("eth-late"), [{ usd: 15, state: "released" }]);
     assert.match((await transfer("eth-over", String(10n ** 16n))).text, /the transfer moves about 30\.00 USD, above this agent's 20\.00 USD per-transaction cap/);
     assert.deepEqual(await journaled("eth-over"), [], "a transfer over the cap never reaches the journal");
   } finally {
@@ -235,28 +235,30 @@ test("a send Whale cannot price never reaches the executor's journal or the ledg
   }
 });
 
-test("a retry of a committed transfer gets the journal's stored reply and is not priced or run again", { skip: !TEST_DATABASE_URL }, async () => {
+test("a retry of a released dry-run transfer gets the journal's stored reply and is not priced or run again", { skip: !TEST_DATABASE_URL }, async () => {
   const { pricing, transfer, journaled, spent, drop } = await harness();
   try {
     const first = await transfer("eth-again", halfCent);
     assert.equal(first.isError, false, first.text);
+    assert.deepEqual(await spent("eth-again"), [{ usd: 15, state: "released" }]);
     pricing.up = false;
     const asked = pricing.quotes;
     const retry = await transfer("eth-again", halfCent);
     assert.equal(retry.isError, false, retry.text);
     assert.deepEqual(JSON.parse(retry.text), JSON.parse(first.text), "the retry answers with the stored reply");
-    assert.equal(pricing.quotes, asked, "the committed retry is not priced again");
+    assert.equal(pricing.quotes, asked, "the released retry is not priced again");
     assert.deepEqual(await journaled("eth-again"), ["executed"]);
-    assert.deepEqual(await spent("eth-again"), [{ usd: 15, state: "committed" }]);
+    assert.deepEqual(await spent("eth-again"), [{ usd: 15, state: "released" }]);
   } finally {
     await drop();
   }
 });
 
 test("a retry of a committed send the executor has no record of is refused and never runs again", { skip: !TEST_DATABASE_URL }, async () => {
-  const { pricing, forget, transfer, journaled, spent, drop } = await harness();
+  const { pool, pricing, forget, transfer, journaled, spent, drop } = await harness();
   try {
     assert.equal((await transfer("eth-forgotten", halfCent)).isError, false);
+    await pool.query("UPDATE agent_spends SET state = 'committed' WHERE idempotency_key = 'eth-forgotten'");
     await forget("eth-forgotten");
     const asked = pricing.quotes;
     const retry = await transfer("eth-forgotten", halfCent);
