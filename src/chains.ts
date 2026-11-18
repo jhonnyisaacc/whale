@@ -122,6 +122,7 @@ export const CHAINS: readonly ChainSpec[] = [
     null,
     [
       "https://docs.robinhood.com/chain/connecting/",
+      "https://docs.robinhood.com/chain/contracts",
       "https://docs.0x.org/changelog",
     ],
     "DexScreener's slug for Robinhood Chain was not in the sources checked, so pool refresh ignores that slug until DEXSCREENER_CHAIN_SLUGS sets one.",
@@ -327,6 +328,7 @@ export const QUOTE_ASSETS: QuoteAssets = {
   linea: [usdc("0x176211869cA2b568f2A7D4EE941E073a821EE1ff")],
   blast: [weth("0x4300000000000000000000000000000000000004"), { address: "0x4300000000000000000000000000000000000003", symbol: "USDB", decimals: 18 }],
   scroll: [weth("0x5300000000000000000000000000000000000004")],
+  robinhood: [{ address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", symbol: "USDG", decimals: 6 }, weth("0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73")],
   hyperevm: [usdc("0xb88339CB7199b77E23DB6E890353E22632Ba630f")],
   monad: [usdc("0x754704Bc059F8C67012fEd69BC8A327a5aafb603"), { address: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A", symbol: "WMON", decimals: 18 }],
   solana: [
