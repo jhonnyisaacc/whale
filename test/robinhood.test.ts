@@ -115,7 +115,8 @@ test("a dry-run swap on Robinhood Chain posted to the executor routes through WE
       assert.equal(report.txs, undefined);
       const zeroEx = asked.filter((item) => item.host === ZEROEX_HOST);
       assert.ok(zeroEx.length > 0 && zeroEx.every((item) => item.chainId === "4663"));
-      assert.ok(asked.filter((item) => item.host === KYBER_HOST).every((item) => item.path === "/robinhood/api/v1/routes"));
+      const kyber = asked.filter((item) => item.host === KYBER_HOST);
+      assert.ok(kyber.length > 0 && kyber.every((item) => item.path === "/robinhood/api/v1/routes"));
     });
   } finally {
     await app.close();
