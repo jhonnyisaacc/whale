@@ -26,6 +26,7 @@ export function approvalAction(approvalId: string, command: HostedCommand) {
 }
 
 const statusAt = (now: string) => `CASE WHEN a.status IN ('pending', 'approved') AND a.expires_at <= ${now}::timestamptz THEN 'expired' ELSE a.status END`;
+const storedAs = (status: string | null) => (status === "expired" ? ["pending", "approved", "expired"] : status === null ? null : [status]);
 
 export async function requestApproval(
   pool: pg.Pool,
@@ -55,11 +56,10 @@ export async function requestApproval(
   });
 }
 
-export async function approvalFor(pool: pg.Pool, agent: AgentContext, idempotencyKey: string, command: HostedCommand, now = Date.now()): Promise<Approval["status"] | "missing" | "conflict"> {
-  const found = await pool.query<{ status: Approval["status"]; command: unknown }>(`SELECT ${statusAt("$3")} AS status, a.command FROM approvals a WHERE a.agent_id = $1 AND a.idempotency_key = $2`, [
+export async function approvalFor(pool: pg.Pool, agent: AgentContext, idempotencyKey: string, command: HostedCommand): Promise<Approval["status"] | "missing" | "conflict"> {
+  const found = await pool.query<{ status: Approval["status"]; command: unknown }>(`SELECT ${statusAt("now()")} AS status, a.command FROM approvals a WHERE a.agent_id = $1 AND a.idempotency_key = $2`, [
     agent.agentId,
     idempotencyKey,
-    new Date(now),
   ]);
   const row = found.rows[0];
   if (!row) return "missing";
@@ -108,8 +108,8 @@ export async function listApprovals(pool: pg.Pool, accountId: string, status: st
   }>(
     `SELECT a.id, a.wallet_id, a.agent_id, g.name, a.kind, a.command, a.estimate_usd, a.reason, ${statusAt("$3")} AS status, a.created_at, a.expires_at
      FROM approvals a JOIN agents g ON g.id = a.agent_id
-     WHERE a.account_id = $1 AND ($2::text IS NULL OR ${statusAt("$3")} = $2) ORDER BY a.created_at DESC LIMIT 100`,
-    [accountId, status, new Date(now)],
+     WHERE a.account_id = $1 AND ($2::text IS NULL OR (a.status = ANY ($4::text[]) AND ${statusAt("$3")} = $2)) ORDER BY a.created_at DESC LIMIT 100`,
+    [accountId, status, new Date(now), storedAs(status)],
   );
   return rows.rows.map((row) => ({
     id: row.id,
@@ -126,11 +126,11 @@ export async function listApprovals(pool: pg.Pool, accountId: string, status: st
   }));
 }
 
-export async function openRequests(pool: pg.Pool, agent: AgentContext, now = Date.now()) {
+export async function openRequests(pool: pg.Pool, agent: AgentContext) {
   const rows = await pool.query<{ id: string; kind: Approval["kind"]; idempotency_key: string; command: HostedCommand; estimate_usd: number | null; reason: string; status: Approval["status"]; created_at: Date; expires_at: Date }>(
-    `SELECT a.id, a.kind, a.idempotency_key, a.command, a.estimate_usd, a.reason, ${statusAt("$2")} AS status, a.created_at, a.expires_at FROM approvals a
-     WHERE a.agent_id = $1 AND ${statusAt("$2")} IN ('pending', 'approved') ORDER BY a.created_at DESC LIMIT 100`,
-    [agent.agentId, new Date(now)],
+    `SELECT a.id, a.kind, a.idempotency_key, a.command, a.estimate_usd, a.reason, ${statusAt("now()")} AS status, a.created_at, a.expires_at FROM approvals a
+     WHERE a.agent_id = $1 AND a.status IN ('pending', 'approved') AND ${statusAt("now()")} IN ('pending', 'approved') ORDER BY a.created_at DESC LIMIT 100`,
+    [agent.agentId],
   );
   return rows.rows.map((row) => ({
     approvalId: row.id,
@@ -145,13 +145,13 @@ export async function openRequests(pool: pg.Pool, agent: AgentContext, now = Dat
   }));
 }
 
-export async function cancelRequest(pool: pg.Pool, agent: AgentContext, approvalId: string, now = Date.now()): Promise<true | string> {
+export async function cancelRequest(pool: pg.Pool, agent: AgentContext, approvalId: string): Promise<true | string> {
   return inTransaction(pool, async (client) => {
-    const found = await client.query<{ status: Approval["status"] }>(`SELECT ${statusAt("$3")} AS status FROM approvals a WHERE a.id = $1 AND a.agent_id = $2 FOR UPDATE`, [approvalId, agent.agentId, new Date(now)]);
+    const found = await client.query<{ status: Approval["status"] }>(`SELECT ${statusAt("now()")} AS status FROM approvals a WHERE a.id = $1 AND a.agent_id = $2 FOR UPDATE`, [approvalId, agent.agentId]);
     const status = found.rows[0]?.status;
-    if (status === "claimed") return "the send for this request is already running, so it cannot be cancelled. Call the tool again later with the same idempotencyKey";
+    if (status === "claimed") return "the send for this request is already running, so it cannot be cancelled. Call swap or transfer again later with the same idempotencyKey to get its result";
     if (status !== "pending" && status !== "approved") return "this agent has no open request with that approvalId";
-    await client.query("UPDATE approvals SET status = 'denied', decided_at = $2 WHERE id = $1", [approvalId, new Date(now)]);
+    await client.query("UPDATE approvals SET status = 'denied', decided_at = now() WHERE id = $1", [approvalId]);
     await audit(client, { accountId: agent.accountId, walletId: agent.walletId, agentId: agent.agentId, actor: "agent", action: "approval.denied", detail: { approvalId, reason: "cancelled by the agent" } });
     return true;
   });

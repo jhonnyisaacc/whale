@@ -132,5 +132,5 @@ async function lapsedApproval(pool: pg.Pool, agent: AgentContext, command: Send,
   const now = await approvalFor(pool, agent, command.idempotencyKey, command);
   if (now === "claimed") return settling;
   if (now === "denied") return deny(DENIED);
-  return deny(now === "expired" ? "the approval request expired. Ask again with a new idempotencyKey" : "this approval was already used. Ask again with a new idempotencyKey");
+  return deny(now === "expired" || now === "approved" ? "the approval request expired. Ask again with a new idempotencyKey" : "this approval was already used. Ask again with a new idempotencyKey");
 }
