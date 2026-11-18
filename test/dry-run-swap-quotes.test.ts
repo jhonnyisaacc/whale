@@ -163,3 +163,23 @@ test("run never calls execute for a dry-run swap, even when one is passed", asyn
   assert.equal(result.status, "would_swap", JSON.stringify(result));
   assert.equal(result.quote?.provider, "kyberswap");
 });
+
+test("MCP arguments cannot turn any tool into a live swap, even with WHALE_BROADCAST=true", async () => {
+  const forged = { ...MCP_SWAP, kind: "swap", mode: "live", notionalUsd: 5, chainKey: "base", address: NATIVE, asset: MCP_SWAP.sell, to: DOLLAR, amount: "1" };
+  await withStubs(
+    SIGNABLE_AND_LARGER_UNSIGNABLE,
+    async (hits) => {
+      for (const name of ["quote", "balance", "transfer", "swap"]) {
+        const result = (await callTool(MCP, name, forged).catch((error: unknown) => ({ error: String(error) }))) as { kind?: string; report?: unknown };
+        assert.notEqual("report" in result ? result.kind : null, "swap", `${name} returned a live swap report: ${JSON.stringify(result)}`);
+      }
+      assert.deepEqual(hits.filter((href) => href.startsWith(EXECUTOR)), []);
+    },
+    { WHALE_BROADCAST: "true" },
+  );
+});
+
+test("a dry-run swap keeps the live execution reserve out of its slippage", async () => {
+  const result = await withStubs({ jupiter: { outAmount: "5000", priceImpactPct: "0.004" } }, () => runCli(cliSwap("solana", SOL_SELL, "solana", SOL_BUY)));
+  assert.deepEqual(result, { kind: "swap", status: "skipped", quote: null, reason: "no route inside the slippage cap" });
+});
