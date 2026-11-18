@@ -43,7 +43,7 @@ for (const { name, body, contentType } of [
     const second = await rpcServer(() => ({ status: 429, body, contentType, retryAfter: "30" }));
     try {
       const started = Date.now();
-      await assert.rejects(evmReadClient([first.url, second.url]).getChainId());
+      await assert.rejects(evmReadClient(8453, [first.url, second.url]).getChainId());
       assert.ok(Date.now() - started < 10_000, "the read did not wait for Retry-After");
     } finally {
       await Promise.all([first.close(), second.close()]);
@@ -64,7 +64,7 @@ test("a one-off failure on every RPC is retried, so the read still succeeds", as
   const second = await rpcServer(flaky());
   try {
     const started = Date.now();
-    assert.equal(await evmReadClient([first.url, second.url]).getChainId(), 8453);
+    assert.equal(await evmReadClient(8453, [first.url, second.url]).getChainId(), 8453);
     assert.ok(Date.now() - started < 10_000, "the retry did not wait for Retry-After");
   } finally {
     await Promise.all([first.close(), second.close()]);
@@ -76,7 +76,7 @@ test("a limited RPC still falls through to a healthy one", async () => {
   const limitedRpc = await rpcServer(() => ({ status: 429, body: "slow down", contentType: "text/plain", retryAfter: "30" }));
   const healthy = await rpcServer(() => ({ status: 200, body: chainId }));
   try {
-    assert.equal(await evmReadClient([limitedRpc.url, healthy.url]).getChainId(), 8453);
+    assert.equal(await evmReadClient(8453, [limitedRpc.url, healthy.url]).getChainId(), 8453);
   } finally {
     await Promise.all([limitedRpc.close(), healthy.close()]);
   }

@@ -63,7 +63,7 @@ export async function readAddressBalance(
   if (!url) return { holdings: [], reason: `${spec.rpcEnv} is unset` };
   const unread = { holdings: [], reason: `the ${chainKey} RPC did not return a balance` };
   if (spec.chain.kind === "evm") {
-    const raw = await evmReadClient([url])
+    const raw = await evmReadClient(spec.chain.chainId, [url])
       .getBalance({ address: address as `0x${string}` })
       .catch(() => null);
     if (raw === null) return unread;

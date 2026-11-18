@@ -13,7 +13,7 @@ export function rpcTransport(url: string) {
   return http(url, { retryCount: 0, timeout: 1_500, fetchFn: fetchIgnoringRetryAfter });
 }
 
-export function readTransport(urls: readonly string[]) {
+export function readTransport(chainId: number, urls: readonly string[]) {
   const [only] = urls;
   if (urls.length === 1 && only) return rpcTransport(only);
   return fallback(urls.map(rpcTransport), { rank: false });
@@ -27,11 +27,11 @@ export function resetRpcClients(): void {
   connections.clear();
 }
 
-export function evmReadClient(urls: readonly string[]): PublicClient {
-  const key = urls.join(",");
+export function evmReadClient(chainId: number, urls: readonly string[]): PublicClient {
+  const key = `${chainId}:${urls.join(",")}`;
   const existing = evmClients.get(key);
   if (existing) return existing;
-  const created = createPublicClient({ transport: readTransport(urls) });
+  const created = createPublicClient({ transport: readTransport(chainId, urls) });
   evmClients.set(key, created);
   return created;
 }

@@ -110,7 +110,7 @@ export function viemRpc(chainId: number, rpcs: readonly string[]): EvmRpc {
 }
 
 export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc {
-  const client = createPublicClient({ chain: evmChain(chainId, rpcs), transport: readTransport(rpcs) });
+  const client = createPublicClient({ chain: evmChain(chainId, rpcs), transport: readTransport(chainId, rpcs) });
   return {
     async fees() {
       const fees = await client.estimateFeesPerGas();

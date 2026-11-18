@@ -287,7 +287,7 @@ test("an EVM read falls back to the second RPC when the first fails", async () =
   const bad = await rpcServer(() => ({ status: 500, body: { error: "down" } }));
   const good = await rpcServer((body) => ({ status: 200, body: { jsonrpc: "2.0", id: body.id, result: "0x2105" } }));
   try {
-    assert.equal(await evmReadClient([bad.url, good.url]).getChainId(), 8453);
+    assert.equal(await evmReadClient(8453, [bad.url, good.url]).getChainId(), 8453);
     assert.ok(bad.hits() >= 1);
     assert.ok(good.hits() >= 1);
   } finally {
