@@ -3,7 +3,8 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { PublicKey } from "@solana/web3.js";
-import { resetProviderGuards } from "../src/aggregators.js";
+import { guardFor, resetProviderGuards } from "../src/aggregators.js";
+import { loadConfig } from "../src/config.js";
 import { parseCommand } from "../src/cli.js";
 import { commandDeps } from "../src/command-callers.js";
 import { run, type WalletCommand, type WalletResult } from "../src/commands.js";
@@ -144,6 +145,24 @@ test("a destination outside the owner allowlist or on a disabled chain is refuse
   assert.equal(disabledSource.plan.kind, "skip");
   assert.match(disabledSource.plan.reason, /ethereum is not enabled/);
   assert.equal(calls.length, 0);
+});
+
+test("an amount over the bridge cap is refused before any fetch", async () => {
+  const { fetchImpl, calls } = stubFetch({ lifi, across, relay });
+  const result = await plan({ ...bridge({ chainKey: "arbitrum", address: owner }), amount: "100000000" }, fetchImpl);
+  assert.equal(result.plan.kind, "skip");
+  assert.match(result.plan.reason, /over the 25 USD bridge cap/);
+  assert.equal(calls.length, 0);
+});
+
+test("failing bridge quotes do not open the swap quote breaker for the same vendor", async () => {
+  const { fetchImpl } = stubFetch({ lifi: "fail", across: "fail", relay: "fail" });
+  const command = bridge({ chainKey: "arbitrum", address: owner });
+  resetProviderGuards();
+  for (let attempt = 0; attempt < 4; attempt += 1) await run(command, commandDeps(baseEnv, command, fetchImpl));
+  const guard = guardFor(loadConfig(baseEnv));
+  assert.equal(guard.before("lifi"), "allow");
+  assert.notEqual(guard.before("lifi-bridge"), "allow");
 });
 
 test("a Solana destination keeps its case and a case variant is refused", async () => {

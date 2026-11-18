@@ -51,7 +51,7 @@ async function quoteLifi(config: AppConfig, route: BridgeRoute, ids: ChainIds, f
   url.searchParams.set("fromAddress", route.source.address);
   url.searchParams.set("toAddress", route.destination.address);
   if (config.keys.lifiIntegrator) url.searchParams.set("integrator", config.keys.lifiIntegrator);
-  const parsed = lifiBridgeSchema.safeParse(await callProvider(config, "lifi", url.toString(), { headers: lifiHeaders(config) }, fetchImpl, signal));
+  const parsed = lifiBridgeSchema.safeParse(await callProvider(config, "lifi-bridge", url.toString(), { headers: lifiHeaders(config) }, fetchImpl, signal));
   if (!parsed.success) return null;
   const { action, estimate } = parsed.data;
   const separate = (estimate.feeCosts ?? []).filter((fee) => fee.included === false).map((fee) => fee.amountUSD);
@@ -71,7 +71,7 @@ async function quoteAcross(config: AppConfig, route: BridgeRoute, ids: ChainIds,
   url.searchParams.set("recipient", route.destination.address);
   if (config.keys.acrossIntegrator) url.searchParams.set("integratorId", config.keys.acrossIntegrator);
   const headers: Record<string, string> = config.keys.acrossKey ? { Authorization: `Bearer ${config.keys.acrossKey}` } : {};
-  const parsed = acrossSchema.safeParse(await callProvider(config, "across", url.toString(), { headers }, fetchImpl, signal));
+  const parsed = acrossSchema.safeParse(await callProvider(config, "across-bridge", url.toString(), { headers }, fetchImpl, signal));
   if (!parsed.success) return null;
   const gas = parsed.data.fees.originGas ? [parsed.data.fees.originGas.amountUsd] : [];
   return quoteFrom("across", route, { amountIn: parsed.data.inputAmount, recipient: null, amountOut: parsed.data.expectedOutputAmount, costsUsd: gas });
@@ -90,7 +90,7 @@ async function quoteRelay(config: AppConfig, route: BridgeRoute, ids: ChainIds, 
     amount: route.amount,
     tradeType: "EXACT_INPUT",
   });
-  const parsed = relayBridgeSchema.safeParse(await callProvider(config, "relay", `${RELAY_BASE}/quote/v2`, { method: "POST", headers, body }, fetchImpl, signal));
+  const parsed = relayBridgeSchema.safeParse(await callProvider(config, "relay-bridge", `${RELAY_BASE}/quote/v2`, { method: "POST", headers, body }, fetchImpl, signal));
   if (!parsed.success) return null;
   const { details, fees } = parsed.data;
   const gas = fees.gas ? [fees.gas.amountUsd] : [];

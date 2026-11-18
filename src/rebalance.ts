@@ -58,7 +58,9 @@ export function bridgeRoute(request: BridgeRequest, policy: BridgePolicy): { kin
   const sell = policy.assets[fromChainKey]?.find((asset) => asset.symbol === request.asset);
   const buy = policy.assets[destination.chainKey]?.find((asset) => asset.symbol === request.asset);
   if (!sell || !buy) return refuse(`${request.asset} is not a quote asset on both ${fromChainKey} and ${destination.chainKey}`);
-  return { kind: "route", route: { source, destination, sell, buy, amount: request.amount, amountInUsd: Number(request.amount) / 10 ** sell.decimals } };
+  const amountInUsd = Number(request.amount) / 10 ** sell.decimals;
+  if (amountInUsd > policy.maxBridgeUsd) return refuse(`${amountInUsd} USD is over the ${policy.maxBridgeUsd} USD bridge cap`);
+  return { kind: "route", route: { source, destination, sell, buy, amount: request.amount, amountInUsd } };
 }
 
 export type RebalancePlan =
