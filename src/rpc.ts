@@ -16,7 +16,9 @@ export function rpcTransport(url: string) {
 
 type ChainCheck = { kind: "match" } | { kind: "mismatch"; returned: number } | { kind: "unchecked" };
 
-const chainChecks = new Map<string, Promise<ChainCheck>>();
+const UNCHECKED_RETRY_MS = 30_000;
+
+const chainChecks = new Map<string, { check: Promise<ChainCheck>; retryAt: number }>();
 
 async function probeChainId(chainId: number, url: string): Promise<ChainCheck> {
   try {
@@ -30,13 +32,13 @@ async function probeChainId(chainId: number, url: string): Promise<ChainCheck> {
 function checkChainId(chainId: number, url: string): Promise<ChainCheck> {
   const key = `${chainId}:${url}`;
   const cached = chainChecks.get(key);
-  if (cached) return cached;
-  const check = probeChainId(chainId, url);
-  chainChecks.set(key, check);
-  void check.then((result) => {
-    if (result.kind === "unchecked" && chainChecks.get(key) === check) chainChecks.delete(key);
+  if (cached && Date.now() < cached.retryAt) return cached.check;
+  const entry = { check: probeChainId(chainId, url), retryAt: Number.POSITIVE_INFINITY };
+  chainChecks.set(key, entry);
+  void entry.check.then((result) => {
+    if (result.kind === "unchecked") entry.retryAt = Date.now() + UNCHECKED_RETRY_MS;
   });
-  return check;
+  return entry.check;
 }
 
 async function assertChainId(chainId: number, urls: readonly string[]): Promise<void> {
@@ -44,7 +46,9 @@ async function assertChainId(chainId: number, urls: readonly string[]): Promise<
   for (const check of checks) {
     if (check.kind !== "mismatch") continue;
     const name = chainByEvmId(chainId)?.key ?? `chain ${chainId}`;
-    throw new Error(`refusing ${name}: it is configured as chain ${chainId}, but its RPC answered eth_chainId with chain ${check.returned}`);
+    throw new Error(
+      `refusing ${name}: it is configured as chain ${chainId}, but an RPC in RPC_URL_${chainId}, RPC_URLS_${chainId} or MEV_RPC_URL_${chainId} answered eth_chainId with chain ${check.returned}`,
+    );
   }
 }
 
