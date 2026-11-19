@@ -56,11 +56,18 @@ export async function readMintDecimals(rpc: string, mint: string): Promise<numbe
   }
 }
 
-export async function checkedDecimals(symbol: string, declared: number | null | undefined, read: () => Promise<number | null>): Promise<number | string> {
-  const onChain = acceptDecimals(await read().catch(() => null));
-  if (onChain === null) return `${symbol} decimals could not be read from the chain`;
+export function unreadDecimals(symbol: string): string {
+  return `${symbol} decimals could not be read from the chain`;
+}
+
+export function matchedDecimals(symbol: string, declared: number | null | undefined, onChain: number | null): number | string {
+  if (onChain === null) return unreadDecimals(symbol);
   if (declared !== null && declared !== undefined && declared !== onChain) return `${symbol} decimals ${declared} do not match the chain's ${onChain}`;
   return onChain;
+}
+
+export async function checkedDecimals(symbol: string, declared: number | null | undefined, read: () => Promise<number | null>): Promise<number | string> {
+  return matchedDecimals(symbol, declared, acceptDecimals(await read().catch(() => null)));
 }
 
 export async function resolveTokenDecimals(

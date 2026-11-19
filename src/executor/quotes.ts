@@ -2,7 +2,7 @@ import { QUOTE_ASSETS, chainByKey, feeRankOf } from "../chains.js";
 import type { Holding, RaceQuote, RouteLeg, RoutePlan, RouteQuote, SwapIntent } from "../domain.js";
 import { combineHopImpact, planRoutes } from "../routing.js";
 import { holdingFitsChain, holdingsForTrade } from "../balances.js";
-import { acceptDecimals, cachedTokenDecimals, checkedDecimals, rememberTokenDecimals } from "../token-decimals.js";
+import { acceptDecimals, cachedTokenDecimals, checkedDecimals, matchedDecimals, rememberTokenDecimals, unreadDecimals } from "../token-decimals.js";
 import type { ExecutorDeps, HopQuote } from "../executor.js";
 
 function raceQuoteOf(hop: { sellAmount: string }, quote: HopQuote): RaceQuote | undefined {
@@ -57,17 +57,22 @@ async function withChainDecimals(
   const readDecimals = deps.readTokenDecimals;
   if (!readDecimals) return { token, holdings };
   const read = (address: string) => () => readDecimals({ chainKey: token.chainKey, chain: token.chain, address });
-  const onTradeChain = (holding: Holding) => !holding.native && (!holding.chainKey || holding.chainKey === token.chainKey) && holdingFitsChain(holding, token.chainKey);
-  const checkHolding = async (holding: Holding): Promise<Holding | string> => {
-    if (!onTradeChain(holding)) return holding;
-    const decimals = await checkedDecimals(holding.symbol, holding.decimals, read(holding.address));
+  const onTradeChain = (holding: Holding) => (!holding.chainKey || holding.chainKey === token.chainKey) && holdingFitsChain(holding, token.chainKey);
+  const checkHolding = async (holding: Holding): Promise<Holding | string | null> => {
+    if (holding.native || !onTradeChain(holding)) return holding;
+    const onChain = acceptDecimals(await read(holding.address)().catch(() => null));
+    if (onChain === null) return null;
+    const decimals = matchedDecimals(holding.symbol, holding.decimals, onChain);
     return typeof decimals === "string" ? decimals : { ...holding, decimals };
   };
   const [buy, checked] = await Promise.all([checkedDecimals(token.symbol, token.decimals, read(token.address)), Promise.all(holdings.map(checkHolding))]);
   if (typeof buy === "string") return buy;
   const refused = checked.find((row): row is string => typeof row === "string");
   if (refused) return refused;
-  return { token: { ...token, decimals: buy }, holdings: checked.filter((row): row is Holding => typeof row !== "string") };
+  const kept = checked.filter((row): row is Holding => row !== null && typeof row !== "string");
+  const unread = holdings.find((_, index) => checked[index] === null);
+  if (unread && !kept.some(onTradeChain)) return unreadDecimals(unread.symbol);
+  return { token: { ...token, decimals: buy }, holdings: kept };
 }
 
 export async function sizedLive(intent: SwapIntent, token: SwapIntent["token"], deps: ExecutorDeps): Promise<{ intent: SwapIntent; token: SwapIntent["token"] } | string> {
