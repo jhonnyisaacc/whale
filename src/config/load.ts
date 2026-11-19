@@ -89,7 +89,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
   const manifest = env.WALLET_DEPLOYMENT_MANIFEST_JSON ? parseDeploymentManifest(JSON.parse(env.WALLET_DEPLOYMENT_MANIFEST_JSON) as unknown) : null;
   const legacyRouters = routerAllowlist(env);
-  if (manifest && env.ROUTER_ALLOWLIST_JSON && JSON.stringify(manifestRouters(manifest)) !== JSON.stringify(legacyRouters)) {
+  const statedRouters = (raw: string) => Object.fromEntries(Object.entries(chainAddressMap(raw, "ROUTER_ALLOWLIST_JSON")).filter(([, list]) => list.length > 0));
+  if (manifest && env.ROUTER_ALLOWLIST_JSON && JSON.stringify(manifestRouters(manifest)) !== JSON.stringify(statedRouters(env.ROUTER_ALLOWLIST_JSON))) {
     throw new Error("WALLET_DEPLOYMENT_MANIFEST_JSON and ROUTER_ALLOWLIST_JSON disagree on routers");
   }
   const feeLimits = manifest ? manifestFeeLimits(manifest) : evmFeeLimits(env.EVM_FEE_LIMITS_JSON);
