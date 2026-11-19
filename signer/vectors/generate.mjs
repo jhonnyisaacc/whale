@@ -1,8 +1,8 @@
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
-import { encodeFunctionData, maxUint256, parseAbi } from "viem";
+import { decodeFunctionData, encodeFunctionData, maxUint256, pad, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DEFAULT_EVM_FEE_LIMITS, signerChainTable } from "../../src/chains.ts";
 
@@ -55,6 +55,58 @@ const zkFees = { gas: 4_415_200n, maxFeePerGas: 54_300_000n, maxPriorityFeePerGa
 const zk = (to, data = "0x", value = 0n) => tx(to, data, value, ZKSYNC, zkFees);
 const usdcToNative = (recipient, swaps = [lifiStep(ZKSYNC_USDC, ZKSYNC_USDC, 5_000_000n, true), lifiStep(ZKSYNC_USDC, NONE, 4_990_000n)]) => lifiSwap("swapTokensMultipleV3ERC20ToNative", recipient, swaps);
 const BASE = 8453;
+const ARBITRUM = 42161;
+const LISTED_BRIDGE_DESTINATION = "0x1111111111111111111111111111111111111111";
+const captured = (name) => JSON.parse(readFileSync(new URL(`../../test/fixtures/bridge/${name}.json`, import.meta.url), "utf8"));
+const lifiBridge = captured("lifi-across-base-arbitrum");
+const acrossBridge = captured("across-base-arbitrum");
+const relayDeposit = captured("relay-base-arbitrum").steps.find((step) => step.id === "deposit").txs[0];
+const BRIDGE_DATA = "(bytes32 transactionId, string bridge, string integrator, address referrer, address sendingAssetId, address receiver, uint256 minAmount, uint256 destinationChainId, bool hasSourceSwaps, bool hasDestinationCall)";
+const ACROSS_V4_DATA = "(bytes32 receiverAddress, bytes32 refundAddress, bytes32 sendingAssetId, bytes32 receivingAssetId, uint256 outputAmount, uint128 outputAmountMultiplier, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message)";
+const lifiAcrossAbi = parseAbi([`function swapAndStartBridgeTokensViaAcrossV4(${BRIDGE_DATA} _bridgeData, ${lifiSwapData}[] _swapData, ${ACROSS_V4_DATA} _acrossData) payable`]);
+const spokePoolAbi = parseAbi(["function deposit(bytes32 depositor, bytes32 recipient, bytes32 inputToken, bytes32 outputToken, uint256 inputAmount, uint256 outputAmount, uint256 destinationChainId, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message) payable"]);
+const word = (address) => pad(address.toLowerCase(), { size: 32 });
+const lifiBridgeWith = (edit) => {
+  const [bridge, swaps, data] = decodeFunctionData({ abi: lifiAcrossAbi, data: lifiBridge.tx.data }).args;
+  const next = { bridge: { ...bridge }, data: { ...data } };
+  edit(next.bridge, next.data);
+  return encodeFunctionData({ abi: lifiAcrossAbi, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [next.bridge, swaps, next.data] });
+};
+const acrossBridgeWith = (edit) => {
+  const args = [...decodeFunctionData({ abi: spokePoolAbi, data: acrossBridge.tx.data }).args];
+  edit(args);
+  return encodeFunctionData({ abi: spokePoolAbi, functionName: "deposit", args });
+};
+const LIFI_DIAMOND = lifiBridge.tx.to;
+const BASE_SPOKE_POOL = acrossBridge.tx.to;
+const onBase = (to, data, value = 0n) => tx(to, data, value, BASE);
+const bridgeSpent = (transaction) => ({ [`${BASE}:native`]: String(transaction.gas * transaction.maxFeePerGas + DEFAULT_EVM_FEE_LIMITS[BASE].l1.maxFeeWei), [`${BASE}:${USDC.toLowerCase()}`]: "2000000" });
+const realLifiBridge = onBase(LIFI_DIAMOND, lifiBridge.tx.data);
+const realAcrossBridge = onBase(BASE_SPOKE_POOL, acrossBridge.tx.data);
+const bridgeCases = [
+  ["a real LI.FI AcrossV4 bridge from Base to this wallet on Arbitrum", realLifiBridge, "signed", null, null, bridgeSpent(realLifiBridge)],
+  ["a real Across SpokePool deposit from Base to this wallet on Arbitrum", realAcrossBridge, "signed", null, null, bridgeSpent(realAcrossBridge)],
+  ["a real LI.FI bridge to a listed destination", onBase(LIFI_DIAMOND, captured("lifi-across-base-arbitrum-destination").tx.data), "signed"],
+  ["a real Across deposit to a listed destination", onBase(BASE_SPOKE_POOL, captured("across-base-arbitrum-destination").tx.data), "signed"],
+  ["a LI.FI bridge paying an attacker", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge, data) => ((bridge.receiver = ATTACKER), (data.receiverAddress = word(ATTACKER))))), "refused", "not this wallet or a listed destination"],
+  ["a LI.FI bridge whose two receivers disagree", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.receiverAddress = word(ATTACKER)))), "refused", "not one the signer can read"],
+  ["a LI.FI bridge refunding an attacker", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.refundAddress = word(ATTACKER)))), "refused", "refunds 0x00000000000000000000000000000000000bad00"],
+  ["a LI.FI bridge to a chain outside the policy", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge) => (bridge.destinationChainId = 31337n))), "refused", "lands on chain 31337, which is not another chain in the policy"],
+  ["a LI.FI bridge back to its own chain", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge) => (bridge.destinationChainId = BigInt(BASE)))), "refused", "lands on chain 8453, which is not another chain in the policy"],
+  ["a LI.FI bridge with a destination call", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge, data) => ((bridge.hasDestinationCall = true), (data.message = "0x1234")))), "refused", "runs a destination call"],
+  ["an Across deposit paying an attacker", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[1] = word(ATTACKER)))), "refused", "not this wallet or a listed destination"],
+  ["an Across deposit refunding an attacker", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[0] = word(ATTACKER)))), "refused", "refunds 0x00000000000000000000000000000000000bad00"],
+  ["an Across deposit to a chain outside the policy", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[6] = 31337n))), "refused", "lands on chain 31337"],
+  ["an Across deposit with a destination message", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[11] = "0xabcd"))), "refused", "runs a destination call"],
+  ["an Across deposit to a non-EVM recipient", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[1] = `0x${"ab".repeat(32)}`))), "refused", "not one the signer can read"],
+  ["an Across deposit above the daily token limit", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[4] = 20_000_000n))), "refused", "above its whole 10000000 daily limit"],
+  ["an Across deposit sent to the LI.FI diamond", onBase(LIFI_DIAMOND, acrossBridge.tx.data), "refused", "not the listed across bridge contract"],
+  ["a LI.FI bridge sent to the SpokePool", onBase(BASE_SPOKE_POOL, lifiBridge.tx.data), "refused", "not the listed lifi bridge contract"],
+  ["a bridge on a chain with no listed bridge contract", tx(BASE_SPOKE_POOL, acrossBridge.tx.data), "refused", "not the listed across bridge contract"],
+  ["an Across deposit that also sends native value", onBase(BASE_SPOKE_POOL, acrossBridge.tx.data, 1n), "refused", "must send no native value"],
+  ["a real Relay deposit, which names no destination", onBase(relayDeposit.to, relayDeposit.data), "refused", "not one the signer can read"],
+  ["an exact approval to the listed SpokePool", onBase(USDC, encodeFunctionData({ abi: erc20, functionName: "approve", args: [BASE_SPOKE_POOL, 2_000_000n] })), "signed"],
+];
 const BASE_L1 = DEFAULT_EVM_FEE_LIMITS[BASE].l1;
 const baseSwap = tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 5_000_000n), "0x", "0x"] }), 0n, BASE);
 
@@ -110,7 +162,7 @@ const evmCases = [
 
 const account = privateKeyToAccount(EVM_KEY);
 const evm = [];
-for (const [name, transaction, expect, reason, recipient, spent] of evmCases) {
+for (const [name, transaction, expect, reason, recipient, spent] of [...evmCases, ...bridgeCases]) {
   const entry = { name, job: job(name, transaction), expect, ...(reason ? { reason } : {}), ...(recipient ? { recipient } : {}), ...(spent ? { spent } : {}) };
   if (expect === "signed") entry.signedTransaction = await account.signTransaction(transaction);
   evm.push(entry);
@@ -179,11 +231,12 @@ const solana = solanaCases.map(([name, bytes, expect, reason]) => ({
 const policy = {
   version: 1,
   evm: {
-    chains: [CHAIN_ID, 10, BASE, 81457, 534352, ZKSYNC],
+    chains: [CHAIN_ID, 10, BASE, 81457, 534352, ZKSYNC, ARBITRUM],
     routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER], [BASE]: [KYBER], [ZKSYNC]: [ZKSYNC_LIFI] },
     settlers: { [CHAIN_ID]: [SETTLER] },
     kyberExecutors: { [CHAIN_ID]: [EXECUTOR], [BASE]: [EXECUTOR] },
-    destinations: [DESTINATION],
+    bridges: { [BASE]: { lifi: LIFI_DIAMOND, across: BASE_SPOKE_POOL } },
+    destinations: [DESTINATION, LISTED_BRIDGE_DESTINATION],
     maxValueWei: "2000000000000000",
     maxFeeWei: "1000000000000000",
     dailyLimits: { [`${CHAIN_ID}:${USDC}`]: "10000000", [`${CHAIN_ID}:native`]: "5000000000000000", [`${BASE}:${USDC}`]: "10000000", [`${BASE}:native`]: "5000000000000000", [`${ZKSYNC}:${ZKSYNC_USDC}`]: "10000000", [`${ZKSYNC}:native`]: "5000000000000000" },
