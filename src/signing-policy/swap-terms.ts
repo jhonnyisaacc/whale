@@ -15,11 +15,44 @@ const SETTLER_ABI = parseAbi([
   "function execute(AllowedSlippage slippage, bytes[] actions, bytes32 zid) payable returns (bool)",
 ]);
 
+// LI.FI GenericSwapFacetV3, from lifinance/contracts src/Facets/GenericSwapFacetV3.sol and LibSwap.SwapData.
+const LIFI_HEAD = "bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut";
+const LIFI_SWAP = "(address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
+const LIFI_ABI = parseAbi([
+  `function swapTokensSingleV3ERC20ToERC20(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
+  `function swapTokensSingleV3ERC20ToNative(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
+  `function swapTokensSingleV3NativeToERC20(${LIFI_HEAD}, ${LIFI_SWAP} _swapData) payable`,
+  `function swapTokensMultipleV3ERC20ToERC20(${LIFI_HEAD}, ${LIFI_SWAP}[] _swapData)`,
+  `function swapTokensMultipleV3ERC20ToNative(${LIFI_HEAD}, ${LIFI_SWAP}[] _swapData)`,
+  `function swapTokensMultipleV3NativeToERC20(${LIFI_HEAD}, ${LIFI_SWAP}[] _swapData) payable`,
+] as const);
+const LIFI_NATIVE = "0x0000000000000000000000000000000000000000";
+
 export type ZeroExExec = { operator: string; token: string; amount: bigint; target: string };
 
 export type SwapTerms =
   | { provider: "kyberswap"; recipient: string; buyToken: string; minOut: bigint; sellToken: string; sellAmount: bigint }
-  | { provider: "zeroex"; recipient: string; buyToken: string; minOut: bigint; exec: ZeroExExec | null };
+  | { provider: "zeroex"; recipient: string; buyToken: string; minOut: bigint; exec: ZeroExExec | null }
+  | { provider: "lifi"; recipient: string; buyToken: string; minOut: bigint; deposit: { token: string; amount: bigint } | null };
+
+type LifiSwapData = { sendingAssetId: string; receivingAssetId: string; fromAmount: bigint; requiresDeposit: boolean };
+
+// The ERC20 entry points pull every swap marked requiresDeposit from the caller (the single ones pull their one swap),
+// so the deposit is that sum, and a route that pulls a second token is not decoded.
+function lifiTerms(data: Hex): SwapTerms | null {
+  const call = decoded(() => decodeFunctionData({ abi: LIFI_ABI, data }));
+  if (!call) return null;
+  const [, , , recipient, minOut, swapData] = call.args;
+  const swaps: readonly LifiSwapData[] = Array.isArray(swapData) ? swapData : [swapData as LifiSwapData];
+  const last = swaps[swaps.length - 1];
+  if (!last) return null;
+  const buyToken = call.functionName.endsWith("ToNative") ? LIFI_NATIVE : last.receivingAssetId;
+  if (call.functionName.includes("V3NativeTo")) return { provider: "lifi", recipient, buyToken, minOut, deposit: null };
+  const pulled = call.functionName.startsWith("swapTokensSingle") ? swaps : swaps.filter((swap) => swap.requiresDeposit);
+  const token = pulled[0]?.sendingAssetId;
+  if (!token || token === LIFI_NATIVE || pulled.some((swap) => swap.sendingAssetId.toLowerCase() !== token.toLowerCase())) return null;
+  return { provider: "lifi", recipient, buyToken, minOut, deposit: { token, amount: pulled.reduce((sum, swap) => sum + swap.fromAmount, 0n) } };
+}
 
 function decoded<T>(read: () => T): T | null {
   try {
@@ -36,6 +69,8 @@ export function swapTerms(data: Hex): SwapTerms | null {
     const desc = kyber.functionName === "swap" ? kyber.args[0].desc : kyber.args[1];
     return { provider: "kyberswap", recipient: desc.dstReceiver, buyToken: desc.dstToken, minOut: desc.minReturnAmount, sellToken: desc.srcToken, sellAmount: desc.amount };
   }
+  const lifi = lifiTerms(data);
+  if (lifi) return lifi;
   const exec = decoded(() => decodeFunctionData({ abi: ALLOWANCE_HOLDER_ABI, data }));
   const settler = decoded(() => decodeFunctionData({ abi: SETTLER_ABI, data: exec ? exec.args[4] : data }));
   if (!settler) return null;

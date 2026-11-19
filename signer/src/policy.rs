@@ -293,6 +293,7 @@ impl Policy {
                             ));
                         }
                     }
+                    abi::Route::Lifi => {}
                     abi::Route::Kyber { parties } => {
                         for party in parties {
                             if !listed(&self.kyber_executors, party) {

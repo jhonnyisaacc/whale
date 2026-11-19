@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { addressKey, CHAINS } from "../chains.js";
+import { addressKey, CHAINS, TURNKEY_EXCLUDED_CHAIN_IDS } from "../chains.js";
 
-// Hosted wallets sign EVM and Solana. HyperCore needs an approved agent key and zkSync has no live send.
-export const HOSTED_CHAINS: readonly string[] = CHAINS.filter((spec) => spec.chain.kind !== "hypercore" && spec.liveSend !== "disabled").map((spec) => spec.key);
+// Hosted wallets sign EVM and Solana through the Turnkey policy. HyperCore needs an approved agent key, and a chain the policy excludes is not hosted.
+export const HOSTED_CHAINS: readonly string[] = CHAINS.filter((spec) => spec.chain.kind !== "hypercore" && !(spec.chain.kind === "evm" && TURNKEY_EXCLUDED_CHAIN_IDS.has(spec.chain.chainId))).map((spec) => spec.key);
 export const ACTIONS = ["swap", "transfer", "bridge"] as const;
 export type Action = (typeof ACTIONS)[number];
 

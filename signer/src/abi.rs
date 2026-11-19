@@ -64,6 +64,7 @@ pub struct Exec {
 pub enum Route {
     ZeroEx { exec: Option<Exec> },
     Kyber { parties: Vec<[u8; 20]> },
+    Lifi,
 }
 
 impl Route {
@@ -71,6 +72,7 @@ impl Route {
         match self {
             Route::ZeroEx { .. } => "zeroex",
             Route::Kyber { .. } => "kyberswap",
+            Route::Lifi => "lifi",
         }
     }
 }
@@ -103,6 +105,83 @@ fn kyber_desc(data: &[u8], start: usize, mut parties: Vec<[u8; 20]>) -> Option<S
         route: Route::Kyber { parties },
         recipient: address(data, start + 6 * 32)?,
         sell: Some((address(data, start)?, amount)),
+    })
+}
+
+const LIFI_HEAD: &str = "bytes32,string,string,address,uint256";
+const LIFI_SWAP: &str = "(address,address,address,address,uint256,bytes,bool)";
+
+fn boolean(data: &[u8], at: usize) -> Option<bool> {
+    match uint(data, at)? {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    }
+}
+
+struct LifiSwap {
+    sending: [u8; 20],
+    amount: u128,
+    deposit: bool,
+}
+
+fn lifi_swap(args: &[u8], start: usize) -> Option<LifiSwap> {
+    Some(LifiSwap {
+        sending: address(args, start + 2 * 32)?,
+        amount: uint(args, start + 4 * 32)?,
+        deposit: boolean(args, start + 6 * 32)?,
+    })
+}
+
+fn lifi_swaps(args: &[u8], single: bool) -> Option<Vec<LifiSwap>> {
+    let at = offset(args, 5 * 32, 0)?;
+    if single {
+        return Some(vec![lifi_swap(args, at)?]);
+    }
+    let count = usize::try_from(uint(args, at)?).ok()?;
+    if count == 0 || count > (args.len() - at) / 32 {
+        return None;
+    }
+    (1..=count)
+        .map(|index| lifi_swap(args, offset(args, at + index * 32, at + 32)?))
+        .collect()
+}
+
+// The ERC20 entry points pull every swap marked requiresDeposit from the caller (a single swap always),
+// so the sell is that sum, and a route that pulls a second token is not read.
+fn lifi_terms(head: &[u8], args: &[u8]) -> Option<SwapTerms> {
+    let (kind, single) = ["ERC20ToERC20", "ERC20ToNative", "NativeToERC20"]
+        .into_iter()
+        .flat_map(|kind| [(kind, true), (kind, false)])
+        .find(|(kind, single)| {
+            let (name, swap) = if *single {
+                ("Single", LIFI_SWAP.to_string())
+            } else {
+                ("Multiple", format!("{LIFI_SWAP}[]"))
+            };
+            head == selector(&format!("swapTokens{name}V3{kind}({LIFI_HEAD},{swap})"))
+        })?;
+    let swaps = lifi_swaps(args, single)?;
+    let recipient = address(args, 3 * 32)?;
+    if kind == "NativeToERC20" {
+        return Some(SwapTerms {
+            route: Route::Lifi,
+            recipient,
+            sell: Some(([0u8; 20], 0)),
+        });
+    }
+    let pulled: Vec<&LifiSwap> = swaps.iter().filter(|swap| single || swap.deposit).collect();
+    let token = pulled.first()?.sending;
+    if token == [0u8; 20] || pulled.iter().any(|swap| swap.sending != token) {
+        return None;
+    }
+    let amount = pulled
+        .iter()
+        .try_fold(0u128, |sum, swap| sum.checked_add(swap.amount))?;
+    Some(SwapTerms {
+        route: Route::Lifi,
+        recipient,
+        sell: Some((token, amount)),
     })
 }
 
@@ -147,5 +226,5 @@ pub fn swap_terms(calldata: &[u8]) -> Option<SwapTerms> {
         }
         return kyber_desc(args, offset(args, execution + 3 * 32, execution)?, parties);
     }
-    None
+    lifi_terms(head, args)
 }

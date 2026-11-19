@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Keypair } from "@solana/web3.js";
 import { providersFor } from "../src/aggregators.js";
-import { CHAINS, DEFAULT_EVM_FEE_LIMITS, L1_DATA_FEE_CHAIN_IDS, chainByKey, feeRankOf } from "../src/chains.js";
+import { CHAINS, DEFAULT_EVM_FEE_LIMITS, L1_DATA_FEE_CHAIN_IDS, TURNKEY_EXCLUDED_CHAIN_IDS, chainByKey, feeRankOf } from "../src/chains.js";
 import { loadConfig } from "../src/config.js";
 import { routerAllowlist } from "../src/config/guard.js";
 import { turnkeyPolicyDocument } from "../src/signing-policy/turnkey.js";
@@ -16,7 +16,7 @@ test("Robinhood Chain and HyperEVM use the published chain ids and RPCs", () => 
   const hyper = chainByKey("hyperevm");
   assert.equal(hyper?.chain.kind === "evm" ? hyper.chain.chainId : 0, 999);
   assert.equal(hyper?.defaultRpc, "https://rpc.hyperliquid.xyz/evm");
-  assert.equal(chainByKey("zksync")?.liveSend, "disabled");
+  assert.equal(chainByKey("zksync")?.liveSend, "eip1559");
   assert.equal(chainByKey("blast")?.aggregator, "lifi");
   assert.equal(chainByKey("hypercore")?.defaultRpc, "https://api.hyperliquid.xyz");
   const monad = chainByKey("monad");
@@ -74,5 +74,5 @@ test("every EVM chain id matches its RPC variable, router allowlist, fee limit, 
     maxValueWei: 1n,
   });
   const clauses = [...JSON.stringify(policy).matchAll(/eth\.tx\.chain_id == (\d+) &&/g)].map((match) => match[1] ?? "");
-  assert.deepEqual(sorted(clauses), signable);
+  assert.deepEqual(sorted(clauses), signable.filter((id) => !TURNKEY_EXCLUDED_CHAIN_IDS.has(id)));
 });

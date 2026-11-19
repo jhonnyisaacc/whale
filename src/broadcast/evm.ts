@@ -183,7 +183,7 @@ function sameToken(left: string, right: string): boolean {
 }
 
 // The calldata, not the API's summary of it, decides who receives the output and the minimum it may be.
-function decodedMinOut(data: Hex, provider: "kyberswap" | "zeroex", owner: string, leg: RouteLeg): bigint {
+function decodedMinOut(data: Hex, provider: "kyberswap" | "zeroex" | "lifi", owner: string, leg: RouteLeg): bigint {
   const terms = swapTerms(data);
   if (!terms || terms.provider !== provider) throw new BroadcastError("swap calldata is not decodable", false);
   if (terms.recipient.toLowerCase() !== owner.toLowerCase()) throw new BroadcastError("swap recipient is not the hot wallet", false);
@@ -191,11 +191,18 @@ function decodedMinOut(data: Hex, provider: "kyberswap" | "zeroex", owner: strin
   if (terms.provider === "kyberswap" && (!sameToken(terms.sellToken, leg.sellAddress) || terms.sellAmount !== BigInt(leg.sellAmount))) {
     throw new BroadcastError("Kyber calldata does not spend the leg's sell token and amount", false);
   }
+  if (terms.provider === "lifi" && !lifiPullsLeg(terms.deposit, leg)) throw new BroadcastError("LI.FI calldata does not pull the leg's sell token and amount", false);
   if (terms.provider === "zeroex" && !terms.exec) throw new BroadcastError("direct Settler calls are not accepted without decodable actions", false);
   if (terms.provider === "zeroex" && terms.exec && (!sameToken(terms.exec.token, leg.sellAddress) || terms.exec.amount !== BigInt(leg.sellAmount))) {
     throw new BroadcastError("0x exec does not spend the leg's sell amount", false);
   }
   return terms.minOut;
+}
+
+// A native sell pays through the transaction value, which prepareEvmLeg checks, so it must pull no token.
+function lifiPullsLeg(deposit: { token: string; amount: bigint } | null, leg: RouteLeg): boolean {
+  if (NATIVE_SELL.has(leg.sellAddress.toLowerCase())) return deposit === null;
+  return deposit !== null && sameToken(deposit.token, leg.sellAddress) && deposit.amount === BigInt(leg.sellAmount);
 }
 
 type BuiltEvm = { provider: string; to: Hex; data: Hex; value: bigint; gas: bigint | null; impact: number; raw: unknown; minOut: bigint | null; quotedOut: bigint };
@@ -225,7 +232,6 @@ export async function evmTransaction(ctx: EvmCtx, leg: RouteLeg, capPct: number,
     };
   }
   if (selected === "lifi") {
-    if (!config.lifiLive) throw new BroadcastError("LI.FI swaps are quote-only until facet calldata can be verified", false);
     const quoted = stored ? { raw: stored.raw } : await firmLifi(config, hop, chainId, taker, reference, fetchImpl, slippageBps);
     if (quoted.raw === undefined) throw new BroadcastError("firm quote outside the slippage cap", false);
     const parsed = readLifi(quoted.raw as Parameters<typeof readLifi>[0], reference, chainId);
@@ -235,15 +241,18 @@ export async function evmTransaction(ctx: EvmCtx, leg: RouteLeg, capPct: number,
     const raw = quoted.raw as { transactionRequest?: { to?: string; data?: string; value?: string; gasLimit?: string }; estimate?: { toAmountMin?: unknown } };
     const request = raw.transactionRequest;
     if (!request?.to || !request.data) throw new BroadcastError("firm quote has no transaction", false);
+    const data = asHex(request.data);
+    const decodable = swapTerms(data)?.provider === "lifi";
+    if (!decodable && !config.lifiLive) throw new BroadcastError("LI.FI swaps are quote-only until facet calldata can be verified", false);
     return {
       provider: selected,
       to: asHex(request.to),
-      data: asHex(request.data),
+      data,
       value: BigInt(request.value ?? "0"),
       gas: request.gasLimit ? BigInt(request.gasLimit) : null,
       impact: parsed.priceImpactPct,
       raw: quoted.raw,
-      minOut: digits(raw.estimate?.toAmountMin),
+      minOut: decodable ? decodedMinOut(data, "lifi", taker, leg) : digits(raw.estimate?.toAmountMin),
       quotedOut: BigInt(parsed.buyAmount),
     };
   }

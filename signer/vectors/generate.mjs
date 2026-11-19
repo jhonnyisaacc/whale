@@ -21,6 +21,10 @@ const LIFI = "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE";
 const CHAIN_ID = 1;
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
+const ZKSYNC = 324;
+const ZKSYNC_LIFI = "0x341e94069f53234fe6dabef707ad424830525715";
+const ZKSYNC_USDC = "0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4";
+const ZKSYNC_ZK = "0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E";
 
 const kyberAbi = parseAbi([
   "struct SwapDescriptionV2 { address srcToken; address dstToken; address[] srcReceivers; uint256[] srcAmounts; address[] feeReceivers; uint256[] feeAmounts; address dstReceiver; uint256 amount; uint256 minReturnAmount; uint256 flags; bytes permit; }",
@@ -30,6 +34,13 @@ const kyberAbi = parseAbi([
 ]);
 const holderAbi = parseAbi(["function exec(address operator, address token, uint256 amount, address target, bytes data) payable returns (bytes result)"]);
 const settlerAbi = parseAbi(["struct AllowedSlippage { address recipient; address buyToken; uint256 minAmountOut; }", "function execute(AllowedSlippage slippage, bytes[] actions, bytes32 zid) payable returns (bool)"]);
+const lifiHead = "bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut";
+const lifiSwapData = "(address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
+const lifiAbi = parseAbi([
+  `function swapTokensSingleV3ERC20ToERC20(${lifiHead}, ${lifiSwapData} _swapData)`,
+  `function swapTokensMultipleV3ERC20ToNative(${lifiHead}, ${lifiSwapData}[] _swapData)`,
+  `function swapTokensMultipleV3NativeToERC20(${lifiHead}, ${lifiSwapData}[] _swapData) payable`,
+]);
 const erc20 = parseAbi(["function transfer(address to, uint256 amount)", "function approve(address spender, uint256 amount)"]);
 
 const desc = (recipient, amount, overrides = {}) => ({ srcToken: USDC, dstToken: WETH, srcReceivers: [EXECUTOR], srcAmounts: [amount], feeReceivers: [], feeAmounts: [], dstReceiver: recipient, amount, minReturnAmount: 1n, flags: 0n, permit: "0x", ...overrides });
@@ -38,7 +49,21 @@ const settlerCall = (recipient) => encodeFunctionData({ abi: settlerAbi, functio
 const tx = (to, data = "0x", value = 0n, chainId = CHAIN_ID, fees = {}) => ({ chainId, nonce: 7, to, value, data, gas: 300000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n, type: "eip1559", ...fees });
 const job = (name, transaction) => ({ id: name, kind: "evm", chainId: transaction.chainId, tx: { nonce: String(transaction.nonce), to: transaction.to, value: String(transaction.value), data: transaction.data, gas: String(transaction.gas), maxFeePerGas: String(transaction.maxFeePerGas), maxPriorityFeePerGas: String(transaction.maxPriorityFeePerGas) } });
 
+const lifiStep = (sell, buy, amount, requiresDeposit = false) => ({ callTo: EXECUTOR, approveTo: EXECUTOR, sendingAssetId: sell, receivingAssetId: buy, fromAmount: amount, callData: "0xabcdef", requiresDeposit });
+const lifiSwap = (functionName, recipient, swaps) => encodeFunctionData({ abi: lifiAbi, functionName, args: [`0x${"00".repeat(32)}`, "whale", "", recipient, 1n, functionName.startsWith("swapTokensSingle") ? swaps[0] : swaps] });
+const zkFees = { gas: 4_415_200n, maxFeePerGas: 54_300_000n, maxPriorityFeePerGas: 0n };
+const zk = (to, data = "0x", value = 0n) => tx(to, data, value, ZKSYNC, zkFees);
+const usdcToNative = (recipient, swaps = [lifiStep(ZKSYNC_USDC, ZKSYNC_USDC, 5_000_000n, true), lifiStep(ZKSYNC_USDC, NONE, 4_990_000n)]) => lifiSwap("swapTokensMultipleV3ERC20ToNative", recipient, swaps);
+
 const evmCases = [
+  ["a zkSync LI.FI swap selling native to this wallet", zk(ZKSYNC_LIFI, lifiSwap("swapTokensMultipleV3NativeToERC20", own, [lifiStep(NONE, NONE, 1_000_000_000_000_000n), lifiStep(NONE, ZKSYNC_USDC, 997_000_000_000_000n)]), 1_000_000_000_000_000n), "signed", null, own],
+  ["a zkSync LI.FI token swap to this wallet", zk(ZKSYNC_LIFI, usdcToNative(own)), "signed", null, own],
+  ["a zkSync LI.FI single token swap to this wallet", zk(ZKSYNC_LIFI, lifiSwap("swapTokensSingleV3ERC20ToERC20", own, [lifiStep(ZKSYNC_USDC, ZKSYNC_ZK, 5_000_000n)])), "signed", null, own],
+  ["a zkSync LI.FI swap paying an attacker", zk(ZKSYNC_LIFI, usdcToNative(ATTACKER)), "refused", "not this wallet", ATTACKER],
+  ["a zkSync LI.FI swap that also pulls a second token", zk(ZKSYNC_LIFI, usdcToNative(own, [lifiStep(ZKSYNC_USDC, ZKSYNC_USDC, 5_000_000n, true), lifiStep(ZKSYNC_ZK, NONE, 1n, true)])), "refused", "not one the signer can read"],
+  ["a zkSync LI.FI swap whose deposits cross the daily token limit", zk(ZKSYNC_LIFI, usdcToNative(own, [lifiStep(ZKSYNC_USDC, ZKSYNC_USDC, 6_000_000n, true), lifiStep(ZKSYNC_USDC, NONE, 6_000_000n, true)])), "refused", "above its whole 10000000 daily limit", own],
+  ["a zkSync LI.FI swap sent to a diamond not listed for zkSync", zk(LIFI, usdcToNative(own)), "refused", "not listed for this chain", own],
+  ["a zkSync native transfer to a listed destination", zk(DESTINATION, "0x", 1_000_000_000_000_000n), "signed"],
   ["kyber simple swap to this wallet", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 5_000_000n), "0x", "0x"] })), "signed", null, own],
   ["kyber swap paying an attacker", tx(KYBER, kyberSwap(desc(ATTACKER, 5_000_000n))), "refused", "not this wallet", ATTACKER],
   ["kyber swap to this wallet", tx(KYBER, kyberSwap(desc(own, 2_000_000n))), "signed", null, own],
@@ -151,14 +176,14 @@ const solana = solanaCases.map(([name, bytes, expect, reason]) => ({
 const policy = {
   version: 1,
   evm: {
-    chains: [CHAIN_ID, 10, 8453, 81457, 534352],
-    routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER] },
+    chains: [CHAIN_ID, 10, 8453, 81457, 534352, ZKSYNC],
+    routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER], [ZKSYNC]: [ZKSYNC_LIFI] },
     settlers: { [CHAIN_ID]: [SETTLER] },
     kyberExecutors: { [CHAIN_ID]: [EXECUTOR] },
     destinations: [DESTINATION],
     maxValueWei: "2000000000000000",
     maxFeeWei: "1000000000000000",
-    dailyLimits: { [`${CHAIN_ID}:${USDC}`]: "10000000", [`${CHAIN_ID}:native`]: "5000000000000000" },
+    dailyLimits: { [`${CHAIN_ID}:${USDC}`]: "10000000", [`${CHAIN_ID}:native`]: "5000000000000000", [`${ZKSYNC}:${ZKSYNC_USDC}`]: "10000000", [`${ZKSYNC}:native`]: "5000000000000000" },
   },
   solana: {
     programs: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
