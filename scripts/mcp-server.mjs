@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -39,6 +39,10 @@ function pnpm(args) {
   throw new Error("neither pnpm nor corepack is on PATH");
 }
 
+if (!existsSync(path.join(root, "pnpm-lock.yaml"))) {
+  process.stderr.write(`whale: ${root} has no pnpm-lock.yaml, so its dependencies cannot be installed pinned. npm drops the lockfile when it installs a package. Install Whale with git clone or a host plugin install instead\n`);
+  process.exit(1);
+}
 const hash = sourceHash();
 if (readStamp() !== hash) {
   process.stderr.write(`whale: building the MCP server in ${root}\n`);
