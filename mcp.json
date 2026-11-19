@@ -5,7 +5,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "dist/src/mcp-server.js"
+        "scripts/mcp-server.mjs"
       ],
       "env": {
         "EXECUTOR_URL": "${EXECUTOR_URL}",

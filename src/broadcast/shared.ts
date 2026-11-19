@@ -1,6 +1,6 @@
 import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction, type Connection } from "@solana/web3.js";
 import bs58 from "bs58";
-import { TransactionNotFoundError, TransactionReceiptNotFoundError, createPublicClient, defineChain, encodeFunctionData, erc20Abi, keccak256, parseUnits, type Hex } from "viem";
+import { BaseError, MethodNotFoundRpcError, MethodNotSupportedRpcError, TransactionNotFoundError, TransactionReceiptNotFoundError, createPublicClient, defineChain, encodeFunctionData, erc20Abi, keccak256, parseUnits, toHex, type Hex } from "viem";
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
 import type { Fill, RaceQuote, RouteLeg, SendResult, TxOutcome, TxRecord } from "../domain.js";
@@ -110,6 +110,11 @@ export function viemRpc(chainId: number, rpcs: readonly string[]): EvmRpc {
   return created;
 }
 
+// zkSync Era's public RPC answers eth_simulateV1 with -32601, so a node without it simulates through eth_call.
+function unsupportedMethod(error: unknown): boolean {
+  return error instanceof BaseError && error.walk((cause) => cause instanceof MethodNotFoundRpcError || cause instanceof MethodNotSupportedRpcError) !== null;
+}
+
 export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc {
   const client = createPublicClient({ chain: evmChain(chainId, rpcs), transport: readTransport(chainId, rpcs) });
   return {
@@ -123,12 +128,18 @@ export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc 
       const span = BigInt(depth);
       return client.getTransactionCount({ address, blockNumber: head > span ? head - span : 0n });
     },
-    estimateGas: (call) => client.estimateGas({ account: call.from, to: call.to, data: call.data, value: call.value }),
+    // viem drops `type` from an estimate without fee fields, and zkSync charges a type-2 transaction more gas than an untyped call.
+    async estimateGas(call) {
+      const request = { from: call.from, to: call.to, data: call.data, value: toHex(call.value), type: "0x2" } as const;
+      return BigInt(await client.request({ method: "eth_estimateGas", params: [request] }));
+    },
     async simulate(call) {
-      if (typeof client.simulateCalls === "function") {
+      try {
         const simulated = await client.simulateCalls({ account: call.from, calls: [{ to: call.to, data: call.data, value: call.value }] });
         if (simulated.results.some((result) => result.status !== "success")) throw new Error("simulation reverted");
         return;
+      } catch (error) {
+        if (!unsupportedMethod(error)) throw error;
       }
       await client.call({ account: call.from, to: call.to, data: call.data, value: call.value });
     },

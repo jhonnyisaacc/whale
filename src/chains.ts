@@ -1,6 +1,6 @@
 import type { ChainRef } from "./domain.js";
 
-export type LiveSend = "eip1559" | "solana" | "hypercore" | "disabled";
+export type LiveSend = "eip1559" | "solana" | "hypercore";
 
 export type AggregatorId = "zeroex" | "lifi" | "jupiter" | "none";
 
@@ -38,7 +38,7 @@ const evm = (
   minNativeReserve,
   aggregator,
   enabledByDefault,
-  liveSend: key === "zksync" ? "disabled" : "eip1559",
+  liveSend: "eip1559",
   rpcEnv,
   defaultRpc,
   dexscreenerSlug,
@@ -82,7 +82,7 @@ export const CHAINS: readonly ChainSpec[] = [
       "https://docs.zksync.io/zksync-network/zksync-era/network-details",
       "https://docs.li.fi/llms.txt",
     ],
-    "0x Swap API does not list zkSync. Quotes use LI.FI with fromChain equal to toChain. Live send stays off because zkSync transactions are not standard EIP-1559.",
+    "0x Swap API does not list zkSync and KyberSwap marks it inactive, so quotes use LI.FI with fromChain equal to toChain. A LI.FI swap is signable only when its GenericSwapFacetV3 calldata decodes and ROUTER_ALLOWLIST_JSON lists the LI.FI diamond for 324. zkSync Era takes standard type-2 transactions and prices pubdata in gas, so gas times maxFeePerGas bounds the whole fee. The Turnkey policy renders no zkSync clause and hosted wallets leave it out until gate #80, so the support tier stays dry_run by default.",
   ),
   evm("base", 8453, "ETH", 0.001, "zeroex", "RPC_URL_8453", null, "base", [
     "https://docs.0x.org/docs/introduction/supported-chains",
@@ -283,6 +283,7 @@ export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
   56: { maxGas: 1_500_000n, maxFeePerGas: GWEI },
   137: { maxGas: 1_500_000n, maxFeePerGas: 3_000n * GWEI },
   143: { maxGas: 1_500_000n, maxFeePerGas: 1_000n * GWEI },
+  324: { maxGas: 6_000_000n, maxFeePerGas: GWEI / 4n },
   999: { maxGas: 1_500_000n, maxFeePerGas: 5n * GWEI },
   4663: { maxGas: 5_000_000n, maxFeePerGas: GWEI },
   42161: { maxGas: 5_000_000n, maxFeePerGas: GWEI },
@@ -290,6 +291,8 @@ export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
 };
 
 export const L1_DATA_FEE_CHAIN_IDS: ReadonlySet<number> = new Set([10, 8453, 81457, 534352]);
+
+export const TURNKEY_EXCLUDED_CHAIN_IDS: ReadonlySet<number> = new Set([324]);
 
 export type SignerChain = { key: string; chainId: number; l1DataFee?: { maxDataBytes: number; maxFeeWei: string } | null };
 
@@ -307,7 +310,7 @@ export function evmFeeLimits(raw: string | undefined): Record<number, EvmFeeLimi
   if (!raw) return limits;
   const parsed: unknown = JSON.parse(raw);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("EVM_FEE_LIMITS_JSON must be an object");
-  const evmIds = new Set(CHAINS.flatMap((chain) => (chain.chain.kind === "evm" && chain.liveSend !== "disabled" && !L1_DATA_FEE_CHAIN_IDS.has(chain.chain.chainId) ? [chain.chain.chainId] : [])));
+  const evmIds = new Set(CHAINS.flatMap((chain) => (chain.chain.kind === "evm" && !L1_DATA_FEE_CHAIN_IDS.has(chain.chain.chainId) ? [chain.chain.chainId] : [])));
   for (const [id, entry] of Object.entries(parsed)) {
     const { maxGas, maxFeePerGas } = (entry ?? {}) as Record<string, unknown>;
     const digits = (value: unknown) => typeof value === "string" && /^[1-9]\d*$/.test(value);

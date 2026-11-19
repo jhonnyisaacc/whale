@@ -23,6 +23,7 @@
     "check": "node scripts/check-file-size.mjs && node scripts/check-boundaries.mjs && tsc -p tsconfig.json && node --test dist/test/*.test.js && pnpm --filter @whale/web run build",
     "start:mcp": "node dist/src/mcp-server.js",
     "smoke": "tsc -p tsconfig.json && node scripts/smoke-entrypoints.mjs",
+    "check:install": "node scripts/check-install.mjs",
     "canary": "tsc -p tsconfig.json && node dist/src/canary.js",
     "policy:manifest": "tsc -p tsconfig.json && node scripts/turnkey-policy.mjs",
     "migrate": "node dist/src/db/migrate-cli.js"
