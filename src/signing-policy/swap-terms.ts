@@ -18,7 +18,7 @@ const SETTLER_ABI = parseAbi([
 // LI.FI GenericSwapFacetV3, from lifinance/contracts src/Facets/GenericSwapFacetV3.sol and LibSwap.SwapData.
 const LIFI_HEAD = "bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut";
 const LIFI_SWAP = "(address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
-const LIFI_ABI = parseAbi([
+export const LIFI_ABI = parseAbi([
   `function swapTokensSingleV3ERC20ToERC20(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
   `function swapTokensSingleV3ERC20ToNative(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
   `function swapTokensSingleV3NativeToERC20(${LIFI_HEAD}, ${LIFI_SWAP} _swapData) payable`,
@@ -37,8 +37,7 @@ export type SwapTerms =
 
 type LifiSwapData = { sendingAssetId: string; receivingAssetId: string; fromAmount: bigint; requiresDeposit: boolean };
 
-// The ERC20 entry points pull every swap marked requiresDeposit from the caller (the single ones pull their one swap),
-// so the deposit is that sum, and a route that pulls a second token is not decoded.
+// The ERC20 entry points pull every swap marked requiresDeposit from the caller, and the single ones pull their one swap.
 function lifiTerms(data: Hex): SwapTerms | null {
   const call = decoded(() => decodeFunctionData({ abi: LIFI_ABI, data }));
   if (!call) return null;

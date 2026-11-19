@@ -245,8 +245,6 @@ export function lifiHeaders(config: AppConfig): Record<string, string> {
   return config.keys.lifi ? { "x-lifi-api-key": config.keys.lifi } : {};
 }
 
-// LI.FI calldata targets its diamond with facet-specific encodings. A quote is signable when it calls a
-// GenericSwapFacetV3 entry point the signer decodes, on a diamond the chain's router allowlist lists.
 function lifiSignable(config: AppConfig, body: unknown, chainId: number): boolean {
   const request = (body as { transactionRequest?: { to?: unknown; data?: unknown } }).transactionRequest;
   const to = request?.to;

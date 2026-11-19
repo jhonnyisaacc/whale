@@ -147,8 +147,7 @@ fn lifi_swaps(args: &[u8], single: bool) -> Option<Vec<LifiSwap>> {
         .collect()
 }
 
-// The ERC20 entry points pull every swap marked requiresDeposit from the caller (a single swap always),
-// so the sell is that sum, and a route that pulls a second token is not read.
+// The ERC20 entry points pull every swap marked requiresDeposit from the caller, and the single ones pull their one swap.
 fn lifi_terms(head: &[u8], args: &[u8]) -> Option<SwapTerms> {
     let (kind, single) = ["ERC20ToERC20", "ERC20ToNative", "NativeToERC20"]
         .into_iter()

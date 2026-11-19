@@ -191,7 +191,7 @@ function decodedMinOut(data: Hex, provider: "kyberswap" | "zeroex" | "lifi", own
   if (terms.provider === "kyberswap" && (!sameToken(terms.sellToken, leg.sellAddress) || terms.sellAmount !== BigInt(leg.sellAmount))) {
     throw new BroadcastError("Kyber calldata does not spend the leg's sell token and amount", false);
   }
-  if (terms.provider === "lifi" && !lifiPullsLeg(terms.deposit, leg)) throw new BroadcastError("LI.FI calldata does not pull the leg's sell token and amount", false);
+  if (terms.provider === "lifi" && !lifiDepositMatchesLeg(terms.deposit, leg)) throw new BroadcastError("LI.FI calldata does not pull the leg's sell token and amount", false);
   if (terms.provider === "zeroex" && !terms.exec) throw new BroadcastError("direct Settler calls are not accepted without decodable actions", false);
   if (terms.provider === "zeroex" && terms.exec && (!sameToken(terms.exec.token, leg.sellAddress) || terms.exec.amount !== BigInt(leg.sellAmount))) {
     throw new BroadcastError("0x exec does not spend the leg's sell amount", false);
@@ -199,8 +199,7 @@ function decodedMinOut(data: Hex, provider: "kyberswap" | "zeroex" | "lifi", own
   return terms.minOut;
 }
 
-// A native sell pays through the transaction value, which prepareEvmLeg checks, so it must pull no token.
-function lifiPullsLeg(deposit: { token: string; amount: bigint } | null, leg: RouteLeg): boolean {
+function lifiDepositMatchesLeg(deposit: { token: string; amount: bigint } | null, leg: RouteLeg): boolean {
   if (NATIVE_SELL.has(leg.sellAddress.toLowerCase())) return deposit === null;
   return deposit !== null && sameToken(deposit.token, leg.sellAddress) && deposit.amount === BigInt(leg.sellAmount);
 }

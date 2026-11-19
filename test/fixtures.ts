@@ -1,5 +1,6 @@
 import { decodeFunctionData, encodeFunctionData, parseAbi, type Hex } from "viem";
 import type { SendResult } from "../src/domain.js";
+import { LIFI_ABI } from "../src/signing-policy/swap-terms.js";
 
 export function landedSend(): SendResult {
   return {
@@ -91,20 +92,8 @@ export function tagOf(data: Hex | undefined): Hex | undefined {
   }
 }
 
-// LI.FI GenericSwapFacetV3, from lifinance/contracts src/Facets/GenericSwapFacetV3.sol and LibSwap.SwapData.
-const LIFI_HEAD = "bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut";
-const LIFI_SWAP = "(address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
-export const LIFI_V3_ABI = parseAbi([
-  `function swapTokensSingleV3ERC20ToERC20(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
-  `function swapTokensSingleV3ERC20ToNative(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
-  `function swapTokensSingleV3NativeToERC20(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
-  `function swapTokensMultipleV3ERC20ToERC20(${LIFI_HEAD}, ${LIFI_SWAP}[] _swapData)`,
-  `function swapTokensMultipleV3ERC20ToNative(${LIFI_HEAD}, ${LIFI_SWAP}[] _swapData)`,
-  `function swapTokensMultipleV3NativeToERC20(${LIFI_HEAD}, ${LIFI_SWAP}[] _swapData)`,
-] as const);
-
 export type LifiSwap = { sell: string; buy: string; amount: bigint; deposit?: boolean };
-export type LifiFunction = (typeof LIFI_V3_ABI)[number] extends infer Item ? (Item extends { name: infer Name } ? Name : never) : never;
+export type LifiFunction = (typeof LIFI_ABI)[number] extends infer Item ? (Item extends { name: infer Name } ? Name : never) : never;
 
 export function lifiData(functionName: LifiFunction, recipient: string, minOut: bigint, swaps: readonly LifiSwap[], tag: Hex = "0x01"): Hex {
   const data = swaps.map((swap) => ({
@@ -118,5 +107,5 @@ export function lifiData(functionName: LifiFunction, recipient: string, minOut: 
   }));
   const head = [`0x${"00".repeat(32)}`, "whale", "", recipient as Hex, minOut] as const;
   const swapData = functionName.startsWith("swapTokensSingle") ? data[0] : data;
-  return encodeFunctionData({ abi: LIFI_V3_ABI, functionName, args: [...head, swapData] } as Parameters<typeof encodeFunctionData>[0]);
+  return encodeFunctionData({ abi: LIFI_ABI, functionName, args: [...head, swapData] } as Parameters<typeof encodeFunctionData>[0]);
 }
