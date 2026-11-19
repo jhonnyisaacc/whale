@@ -47,6 +47,6 @@ pnpm run check
 
 ## Still open
 
-Live bridging. `bridge` fetches and ranks routes but never signs or sends one. deBridge is not called, because its fixed fee is charged in the native coin outside the quote and this path has no native price.
+Live bridging. `executeBridge` in `src/bridge/execute.ts` signs LI.FI (through its AcrossV4 facet) and Across routes between EVM chains: screening on both chains, the bridge reservation on the spend journal, a simulation of the approval and bridge together, and a signing-policy rule that binds the destination chain, the recipient, the refund address, and the exact charge. With `WHALE_BROADCAST` unset it stops at a signed, unsent transaction. No MCP tool or CLI command calls it yet, and hosted live sends stay behind gate #80. `bridge` still fetches and ranks routes without signing. Relay stays quote-only, because its deposit names no destination chain or recipient. deBridge is not called, because its fixed fee is charged in the native coin outside the quote and this path has no native price.
 
 Local signing for live transfers. The keystore can decrypt for a dry-run. `loadManagedSigner` refuses raw keys when the process is live and requires Turnkey. A live `transfer` command returns `skipped`. The TODO is in `src/commands.ts`.
