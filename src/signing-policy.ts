@@ -2,10 +2,10 @@ import { PublicKey } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { isAllowanceHolderExec, swapTerms, type SwapTerms } from "./signing-policy/swap-terms.js";
 import { chainByEvmId, CHAINS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from "./chains.js";
-import { assertTradableAction, type HyperliquidAction } from "./hyperliquid.js";
 
 export * from "./signing-policy/swap-terms.js";
 export * from "./signing-policy/turnkey.js";
+export * from "./signing-policy/hypercore.js";
 
 export const JUPITER_PROGRAM_ID = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
@@ -367,11 +367,4 @@ function checkSolanaSigning(input: SolanaSigningInput): void {
   if (tips > BigInt(input.maxTipLamports)) throw new Error("solana jito tip exceeds the signing policy");
   const priority = unitPrice === null ? 0n : (unitPrice * (unitLimit ?? MAX_COMPUTE_UNITS) + 999_999n) / 1_000_000n;
   if (priority + tips > BigInt(input.maxPriorityLamports)) throw new Error("solana priority fee exceeds the signing policy");
-}
-
-export function assertHyperliquidSigning(action: { type: string }, maxLeverage: number): asserts action is HyperliquidAction {
-  refusedOn("hypercore", () => {
-    assertTradableAction(action);
-    if (action.type === "updateLeverage" && action.leverage > maxLeverage) throw new Error("leverage exceeds the signing policy");
-  });
 }

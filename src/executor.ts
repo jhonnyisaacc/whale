@@ -6,7 +6,7 @@ import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
 import { spendDay, type SpendScope } from "./spend.js";
 import { pickRoute } from "./routing.js";
-import { buildLeverage, buildOrder, cappedLimitPx, orderSize, wirePrice, type HyperliquidAction } from "./hyperliquid.js";
+import { buildOrder, cappedLimitPx, orderSize, tradeActions, wirePrice, type HyperliquidAction } from "./hyperliquid.js";
 import { keepScreened, publicRoute, quotePlan } from "./executor/quotes.js";
 import { liquidityLookup, type LiquidityOf } from "./executor/liquidity.js";
 import { liveTierBlocked, sendBlock, type SupportTier } from "./support.js";
@@ -363,7 +363,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
       reportsOf(deps).set(intent.idempotencyKey, report);
       return report;
     }
-    const actions: HyperliquidAction[] = market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, 1), order];
+    const actions = tradeActions(market, order);
     if (deps.mode === "dry_run") {
       const report: ExecutionReport = {
         idempotencyKey: intent.idempotencyKey,
