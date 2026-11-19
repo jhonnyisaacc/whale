@@ -186,6 +186,12 @@ export function createMemoryJournal() {
         return decision;
       });
     },
+    settle(key: string, status: "committed" | "released") {
+      return lock(() => {
+        const row = rows.get(key);
+        if (row?.status === "reserved") row.status = status;
+      });
+    },
   };
 }
 
