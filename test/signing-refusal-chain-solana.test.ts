@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { PublicKey } from "@solana/web3.js";
-import { assertHyperliquidSigning, assertSolanaSigning, JITO_TIP_ACCOUNTS, JUPITER_PROGRAM_ID, SOLANA_BASE_PROGRAMS, wrappedSolAccount, type SolanaInstruction } from "../src/signing-policy.js";
+import { assertHyperliquidSigning, assertSolanaSigning, associatedTokenAddress, JITO_TIP_ACCOUNTS, JUPITER_PROGRAM_ID, SOLANA_BASE_PROGRAMS, wrappedSolAccount, type SolanaInstruction } from "../src/signing-policy.js";
 
 const key = (fill: number) => new PublicKey(Buffer.alloc(32, fill)).toBase58();
 const PAYER = key(1);
@@ -12,15 +12,19 @@ const MINT = key(5);
 const SYSTEM = "11111111111111111111111111111111";
 const COMPUTE = "ComputeBudget111111111111111111111111111111";
 const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ATA = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const TIP = JITO_TIP_ACCOUNTS[0];
-const ROUTE = createHash("sha256").update("global:route").digest().subarray(0, 8);
+const discriminator = (name: string) => createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
+const ROUTE = discriminator("route");
+const SHARED_ROUTE = discriminator("shared_accounts_route");
 
 const u32 = (value: number) => { const out = Buffer.alloc(4); out.writeUInt32LE(value); return out; };
 const u64 = (value: bigint) => { const out = Buffer.alloc(8); out.writeBigUInt64LE(value); return out; };
 const ix = (program: string, accounts: (string | null)[], data: Uint8Array): SolanaInstruction => ({ program, accounts, data });
 const sol = (from: string | null, to: string, lamports = 1n) => ix(SYSTEM, [from, to], Buffer.concat([u32(2), u64(lamports)]));
-const route = (authority: string, destination: string, fee = JUPITER_PROGRAM_ID) => ix(JUPITER_PROGRAM_ID, [TOKEN, authority, PAYER, destination, JUPITER_PROGRAM_ID, MINT, fee], ROUTE);
+const route = (authority: string, destination: string, fee = JUPITER_PROGRAM_ID, source: string | null = MINT, step = MINT) =>
+  ix(JUPITER_PROGRAM_ID, [TOKEN, MINT, authority, source, MINT, MINT, destination, MINT, MINT, fee, JUPITER_PROGRAM_ID, MINT, JUPITER_PROGRAM_ID, step], SHARED_ROUTE);
 
 function sign(instructions: SolanaInstruction[], feePayer = PAYER): void {
   assertSolanaSigning({
@@ -51,6 +55,10 @@ const refusals: Refusal[] = [
   ["a jupiter route under another authority", "solana", "jupiter transfer authority is not the hot wallet", () => sign([route(STRANGER, wrappedSolAccount(PAYER))])],
   ["a jupiter route with a platform fee", "solana", "jupiter platform fee account is set", () => sign([route(PAYER, wrappedSolAccount(PAYER), STRANGER)])],
   ["a jupiter route paying a stranger", "solana", "jupiter destination is not a hot wallet token account", () => sign([route(PAYER, STRANGER)])],
+  ["a jupiter buy into a Token-2022 account", "solana", "jupiter destination is not a hot wallet token account", () => sign([route(PAYER, associatedTokenAddress(PAYER, MINT, TOKEN_2022))])],
+  ["a jupiter route that passes the hot wallet to a step", "solana", "jupiter passes the hot wallet to an account other than the transfer authority", () => sign([route(PAYER, wrappedSolAccount(PAYER), JUPITER_PROGRAM_ID, MINT, PAYER)])],
+  ["a jupiter source from a lookup table", "solana", "jupiter source is not a static key", () => sign([route(PAYER, wrappedSolAccount(PAYER), JUPITER_PROGRAM_ID, null)])],
+  ["a jupiter route instruction", "solana", `solana instruction is not allowed ${JUPITER_PROGRAM_ID} ${ROUTE.toString("hex")}`, () => sign([ix(JUPITER_PROGRAM_ID, [TOKEN, PAYER, MINT, wrappedSolAccount(PAYER)], ROUTE)])],
   ["an associated account funded by a stranger", "solana", "associated account funder is not the hot wallet", () => sign([ix(ATA, [STRANGER, MINT, PAYER, MINT], Buffer.from([1]))])],
   ["an associated account for a stranger", "solana", "associated account owner is not allowlisted", () => sign([ix(ATA, [PAYER, MINT, STRANGER, MINT], Buffer.from([1]))])],
   ["a jito tip above the cap", "solana", "solana jito tip exceeds the signing policy", () => sign([sol(PAYER, TIP, 10_001n)])],
@@ -69,6 +77,7 @@ const accepted: [string, () => void][] = [
   ["a close paying the hot wallet", () => sign([ix(TOKEN, [MINT, PAYER, PAYER], Buffer.from([9]))])],
   ["an associated account for the hot wallet", () => sign([ix(ATA, [PAYER, MINT, PAYER, MINT], Buffer.from([1]))])],
   ["a jupiter route into wrapped SOL", () => sign([route(PAYER, wrappedSolAccount(PAYER))])],
+  ["a jupiter route into the hot wallet's token account", () => sign([route(PAYER, associatedTokenAddress(PAYER, MINT, TOKEN))])],
   ["leverage within the cap", () => assertHyperliquidSigning(leverage, { maxLeverage: 3, maxOrderUsd: 100 })],
   ["a hyperliquid cancel", () => assertHyperliquidSigning({ type: "cancel", cancels: [{ a: 0, o: 1 }] } as { type: string }, { maxLeverage: 3, maxOrderUsd: 100 })],
 ];

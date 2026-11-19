@@ -1,6 +1,8 @@
 pub mod abi;
 pub mod evm;
 pub mod hypercore;
+pub mod jupiter;
+mod jupiter_swaps;
 pub mod keystore;
 pub mod ledger;
 pub mod net;
@@ -60,10 +62,20 @@ pub fn run_job(
                 Some(Ok(bytes)) => bytes,
                 _ => return refused(vec!["message must be base64".into()]),
             };
+            let buy_mint = match job.get("buyMint") {
+                None => None,
+                Some(value) => match value.as_str().map(solana::key) {
+                    Some(Ok(mint)) => Some(mint),
+                    _ => return refused(vec!["buyMint must be a base58 Solana address".into()]),
+                },
+            };
             match solana::parse(&bytes) {
                 Ok(message) => {
-                    let decision =
-                        policy.check_solana(&message, keys.solana.verifying_key().to_bytes());
+                    let decision = policy.check_solana(
+                        &message,
+                        keys.solana.verifying_key().to_bytes(),
+                        buy_mint,
+                    );
                     (
                         "solana".into(),
                         decision,

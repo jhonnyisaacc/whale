@@ -30,6 +30,34 @@ const CHAIN_KEYS: [(u64, &str); 13] = [
     (143, "monad"),
 ];
 
+pub enum L1DataFee {
+    None,
+    Unbounded,
+    Budget {
+        max_data_bytes: usize,
+        max_fee_wei: u128,
+    },
+}
+
+pub fn l1_data_fee(chain_id: u64) -> L1DataFee {
+    match chain_id {
+        10 => L1DataFee::Budget {
+            max_data_bytes: 20_480,
+            max_fee_wei: 70_000_000_000_000,
+        },
+        8453 => L1DataFee::Budget {
+            max_data_bytes: 20_480,
+            max_fee_wei: 60_000_000_000_000,
+        },
+        534352 => L1DataFee::Budget {
+            max_data_bytes: 4_096,
+            max_fee_wei: 5_000_000_000_000_000,
+        },
+        81457 => L1DataFee::Unbounded,
+        _ => L1DataFee::None,
+    }
+}
+
 pub fn chain_label(chain_id: u64) -> String {
     let key = CHAIN_KEYS
         .iter()

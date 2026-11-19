@@ -60,7 +60,15 @@ Direct `Settler.execute` is refused while its `actions` are not decoded: a recip
 
 So each swap can lose its whole sold amount. What a compromised Whale can move in a day is bounded by the daily limits, the fee caps, and `evm.maxValueWei`, not by who the calldata names. [ADR 0004](../docs/adr/0004-smart-account-level.md) reaches the same conclusion for the smart account level. Set each limit to what you accept losing in a day. `allowUndecodedRouterCalls` lifts this bound for tokens: an undecoded call to a listed router can spend an allowance approved on an earlier day without charging today, so keep it false unless you accept that.
 
-Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. Chains 10 (Optimism), 8453 (Base), 81457 (Blast), and 534352 (Scroll) are currently refused because each charges a separate L1 data fee that cannot be bounded from the transaction alone; charging only the L2 gas would understate the native spend.
+Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. Chains 10 (Optimism), 8453 (Base), 81457 (Blast), and 534352 (Scroll) also charge a separate L1 data fee, which the transaction does not cap and the signer cannot read from the chain. On Optimism, Base, and Scroll the signer adds a fixed L1 fee budget to `gas` times `maxFeePerGas`, both for the `evm.maxFeeWei` check and for the `<chainId>:native` charge, and refuses calldata above the cap that budget covers:
+
+| Chain | Calldata cap | L1 fee budget |
+| --- | --- | --- |
+| Optimism (10) | 20,480 bytes | 70,000,000,000,000 wei |
+| Base (8453) | 20,480 bytes | 60,000,000,000,000 wei |
+| Scroll (534352) | 4,096 bytes | 5,000,000,000,000,000 wei |
+
+The network still charges the real L1 fee. The budget is bookkeeping, so the native daily limit fills faster than the real spend. Each budget covers a transaction at the cap with random calldata at an L1 base fee of 20 gwei and a blob base fee of 2 gwei, measured with `node scripts/l1-fee-budget.mjs`. Above those prices the real fee can pass the budget. Blast is refused: its fee oracle could not be measured, so it has no budget. The table lives in `l1_data_fee` in `src/evm.rs`. `tests/l1_fee.rs` checks it against `vectors/chains.json`, which `generate.mjs` writes from the app's `DEFAULT_EVM_FEE_LIMITS`.
 
 On Solana, every program must be one of these:
 - System, Compute Budget, Token, Token-2022, or Associated Token Account;
@@ -79,7 +87,30 @@ Every Solana transaction also pays its fee from the wallet. The 5000 lamport sig
 
 A rule that needs an account loaded from an address lookup table refuses.
 
-A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.
+A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked.
+
+The signer parses a message the way the runtime does. It refuses an account index at or past the static plus lookup-table account count, a compact length that is not canonical or is above u16, bytes after the lookups, and any message version other than legacy and v0.
+
+### Jupiter
+
+When Jupiter v6 is in `solana.programs`, the signer signs only its `shared_accounts_route` instruction. It refuses `route`, the token ledger, exact-out, v2 and attestation routes, and every other Jupiter instruction. A Solana job that holds a Jupiter swap must name the bought mint in `buyMint`. The signer reads these accounts of the instruction, and each must be a static key:
+
+| Slot | Account | Rule |
+| --- | --- | --- |
+| 2 | Transfer authority | This wallet |
+| 3 | Source | This wallet's wrapped SOL account, which counts against `solana:native`, or its Token account for a mint with a `solana:<mint>` daily limit |
+| 6 | Destination | This wallet's Token account for `buyMint`. A Token-2022 `buyMint` is refused for now |
+| 9 | Platform fee | Unset, which Jupiter encodes as its own program id |
+
+This wallet's key may appear in no other slot of the instruction, at index 0 or at any other static index. A signer cannot be loaded from a lookup table, so a route step cannot use this wallet's signature to move its tokens. Every other slot may come from a lookup table, because the rule does not read it. The signer never resolves lookup tables.
+
+`buyMint` binds the destination by derivation. The signer derives this wallet's associated token account for `buyMint` under the Token program and requires the destination to equal it. A false `buyMint` derives another address, and the swap is refused. The signer trusts `buyMint` for nothing else. The signed bytes, and so the ledger's work digest, stay the message alone.
+
+The signer decodes the whole argument list: every route plan step with its `Swap` variant, `percent`, `inputIndex` and `outputIndex`, then `inAmount`, `quotedOutAmount`, `slippageBps` and `platformFeeBps`, with no bytes left over. `inAmount` counts against the source token's daily limit. A step through a `Swap` variant the signer does not know, or one whose payload it cannot size, is refused. Today that is `DynamicV1` and `DynamicV2`. The payload sizes in `src/jupiter_swaps.rs` come from Jupiter's on-chain Anchor IDL, read from account `C88XWfp26heEmDkmfSzeXP7Fd7GQJ2j9dDTUsyiZbUTa` at slot 469066528 on 2026-11-13 and unchanged at slot 471382659 on 2026-11-19. The inflated IDL JSON has SHA-256 `11e04af55c8b102ac4230b55cb77df7ab1ce30295f18e5cdb2432d8279e7b981`. `node vectors/jupiter-swaps.mjs` reads the current IDL and rewrites the table.
+
+**The Jupiter rule bounds what a swap sells, not what it gets back.** A compromised Whale can set `quotedOutAmount` to 0 and route through a pool it controls, so each swap can lose its whole `inAmount`. That amount counts against the sold token's daily limit, as an EVM swap's does. A token with no `solana:<mint>` limit cannot be sold through Jupiter. Set each limit to what you accept losing in a day.
+
+Some real Jupiter routes pass this wallet to a step, for example a Manifest step. The signer refuses those. `vectors/jupiter-capture.mjs` rebuilds `vectors/jupiter.json` from `lite-api.jup.ag` for a public key whose seed is in that file and for a funded public address, and `vectors/jupiter-simulate.mjs` simulates the funded cases on mainnet with `sigVerify` off, as is and with a foreign token program in slot 0.
 
 On HyperCore, the policy needs a `hypercore` section. The signer signs only for its `network` (`mainnet` or `testnet`). It refuses a job for the other network.
 
