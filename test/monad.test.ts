@@ -51,8 +51,8 @@ test("an operator list for chain 143 replaces the Monad default, an empty list s
   assert.deepEqual(base.routerAllowlist, { 143: [ALLOWANCE_HOLDER, KYBER_ROUTER], 8453: [OTHER] });
 });
 
-test("the deployment manifest, the gateway delegation, and the Turnkey document carry the same Monad routers", () => {
-  const manifest = parseDeploymentManifest({
+const manifestWith = (routers: Record<string, string[]>) =>
+  parseDeploymentManifest({
     version: 1,
     turnkey: {
       userId: "11111111-1111-4111-8111-111111111111",
@@ -61,14 +61,39 @@ test("the deployment manifest, the gateway delegation, and the Turnkey document 
       solanaAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       hyperliquidAddress: null,
     },
-    routers: { "42161": [OTHER] },
+    routers,
     maxValueWei: "2000000000000000",
   });
-  assert.deepEqual(manifestRouters(manifest)[143], [ALLOWANCE_HOLDER, KYBER_ROUTER]);
-  const monadClause = (manifestPolicyDocument(manifest) as { condition: string }[]).find((row) => row.condition.includes("eth.tx.chain_id == 143"));
-  assert.ok(monadClause?.condition.includes(ALLOWANCE_HOLDER) && monadClause.condition.includes(KYBER_ROUTER), "the Turnkey EVM clause names both Monad routers");
-  const env = { EXECUTOR_AUTH_TOKEN: "executor-token-123456", WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(manifest), ROUTER_ALLOWLIST_JSON: JSON.stringify({ "42161": [OTHER] }) };
-  assert.deepEqual(loadConfig(env).routerAllowlist[143], [ALLOWANCE_HOLDER, KYBER_ROUTER]);
+const monadClause = (document: unknown[]) => (document as { condition: string }[]).find((row) => row.condition.includes("eth.tx.chain_id == 143"));
+const withManifest = (manifest: object, routers?: object) => ({
+  EXECUTOR_AUTH_TOKEN: "executor-token-123456",
+  WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(manifest),
+  ...(routers ? { ROUTER_ALLOWLIST_JSON: JSON.stringify(routers) } : {}),
+});
+
+test("a manifest that does not name 143 renders no Monad routers and no Monad Turnkey clause", () => {
+  const manifest = manifestWith({ "42161": [OTHER] });
+  assert.deepEqual(manifestRouters(manifest), { 42161: [OTHER] });
+  assert.equal(monadClause(manifestPolicyDocument(manifest)), undefined);
+  assert.deepEqual(loadConfig(withManifest(manifest)).routerAllowlist, { 42161: [OTHER] });
+});
+
+test("a manifest that names 143 carries those routers into the config and the Turnkey document", () => {
+  const manifest = manifestWith({ "143": [ALLOWANCE_HOLDER, KYBER_ROUTER] });
+  assert.deepEqual(loadConfig(withManifest(manifest)).routerAllowlist, { 143: [ALLOWANCE_HOLDER, KYBER_ROUTER] });
+  const clause = monadClause(manifestPolicyDocument(manifest));
+  assert.ok(clause?.condition.includes(ALLOWANCE_HOLDER) && clause.condition.includes(KYBER_ROUTER), "the Turnkey EVM clause names both Monad routers");
+});
+
+test("a manifest boots beside a ROUTER_ALLOWLIST_JSON that states the same routers, with or without a 143 opt-out", () => {
+  const manifest = manifestWith({ "42161": [OTHER] });
+  assert.deepEqual(loadConfig(withManifest(manifest, { "42161": [OTHER] })).routerAllowlist, { 42161: [OTHER] });
+  assert.deepEqual(loadConfig(withManifest(manifest, { "42161": [OTHER], "143": [] })).routerAllowlist, { 42161: [OTHER] });
+  assert.throws(() => loadConfig(withManifest(manifest, { "42161": [OTHER], "143": [KYBER_ROUTER] })), /disagree on routers/);
+  assert.throws(() => loadConfig(withManifest(manifestWith({ "143": [KYBER_ROUTER] }), { "143": [] })), /disagree on routers/);
+});
+
+test("the gateway delegation fills the Monad default when ROUTER_ALLOWLIST_JSON does not name 143", () => {
   const delegation = delegationFromEnv({ TURNKEY_DELEGATE_API_PUBLIC_KEY: `02${"a".repeat(64)}`, ROUTER_ALLOWLIST_JSON: JSON.stringify({ "42161": [OTHER] }) });
   assert.deepEqual(delegation?.routers[143], [ALLOWANCE_HOLDER, KYBER_ROUTER]);
 });

@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_ROUTERS } from "../src/chains.js";
 import { loadConfig } from "../src/config.js";
 import { manifestPolicyDocument, manifestRouters, parseDeploymentManifest, verifyTurnkeyPolicies } from "../src/deployment-manifest.js";
 import { defaultSupportTier, supportByChain } from "../src/support.js";
 
 const ROUTER = "0x1111111111111111111111111111111111111111";
-const MONAD_ROUTERS = (DEFAULT_ROUTERS[143] ?? []).map((item) => item.toLowerCase());
 const manifest = {
   version: 1,
   turnkey: {
@@ -24,7 +22,7 @@ const manifest = {
 
 test("a manifest parses and drives routers and the Turnkey document from one source", () => {
   const parsed = parseDeploymentManifest(manifest);
-  assert.deepEqual(manifestRouters(parsed), { 143: MONAD_ROUTERS, 42161: [ROUTER.toLowerCase()] });
+  assert.deepEqual(manifestRouters(parsed), { 42161: [ROUTER.toLowerCase()] });
   const document = manifestPolicyDocument(parsed) as { condition: string }[];
   assert.ok(document.some((row) => row.condition.includes("42161") && row.condition.includes(ROUTER.toLowerCase())));
   assert.ok(document.some((row) => row.condition.includes("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")));
@@ -45,7 +43,7 @@ test("policy verification passes on equality and names a missing policy", () => 
 test("config takes routers from the manifest and refuses a disagreeing legacy allowlist", () => {
   const base = { EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456", WALLET_DEPLOYMENT_MANIFEST_JSON: JSON.stringify(manifest) };
   const config = loadConfig(base);
-  assert.deepEqual(config.routerAllowlist, { 143: MONAD_ROUTERS, 42161: [ROUTER.toLowerCase()] });
+  assert.deepEqual(config.routerAllowlist, { 42161: [ROUTER.toLowerCase()] });
   assert.equal(config.maxValueWei, 2000000000000000n);
   assert.throws(() => loadConfig({ ...base, ROUTER_ALLOWLIST_JSON: JSON.stringify({ "42161": ["0x2222222222222222222222222222222222222222"] }) }), /disagree/);
 });
