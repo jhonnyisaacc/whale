@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -53,7 +53,6 @@ if (readStamp() !== hash) {
     process.stderr.write(`whale: ${error.message}. Run pnpm install --frozen-lockfile && pnpm run build in ${root}\n`);
     process.exit(1);
   }
-  mkdirSync(path.dirname(stamp), { recursive: true });
   writeFileSync(stamp, hash);
 }
 const { main } = await import(pathToFileURL(server).href);
