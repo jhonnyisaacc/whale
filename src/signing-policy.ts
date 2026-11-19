@@ -10,8 +10,8 @@ export * from "./signing-policy/turnkey.js";
 export const JUPITER_PROGRAM_ID = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 const COMPUTE_BUDGET_PROGRAM = "ComputeBudget111111111111111111111111111111";
-const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+export const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const ATA_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 
 export const SOLANA_BASE_PROGRAMS = [JUPITER_PROGRAM_ID, SYSTEM_PROGRAM, COMPUTE_BUDGET_PROGRAM, TOKEN_PROGRAM, TOKEN_2022_PROGRAM, ATA_PROGRAM] as const;
@@ -271,29 +271,24 @@ const TOKEN_RULES: ProgramRules = {
   },
 };
 
-type JupiterLayout = { authority: number; destinations: readonly number[]; mint: number; platformFee: number };
+export const SHARED_ROUTE_SLOT = { authority: 2, source: 3, destination: 6, sourceMint: 7, destinationMint: 8, platformFee: 9 } as const;
 
-function jupiterRoute(layout: JupiterLayout): InstructionRule {
-  return (ix, context) => {
-    if (account(ix, layout.authority) !== context.payer) throw new Error("jupiter transfer authority is not the hot wallet");
-    if (account(ix, layout.platformFee) !== JUPITER_PROGRAM_ID) throw new Error("jupiter platform fee account is set");
-    const mint = ix.accounts[layout.mint];
-    const mints = mint ? [mint] : SOLANA_QUOTE_MINTS;
-    for (const index of layout.destinations) {
-      const destination = account(ix, index);
-      if (destination === JUPITER_PROGRAM_ID && index !== layout.destinations[0]) continue;
-      if (destination !== context.wrappedSol && !ownedTokenAccount(destination, [context.payer], mints)) {
-        throw new Error("jupiter destination is not a hot wallet token account");
-      }
-    }
-  };
+function sharedAccountsRoute(ix: SolanaInstruction, context: SolanaContext): void {
+  const slot = SHARED_ROUTE_SLOT;
+  if (account(ix, slot.authority) !== context.payer) throw new Error("jupiter transfer authority is not the hot wallet");
+  if (ix.accounts.some((key, position) => position !== slot.authority && key === context.payer)) {
+    throw new Error("jupiter passes the hot wallet to an account other than the transfer authority");
+  }
+  if (!ix.accounts[slot.source]) throw new Error("jupiter source is not a static key");
+  if (account(ix, slot.platformFee) !== JUPITER_PROGRAM_ID) throw new Error("jupiter platform fee account is set");
+  const destination = account(ix, slot.destination);
+  const mint = ix.accounts[slot.destinationMint];
+  const mints = mint ? [mint] : SOLANA_QUOTE_MINTS;
+  if (destination !== context.wrappedSol && !mints.some((candidate) => associatedTokenAddress(context.payer, candidate, TOKEN_PROGRAM) === destination)) {
+    throw new Error("jupiter destination is not a hot wallet token account");
+  }
 }
 
-const ROUTE = jupiterRoute({ authority: 1, destinations: [3, 4], mint: 5, platformFee: 6 });
-const SHARED_ROUTE = jupiterRoute({ authority: 2, destinations: [6], mint: 8, platformFee: 9 });
-
-// Account layouts follow the published Jupiter v6 IDL. Quotes are always exactIn, so the exact-out routes
-// (exact_out_route, shared_accounts_exact_out_route) and the v2 routes are not listed and are denied.
 const SOLANA_INSTRUCTION_TABLE: Readonly<Record<string, ProgramRules>> = {
   [SYSTEM_PROGRAM]: {
     discriminator: (data) => (data.length >= 4 ? String(Buffer.from(data).readUInt32LE(0)) : "short"),
@@ -325,10 +320,7 @@ const SOLANA_INSTRUCTION_TABLE: Readonly<Record<string, ProgramRules>> = {
   [JUPITER_PROGRAM_ID]: {
     discriminator: (data) => Buffer.from(data.subarray(0, 8)).toString("hex"),
     rules: {
-      e517cb977ae3ad2a: ROUTE,
-      "96564774a75d0e68": ROUTE,
-      c1209b3341d69c81: SHARED_ROUTE,
-      e6798f50779f6aaa: SHARED_ROUTE,
+      c1209b3341d69c81: sharedAccountsRoute,
     },
   },
 };
