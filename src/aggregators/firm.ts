@@ -35,6 +35,7 @@ export async function jupiterSwap(
         userPublicKey: owner,
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
+        useSharedAccounts: true,
         prioritizationFeeLamports: jupiterFees(config),
       }),
     },
