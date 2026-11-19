@@ -125,3 +125,23 @@ test("a bridge approval may name only the verified contract and the exact deposi
   assert.throws(sign(approve(ATTACKER, 2_000_000n), approval), /approval spender is not an allowlisted router/);
   assert.throws(sign(approve(across.tx.to, 2n ** 255n), { ...approval, approval: { token: USDC, amount: 2n ** 255n } }), /approval amount is not the exact sell amount/);
 });
+
+test("the app's bridge rule and whale-signer decide every bridge vector the same way", () => {
+  type Vector = { name: string; expect: string; reason?: string; job: { chainId: number; tx: { to: string; data: Hex; value: string } } };
+  const vectors = JSON.parse(readFileSync(new URL("../../signer/vectors/evm.json", import.meta.url), "utf8")) as { own: string; cases: Vector[] };
+  const policy = JSON.parse(readFileSync(new URL("../../signer/vectors/policy.json", import.meta.url), "utf8")) as { evm: { destinations: string[] } };
+  const bridges = vectors.cases.filter((entry) => / bridge |Across|Relay/.test(entry.name) && entry.job.tx.to.toLowerCase() !== USDC.toLowerCase() && !entry.reason?.includes("daily limit"));
+  assert.ok(bridges.length >= 18, `found ${bridges.length} bridge vectors`);
+  for (const entry of bridges) {
+    const { chainId, tx } = entry.job;
+    const charge = bridgeTerms(tx.data)?.charge;
+    const decide = sign({ to: tx.to, data: tx.data, value: tx.value }, { chainId, owner: vectors.own, withdrawAllowlist: policy.evm.destinations, maxValueWei: 10n, ...(charge ? { charge } : {}) });
+    let decision = "signed";
+    try {
+      decide();
+    } catch {
+      decision = "refused";
+    }
+    assert.equal(decision, entry.expect, entry.name);
+  }
+});
