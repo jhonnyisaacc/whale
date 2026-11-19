@@ -86,8 +86,7 @@ export function createHandler(deps: McpDeps) {
   };
 }
 
-const entry = process.argv[1] ?? "";
-if (entry.endsWith("mcp-server.js")) {
+export async function main(): Promise<void> {
   const deps: McpDeps = {
     executorUrl: process.env.EXECUTOR_URL ?? "http://127.0.0.1:8788",
     executorAuthToken: process.env.EXECUTOR_AUTH_TOKEN ?? process.env.AUTH_TOKEN ?? null,
@@ -137,3 +136,5 @@ if (entry.endsWith("mcp-server.js")) {
     })();
   });
 }
+
+if ((process.argv[1] ?? "").endsWith("mcp-server.js")) await main();

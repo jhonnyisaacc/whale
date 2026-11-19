@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { validateHostManifests } from "./host-manifests.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const copied = [".claude-plugin", ".codex-plugin", ".grok-plugin", ".muse-plugin", ".mcp.json", "plugin.json", "mcp.json", "package.json", "skills", "src/mcp-server.ts", "dist/src/mcp-server.js"];
+const copied = [".claude-plugin", ".codex-plugin", ".grok-plugin", ".muse-plugin", ".mcp.json", "plugin.json", "mcp.json", "package.json", "skills", "src/mcp-server.ts", "scripts/mcp-server.mjs", ".gitignore"];
 
 function fixture(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "whale-manifests-"));
@@ -38,9 +38,8 @@ test("the repo's five host manifests pass validation", () => {
   assert.deepEqual(validateHostManifests(repo), []);
 });
 
-test("a missing .mcp.json fails the Codex and Claude manifests", () => {
+test("a missing .mcp.json fails the Codex manifest", () => {
   rejects((dir) => rmSync(path.join(dir, ".mcp.json")), /^\.codex-plugin\/plugin\.json: .*\.mcp\.json/);
-  rejects((dir) => rmSync(path.join(dir, ".mcp.json")), /^\.claude-plugin\/plugin\.json: .*\.mcp\.json/);
 });
 
 test("a missing skills directory fails every host that loads skills", () => {
@@ -63,8 +62,9 @@ test("a skill directory without SKILL.md frontmatter fails", () => {
 });
 
 test("an MCP server whose entry file is gone fails", () => {
-  rejects((dir) => rmSync(path.join(dir, "dist/src/mcp-server.js")), /^\.codex-plugin\/plugin\.json: .*dist\/src\/mcp-server\.js/);
-  rejects((dir) => rmSync(path.join(dir, "src/mcp-server.ts")), /^\.muse-plugin\/plugin\.json: .*src\/mcp-server\.ts/);
+  for (const manifest of [".claude-plugin", ".codex-plugin", ".muse-plugin"]) {
+    rejects((dir) => rmSync(path.join(dir, "scripts/mcp-server.mjs")), new RegExp(`^\\${manifest}/plugin\\.json: MCP server whale runs scripts/mcp-server\\.mjs, which does not exist`));
+  }
   rejects((dir) => editJson(dir, ".mcp.json", (value) => { value.mcpServers = {}; }), /^\.codex-plugin\/plugin\.json: .*declares no MCP server/);
 });
 
@@ -103,8 +103,22 @@ test("SKILL.md frontmatter a YAML loader would drop fails", () => {
 });
 
 test("an MCP command under the plugin root variable or after node flags passes", () => {
-  accepts((dir) => editJson(dir, ".mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["${CLAUDE_PLUGIN_ROOT}/dist/src/mcp-server.js"]; }));
-  accepts((dir) => editJson(dir, ".mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["--enable-source-maps", "dist/src/mcp-server.js"]; }));
+  accepts((dir) => editJson(dir, ".mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.mjs"]; }));
+  accepts((dir) => editJson(dir, ".mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["--enable-source-maps", "scripts/mcp-server.mjs"]; }));
+});
+
+test("an MCP entry that a clone of the repo lacks fails every host that starts one", () => {
+  const built = ["dist/src/mcp-server.js"];
+  rejects((dir) => editJson(dir, ".mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = built; }), /^\.codex-plugin\/plugin\.json: MCP server whale runs dist\/src\/mcp-server\.js, which a clone lacks because \.gitignore ignores dist\//);
+  rejects((dir) => editJson(dir, ".muse-plugin/plugin.json", (value) => { (value.capabilities as { mcpServers: { command: string[] }[] }).mcpServers[0].command = ["node", ...built]; }), /^\.muse-plugin\/plugin\.json: .*which a clone lacks/);
+  rejects((dir) => editJson(dir, "mcp.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = built; }), /^plugin\.json: .*which a clone lacks/);
+  rejects((dir) => editJson(dir, ".claude-plugin/plugin.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["${CLAUDE_PLUGIN_ROOT}/dist/src/mcp-server.js"]; }), /^\.claude-plugin\/plugin\.json: .*which a clone lacks/);
+});
+
+test("a Claude plugin server outside the plugin root variable fails, because Claude Code starts it in the project directory", () => {
+  rejects((dir) => editJson(dir, ".claude-plugin/plugin.json", (value) => { (value.mcpServers as Record<string, { args: string[] }>).whale.args = ["scripts/mcp-server.mjs"]; }), /^\.claude-plugin\/plugin\.json: MCP server whale runs scripts\/mcp-server\.mjs from the project directory/);
+  rejects((dir) => editJson(dir, ".claude-plugin/plugin.json", (value) => { delete value.mcpServers; }), /^\.claude-plugin\/plugin\.json: MCP server whale runs scripts\/mcp-server\.mjs from the project directory/);
+  rejects((dir) => editJson(dir, ".claude-plugin/plugin.json", (value) => { value.mcpServers = "./.mcp.json"; }), /^\.claude-plugin\/plugin\.json: mcpServers must be an inline server map/);
 });
 
 test("a Muse skill path that names a directory fails with a manifest error", () => {
@@ -132,8 +146,8 @@ test("a Hermes mcp.json that leaves the Agent Plugins v1 shape fails", () => {
 });
 
 test("a Hermes stdio server whose script is gone fails", () => {
-  rejects((dir) => rmSync(path.join(dir, "dist/src/mcp-server.js")), /^plugin\.json: MCP server whale runs dist\/src\/mcp-server\.js, which does not exist/);
-  rejects((dir) => editHermesServer(dir, (server) => { server.args = ["dist/src/gone.js"]; }), /^plugin\.json: MCP server whale runs dist\/src\/gone\.js/);
+  rejects((dir) => rmSync(path.join(dir, "scripts/mcp-server.mjs")), /^plugin\.json: MCP server whale runs scripts\/mcp-server\.mjs, which does not exist/);
+  rejects((dir) => editHermesServer(dir, (server) => { server.args = ["scripts/gone.mjs"]; }), /^plugin\.json: MCP server whale runs scripts\/gone\.mjs/);
 });
 
 test("a Hermes server env that drifts from what Whale reads fails", () => {
@@ -153,10 +167,10 @@ test("a Hermes server that forwards the retired AUTH_TOKEN fails", () => {
 test("a Hermes stdio entry the Hermes loader would skip fails", () => {
   rejects((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).timeout = 30; }), /^plugin\.json: MCP server whale has timeout, which is not an Agent Plugins v1 stdio field/);
   rejects((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).cwd = "dist"; }), /^plugin\.json: MCP server whale cwd dist must start with/);
-  rejects((dir) => editHermesServer(dir, (server) => { server.args = ["${CLAUDE_PLUGIN_ROOT}/dist/src/mcp-server.js"]; }), /^plugin\.json: MCP server whale runs \$\{CLAUDE_PLUGIN_ROOT\}/);
+  rejects((dir) => editHermesServer(dir, (server) => { server.args = ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.mjs"]; }), /^plugin\.json: MCP server whale runs \$\{CLAUDE_PLUGIN_ROOT\}/);
 });
 
 test("a Hermes server path under the Hermes plugin root variable passes", () => {
-  accepts((dir) => editHermesServer(dir, (server) => { server.args = ["${PLUGIN_ROOT}/dist/src/mcp-server.js"]; }));
+  accepts((dir) => editHermesServer(dir, (server) => { server.args = ["${PLUGIN_ROOT}/scripts/mcp-server.mjs"]; }));
   accepts((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).cwd = "./"; }));
 });
