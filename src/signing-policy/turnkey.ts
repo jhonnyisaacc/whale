@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { DEFAULT_EVM_FEE_LIMITS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from "../chains.js";
+import { DEFAULT_EVM_FEE_LIMITS, L1_DATA_FEE_CHAIN_IDS, TURNKEY_EXCLUDED_CHAIN_IDS, type EvmFeeLimit } from "../chains.js";
 import { DEFAULT_MAX_VALUE_WEI, JITO_TIP_ACCOUNTS, SOLANA_BASE_PROGRAMS, evmChainIds, wrappedSolAccount } from "../signing-policy.js";
 
 export { DEFAULT_MAX_VALUE_WEI };
@@ -80,7 +80,7 @@ function renderTurnkeyPolicy(input: {
 }): unknown[] {
   const clauses = Object.entries(input.routers).flatMap(([id, list]) => {
     const limit = input.feeLimits[Number(id)];
-    if (!limit || L1_DATA_FEE_CHAIN_IDS.has(Number(id))) return [];
+    if (!limit || L1_DATA_FEE_CHAIN_IDS.has(Number(id)) || TURNKEY_EXCLUDED_CHAIN_IDS.has(Number(id))) return [];
     const fee = `eth.tx.gas <= ${limit.maxGas} && eth.tx.max_fee_per_gas <= ${limit.maxFeePerGas} && eth.tx.gas_price <= ${limit.maxFeePerGas}`;
     return [`(eth.tx.chain_id == ${id} && ${fee} && (${list.map((item) => `eth.tx.to == '${item}'`).join(" || ")}))`];
   });

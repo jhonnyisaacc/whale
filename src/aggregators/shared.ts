@@ -9,6 +9,7 @@ import type { HopQuote } from "../executor.js";
 import { ProviderGuard, classifyHttp, retryAfterAt } from "../provider-guard.js";
 import { impactPctFromUsd, readJupiter, readLifi, readZeroEx } from "../quotes.js";
 import { readVendorText, vendorResponse } from "../vendor-fetch.js";
+import { swapTerms } from "../signing-policy/swap-terms.js";
 
 const ZEROEX = new Set([1, 10, 56, 137, 143, 8453, 42161, 59144, 534352, 4663, 999]);
 const ONEINCH = new Set([1, 10, 56, 137, 324, 8453, 42161, 59144]);
@@ -244,12 +245,20 @@ export function lifiHeaders(config: AppConfig): Record<string, string> {
   return config.keys.lifi ? { "x-lifi-api-key": config.keys.lifi } : {};
 }
 
-// LI.FI calldata targets its diamond with facet-specific encodings, so the signer cannot read the swap recipient.
-// It stays quote-only while facet calldata is not verified.
+function lifiSignable(config: AppConfig, body: unknown, chainId: number): boolean {
+  const request = (body as { transactionRequest?: { to?: unknown; data?: unknown } }).transactionRequest;
+  const to = request?.to;
+  const data = request?.data;
+  if (typeof to !== "string" || typeof data !== "string" || !/^0x[0-9a-fA-F]*$/.test(data)) return false;
+  const listed = (config.routerAllowlist[chainId] ?? []).some((router) => router.toLowerCase() === to.toLowerCase());
+  return listed && swapTerms(data as `0x${string}`)?.provider === "lifi";
+}
+
 export function lifiQuote(config: AppConfig, body: unknown, reference: Reference | null, chainId: number): HopQuote {
   const parsed = readLifi(body as Parameters<typeof readLifi>[0], reference, chainId);
   if (!parsed.sameChain) return empty();
-  return { priceImpactPct: parsed.priceImpactPct, feeUsd: parsed.feeUsd, buyAmount: parsed.buyAmount, raw: body, provider: "lifi", signable: config.lifiLive };
+  const signable = config.lifiLive || lifiSignable(config, body, chainId);
+  return { priceImpactPct: parsed.priceImpactPct, feeUsd: parsed.feeUsd, buyAmount: parsed.buyAmount, raw: body, provider: "lifi", signable };
 }
 
 export function kyberRoutesUrl(config: AppConfig, slug: string, hop: QuoteHop): string {

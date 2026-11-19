@@ -1,5 +1,6 @@
 import { decodeFunctionData, encodeFunctionData, parseAbi, type Hex } from "viem";
 import type { SendResult } from "../src/domain.js";
+import { LIFI_ABI } from "../src/signing-policy/swap-terms.js";
 
 export function landedSend(): SendResult {
   return {
@@ -89,4 +90,22 @@ export function tagOf(data: Hex | undefined): Hex | undefined {
       return data;
     }
   }
+}
+
+export type LifiSwap = { sell: string; buy: string; amount: bigint; deposit?: boolean };
+export type LifiFunction = (typeof LIFI_ABI)[number] extends infer Item ? (Item extends { name: infer Name } ? Name : never) : never;
+
+export function lifiData(functionName: LifiFunction, recipient: string, minOut: bigint, swaps: readonly LifiSwap[], tag: Hex = "0x01"): Hex {
+  const data = swaps.map((swap) => ({
+    callTo: SETTLER as Hex,
+    approveTo: SETTLER as Hex,
+    sendingAssetId: swap.sell as Hex,
+    receivingAssetId: swap.buy as Hex,
+    fromAmount: swap.amount,
+    callData: tag,
+    requiresDeposit: swap.deposit ?? false,
+  }));
+  const head = [`0x${"00".repeat(32)}`, "whale", "", recipient as Hex, minOut] as const;
+  const swapData = functionName.startsWith("swapTokensSingle") ? data[0] : data;
+  return encodeFunctionData({ abi: LIFI_ABI, functionName, args: [...head, swapData] } as Parameters<typeof encodeFunctionData>[0]);
 }

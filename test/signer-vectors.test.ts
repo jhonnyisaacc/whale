@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { Hex } from "viem";
-import { CHAINS } from "../src/chains.js";
+import { signerChainTable } from "../src/chains.js";
 import { JUPITER_PROGRAM_ID } from "../src/signing-policy.js";
 import { swapTerms } from "../src/signing-policy/swap-terms.js";
 
@@ -23,8 +23,12 @@ test("the example signer policy lists the Jupiter program the app signs for", ()
   assert.deepEqual(policy.solana.programs, [JUPITER_PROGRAM_ID]);
 });
 
-test("the self-hosted signer names the same EVM chains as the app's chain table", () => {
+test("the self-hosted signer names the same EVM chains and L1 fee budgets as the app's chain table", () => {
   const signer = JSON.parse(readFileSync(new URL("../../signer/vectors/chains.json", import.meta.url), "utf8")) as unknown;
-  const app = CHAINS.flatMap(({ key, chain }) => (chain.kind === "evm" ? [{ key, chainId: chain.chainId }] : []));
-  assert.deepEqual(signer, app, "run node signer/vectors/generate.mjs after a chain table change");
+  assert.deepEqual(signer, signerChainTable(), "run node signer/vectors/generate.mjs after a chain table change");
+  const budgets = signerChainTable().filter((chain) => chain.l1DataFee !== undefined);
+  assert.deepEqual(
+    budgets.map((chain) => [chain.chainId, chain.l1DataFee === null]),
+    [[10, false], [8453, false], [81457, true], [534352, false]],
+  );
 });
