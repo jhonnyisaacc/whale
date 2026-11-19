@@ -31,7 +31,7 @@ const lookupTable = new AddressLookupTableAccount({
   state: { deactivationSlot: 2n ** 64n - 1n, lastExtendedSlot: 0, lastExtendedSlotStartIndex: 0, addresses: [sellMint, buyMint, filler] },
 });
 
-type Build = { kind?: Buffer; steps?: Buffer[]; out?: bigint; slippage?: number; trailing?: Buffer; lookup?: boolean; destination?: PublicKey; optional?: PublicKey };
+type Build = { kind?: Buffer; steps?: Buffer[]; out?: bigint; slippage?: number; trailing?: Buffer; lookup?: boolean; destination?: PublicKey };
 
 function args(inAmount: bigint, out: bigint, slippage: number): Buffer {
   const data = Buffer.alloc(19);
@@ -54,7 +54,7 @@ function transaction(build: Build = {}): VersionedTransaction {
   const shared = kind.equals(SHARED_ROUTE) || kind.equals(TOKEN_LEDGER_ROUTE);
   const keys = shared
     ? [TOKEN, filler, owner, sourceAta, filler, filler, destination, sellMint, buyMint, JUP, JUP, JUP, JUP]
-    : [TOKEN, owner, sourceAta, destination, build.optional ?? JUP, buyMint, JUP, JUP, JUP];
+    : [TOKEN, owner, sourceAta, destination, JUP, buyMint, JUP, JUP, JUP];
   const tail = Buffer.concat([args(5_000_000n, build.out ?? 10_000_000n, build.slippage ?? 50), build.trailing ?? Buffer.alloc(0)]);
   const ix = new TransactionInstruction({
     programId: JUP,
@@ -78,19 +78,15 @@ function replaceAccount(tx: VersionedTransaction, position: number): void {
   ix.accountKeyIndexes[position] = index;
 }
 
-test("route and shared_accounts_route accept an exact quote with wallet-owned token accounts", () => {
-  for (const kind of [ROUTE, SHARED_ROUTE]) {
-    assert.doesNotThrow(() => assertJupiterTransaction(transaction({ kind }), expectation));
-    assert.doesNotThrow(() => assertJupiterTransaction(transaction({ kind, steps: [WHIRLPOOL_STEP, DLMM_STEP] }), expectation));
-  }
+test("shared_accounts_route accepts an exact quote with wallet-owned token accounts", () => {
+  assert.doesNotThrow(() => assertJupiterTransaction(transaction(), expectation));
+  assert.doesNotThrow(() => assertJupiterTransaction(transaction({ steps: [WHIRLPOOL_STEP, DLMM_STEP] }), expectation));
 });
 
-test("Jupiter accepts routes whose mints are loaded from an address lookup table", () => {
-  for (const kind of [ROUTE, SHARED_ROUTE]) {
-    const tx = transaction({ kind, lookup: true });
-    assert.ok(tx.message.addressTableLookups.length > 0);
-    assert.doesNotThrow(() => assertJupiterTransaction(tx, expectation));
-  }
+test("Jupiter accepts a route whose mints are loaded from an address lookup table", () => {
+  const tx = transaction({ lookup: true });
+  assert.ok(tx.message.addressTableLookups.length > 0);
+  assert.doesNotThrow(() => assertJupiterTransaction(tx, expectation));
 });
 
 test("Jupiter accepts a quote whose threshold Jupiter rounded up and refuses one the route cannot honor", () => {
@@ -103,10 +99,8 @@ test("Jupiter accepts a quote whose threshold Jupiter rounded up and refuses one
 
 test("Jupiter refuses decoy arguments appended after the arguments the program reads", () => {
   const decoy = args(5_000_000n, 10_000_000n, 50);
-  for (const kind of [ROUTE, SHARED_ROUTE]) {
-    for (const steps of [[], [WHIRLPOOL_STEP]]) {
-      assert.throws(() => assertJupiterTransaction(transaction({ kind, steps, out: 1n, slippage: 10_000, trailing: decoy }), expectation), /trailing bytes/);
-    }
+  for (const steps of [[], [WHIRLPOOL_STEP]]) {
+    assert.throws(() => assertJupiterTransaction(transaction({ steps, out: 1n, slippage: 10_000, trailing: decoy }), expectation), /trailing bytes/);
   }
 });
 
@@ -119,7 +113,7 @@ test("Jupiter refuses a route plan it cannot decode exactly", () => {
   for (const [step, reason] of cases) assert.throws(() => assertJupiterTransaction(transaction({ steps: [step] }), expectation), reason);
 });
 
-test("Jupiter rejects changed input, output, slippage, fees, and token-ledger routes", () => {
+test("Jupiter rejects changed input, output, slippage, fees, route, and token-ledger routes", () => {
   const cases: Array<[VersionedTransaction, RegExp]> = [];
   const input = transaction();
   editArgs(input, (data) => data.writeBigUInt64LE(5_000_001n, data.length - 19));
@@ -131,7 +125,8 @@ test("Jupiter rejects changed input, output, slippage, fees, and token-ledger ro
     data[data.length - 1] = 1;
   });
   cases.push([fee, /platform fee/]);
-  cases.push([transaction({ kind: TOKEN_LEDGER_ROUTE }), /token-ledger/]);
+  cases.push([transaction({ kind: ROUTE }), /not sharedAccountsRoute/]);
+  cases.push([transaction({ kind: TOKEN_LEDGER_ROUTE }), /not sharedAccountsRoute/]);
   for (const [tx, reason] of cases) assert.throws(() => assertJupiterTransaction(tx, expectation), reason);
 });
 
@@ -141,10 +136,19 @@ test("Jupiter rejects foreign token accounts, changed mints, and a mismatched qu
   const source = transaction();
   replaceAccount(source, 3);
   assert.throws(() => assertJupiterTransaction(source, expectation), /source is not the wallet's token account/);
-  for (const kind of [ROUTE, SHARED_ROUTE]) {
-    assert.throws(() => assertJupiterTransaction(transaction({ kind, destination: foreign, lookup: true }), expectation), /destination is not the wallet's token account/);
-  }
-  assert.throws(() => assertJupiterTransaction(transaction({ kind: ROUTE, optional: foreign }), expectation), /different token account/);
+  assert.throws(() => assertJupiterTransaction(transaction({ destination: foreign, lookup: true }), expectation), /destination is not the wallet's token account/);
+  const token2022 = new PublicKey(associatedTokenAddress(owner.toBase58(), buyMint.toBase58(), "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"));
+  assert.throws(() => assertJupiterTransaction(transaction({ destination: token2022 }), expectation), /destination is not the wallet's token account/);
+  const walletInStep = transaction();
+  const step = walletInStep.message.compiledInstructions[0] as (typeof walletInStep.message.compiledInstructions)[number];
+  step.accountKeyIndexes[1] = 0;
+  assert.throws(() => assertJupiterTransaction(walletInStep, expectation), /wallet to an account other than the transfer authority/);
+  const authority = transaction();
+  replaceAccount(authority, 2);
+  assert.throws(() => assertJupiterTransaction(authority, expectation), /transfer authority is not the wallet/);
+  const fee = transaction();
+  replaceAccount(fee, 9);
+  assert.throws(() => assertJupiterTransaction(fee, expectation), /platform fee account is set/);
   const sourceMint = transaction();
   replaceAccount(sourceMint, 7);
   assert.throws(() => assertJupiterTransaction(sourceMint, expectation), /sells a different mint/);

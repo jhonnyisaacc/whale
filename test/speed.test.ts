@@ -139,7 +139,7 @@ test("a 429 with Retry-After opens that provider until the given time", async ()
   assert.equal(retryAfterAt("soon", clock), null);
 });
 
-test("the Jupiter swap body asks for a capped veryHigh priority fee, or a Jito tip when Jito is on", async () => {
+test("the Jupiter swap body asks for sharedAccountsRoute and a capped veryHigh priority fee, or a Jito tip when Jito is on", async () => {
   resetProviderGuards();
   const bodies: Array<Record<string, unknown>> = [];
   const fetchImpl: typeof fetch = async (_input, init) => {
@@ -149,6 +149,7 @@ test("the Jupiter swap body asks for a capped veryHigh priority fee, or a Jito t
   const built = await jupiterSwap(loadConfig({}), { outAmount: "1" }, "owner", fetchImpl);
   assert.equal(built?.lastValidBlockHeight, 10);
   assert.deepEqual(bodies[0]?.prioritizationFeeLamports, { priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "veryHigh" } });
+  assert.equal(bodies[0]?.useSharedAccounts, true, "the signing policy accepts only sharedAccountsRoute");
   await jupiterSwap(loadConfig({ JITO_ENABLED: "true" }), { outAmount: "1" }, "owner", fetchImpl);
   assert.deepEqual(bodies[1]?.prioritizationFeeLamports, { jitoTipLamports: 10_000 });
   assert.throws(() => loadConfig({ JITO_TIP_LAMPORTS: "999" }), /at least 1000/);
@@ -156,10 +157,9 @@ test("the Jupiter swap body asks for a capped veryHigh priority fee, or a Jito t
 });
 
 test("live boot requires a 0x key, a unique Kyber client id, and https on every RPC in a list", () => {
-  const live = { WHALE_BROADCAST: "true", DISABLED_CHAINS: "base,optimism,blast,scroll", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "rocket-trader" };
-  assert.doesNotThrow(() => assertLiveEdges(loadConfig(live), {}));
-  assert.throws(() => assertLiveEdges(loadConfig({ ...live, DISABLED_CHAINS: "optimism,blast,scroll" }), {}), /closed on base until its separate L1 data fee/);
-  assert.throws(() => assertLiveEdges(loadConfig({ ...live, DISABLED_CHAINS: "base,optimism,blast" }), {}), /closed on scroll until its separate L1 data fee/);
+  const live = { WHALE_BROADCAST: "true", DISABLED_CHAINS: "blast", ZEROX_API_KEY: "zeroex-key", ZEROX_SETTLER_ALLOWLIST_JSON: SETTLERS, KYBERSWAP_CLIENT_ID: "rocket-trader" };
+  assert.doesNotThrow(() => assertLiveEdges(loadConfig(live), {}), "base, optimism, and scroll boot live with an L1 fee budget");
+  assert.throws(() => assertLiveEdges(loadConfig({ ...live, DISABLED_CHAINS: "" }), {}), /closed on blast until its separate L1 data fee has a budget/);
   assert.throws(() => assertLiveEdges(loadConfig({ ...live, ZEROX_API_KEY: "" }), {}), /ZEROX_API_KEY/);
   assert.throws(() => assertLiveEdges(loadConfig({ ...live, ZEROX_SETTLER_ALLOWLIST_JSON: "" }), {}), /ZEROX_SETTLER_ALLOWLIST_JSON/);
   assert.throws(() => loadConfig({ ...live, ZEROX_SETTLER_ALLOWLIST_JSON: JSON.stringify({ "8453": ["settler"] }) }), /ZEROX_SETTLER_ALLOWLIST_JSON is invalid/);

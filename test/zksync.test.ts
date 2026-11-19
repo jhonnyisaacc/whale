@@ -35,7 +35,7 @@ test("zkSync signs type-2 sends under its own gas and fee-per-gas limit", () => 
   assert.equal(chainByKey("zksync")?.liveSend, "eip1559");
   const limit = DEFAULT_EVM_FEE_LIMITS[ZKSYNC];
   assert.deepEqual(limit, { maxGas: 6_000_000n, maxFeePerGas: 250_000_000n });
-  const measured = { chainId: ZKSYNC, gas: 4_415_200n, maxFeePerGas: 54_300_000n, maxPriorityFeePerGas: 0n };
+  const measured = { chainId: ZKSYNC, gas: 4_415_200n, maxFeePerGas: 54_300_000n, maxPriorityFeePerGas: 0n, data: usdcToZk(5_000_000n) };
   assert.doesNotThrow(() => assertEvmFee(limit, measured));
   assert.throws(() => assertEvmFee(limit, { ...measured, gas: 6_000_001n }), /zksync \(chain id 324\): EVM gas limit exceeds the signing policy/);
   assert.throws(() => assertEvmFee(limit, { ...measured, maxFeePerGas: 250_000_001n }), /maxFeePerGas exceeds the signing policy/);

@@ -272,10 +272,14 @@ export type QuoteAsset = { address: string; symbol: string; decimals: number };
 
 export type QuoteAssets = Readonly<Record<string, readonly QuoteAsset[]>>;
 
-export type EvmFeeLimit = { maxGas: bigint; maxFeePerGas: bigint };
+export type L1FeeBudget = { maxDataBytes: number; maxFeeWei: bigint };
+export type EvmFeeLimit = { maxGas: bigint; maxFeePerGas: bigint; l1?: L1FeeBudget };
 const GWEI = 1_000_000_000n;
 export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
   1: { maxGas: 600_000n, maxFeePerGas: 3n * GWEI },
+  10: { maxGas: 1_500_000n, maxFeePerGas: GWEI, l1: { maxDataBytes: 20_480, maxFeeWei: 70_000_000_000_000n } },
+  8453: { maxGas: 1_500_000n, maxFeePerGas: GWEI, l1: { maxDataBytes: 20_480, maxFeeWei: 60_000_000_000_000n } },
+  534352: { maxGas: 1_500_000n, maxFeePerGas: GWEI, l1: { maxDataBytes: 4_096, maxFeeWei: 5_000_000_000_000_000n } },
   56: { maxGas: 1_500_000n, maxFeePerGas: GWEI },
   137: { maxGas: 1_500_000n, maxFeePerGas: 3_000n * GWEI },
   143: { maxGas: 1_500_000n, maxFeePerGas: 1_000n * GWEI },
@@ -289,6 +293,17 @@ export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
 export const L1_DATA_FEE_CHAIN_IDS: ReadonlySet<number> = new Set([10, 8453, 81457, 534352]);
 
 export const TURNKEY_EXCLUDED_CHAIN_IDS: ReadonlySet<number> = new Set([324]);
+
+export type SignerChain = { key: string; chainId: number; l1DataFee?: { maxDataBytes: number; maxFeeWei: string } | null };
+
+export function signerChainTable(): SignerChain[] {
+  return CHAINS.flatMap(({ key, chain }): SignerChain[] => {
+    if (chain.kind !== "evm") return [];
+    if (!L1_DATA_FEE_CHAIN_IDS.has(chain.chainId)) return [{ key, chainId: chain.chainId }];
+    const budget = DEFAULT_EVM_FEE_LIMITS[chain.chainId]?.l1;
+    return [{ key, chainId: chain.chainId, l1DataFee: budget ? { maxDataBytes: budget.maxDataBytes, maxFeeWei: budget.maxFeeWei.toString() } : null }];
+  });
+}
 
 export function evmFeeLimits(raw: string | undefined): Record<number, EvmFeeLimit> {
   const limits: Record<number, EvmFeeLimit> = { ...DEFAULT_EVM_FEE_LIMITS };

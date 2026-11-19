@@ -100,7 +100,7 @@
         "message": "gAEAAgOgmqX0emdZgC/5VfjcLSoUpcmdI76X+GQSf/k4NFWk8AR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQMCAAUC4JMEAAIACQNkAAAAAAAAAAEDAAMECOUXy5d6460qAQcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHAgECAA=="
       },
       "expect": "refused",
-      "reason": "no instruction rule"
+      "reason": "only Jupiter shared_accounts_route is signed, not route"
     },
     {
       "name": "a v0 sol transfer with a lookup table",
