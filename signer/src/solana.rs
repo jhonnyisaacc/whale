@@ -8,7 +8,6 @@ pub struct Message {
     pub required_signatures: u8,
     pub keys: Vec<[u8; 32]>,
     pub instructions: Vec<Instruction>,
-    pub has_lookups: bool,
 }
 
 struct Reader<'a> {
@@ -35,12 +34,17 @@ impl<'a> Reader<'a> {
         let mut value = 0usize;
         for shift in [0, 7, 14] {
             let byte = self.byte()?;
+            if shift > 0 && byte == 0 {
+                return Err("compact length is not canonical".into());
+            }
             value |= usize::from(byte & 0x7f) << shift;
             if byte & 0x80 == 0 {
-                return Ok(value);
+                return u16::try_from(value)
+                    .map(usize::from)
+                    .map_err(|_| "compact length is above u16".into());
             }
         }
-        Err("compact length is too long".into())
+        Err("compact length is above u16".into())
     }
 
     fn count(&mut self, item_size: usize) -> Result<usize, String> {
@@ -88,26 +92,34 @@ pub fn parse(bytes: &[u8]) -> Result<Message, String> {
             data: reader.take(data_length)?.to_vec(),
         });
     }
-    let mut has_lookups = false;
+    let mut loaded = keys.len();
     if versioned {
-        let lookups = reader.short()?;
-        has_lookups = lookups > 0;
-        for _ in 0..lookups {
+        for _ in 0..reader.short()? {
             reader.take(32)?;
-            let writable = reader.short()?;
-            reader.take(writable)?;
-            let readonly = reader.short()?;
-            reader.take(readonly)?;
+            for _ in 0..2 {
+                let count = reader.short()?;
+                reader.take(count)?;
+                loaded += count;
+            }
         }
     }
     if reader.at != bytes.len() {
         return Err("message has trailing bytes".into());
     }
+    for (position, instruction) in instructions.iter().enumerate() {
+        if let Some(index) = std::iter::once(&instruction.program)
+            .chain(&instruction.accounts)
+            .find(|index| **index >= loaded)
+        {
+            return Err(format!(
+                "instruction {position} names account {index}, but the message loads only {loaded}"
+            ));
+        }
+    }
     Ok(Message {
         required_signatures,
         keys,
         instructions,
-        has_lookups,
     })
 }
 

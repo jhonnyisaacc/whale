@@ -13,6 +13,7 @@ const TOKEN = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER_TOKEN = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const BUY = "0xdddddddddddddddddddddddddddddddddddddddd";
 const BASE = "base (chain id 8453)";
+const BLAST = "blast (chain id 81457)";
 const POLYGON = "polygon (chain id 137)";
 
 const transfer = (to: Hex, amount = 1n) => encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] });
@@ -42,13 +43,16 @@ const swap = {
 const withdraw = { ...swap, purpose: "withdraw" as const, to: TOKEN, data: transfer(DESTINATION) };
 const approval = { ...swap, purpose: "approve" as const, to: TOKEN, data: approve(1000n), approval: { token: TOKEN, amount: 1000n } };
 const polygonLimit = DEFAULT_EVM_FEE_LIMITS[137];
-const fee = { chainId: 137, gas: 300_000n, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n };
-const baseFee = { ...fee, chainId: 8453 };
+const fee = { chainId: 137, gas: 300_000n, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n, data: "0x" as Hex };
+const baseLimit = DEFAULT_EVM_FEE_LIMITS[8453];
+const baseFee = { ...fee, chainId: 8453, maxFeePerGas: baseLimit!.maxFeePerGas, maxPriorityFeePerGas: 1n };
 
 type Refusal = [string, string, string, () => void];
 
 const refusals: Refusal[] = [
-  ["a chain with no fee limit", BASE, "chain has no EVM fee limit in the signing policy", () => assertEvmFee(DEFAULT_EVM_FEE_LIMITS[8453], baseFee)],
+  ["a chain with no fee limit", BLAST, "chain has no EVM fee limit in the signing policy", () => assertEvmFee(DEFAULT_EVM_FEE_LIMITS[81457], { ...baseFee, chainId: 81457 })],
+  ["an L1 data fee chain without an L1 fee budget", BASE, "chain charges an L1 data fee and has no L1 fee budget in the signing policy", () => assertEvmFee({ maxGas: baseLimit!.maxGas, maxFeePerGas: baseLimit!.maxFeePerGas }, baseFee)],
+  ["calldata above the L1 fee budget cap", BASE, `calldata is above the ${baseLimit!.l1!.maxDataBytes}-byte cap the L1 fee budget covers`, () => assertEvmFee(baseLimit, { ...baseFee, data: `0x${"ab".repeat(baseLimit!.l1!.maxDataBytes + 1)}` })],
   ["a zero gas limit", POLYGON, "EVM fee fields are invalid", () => assertEvmFee(polygonLimit, { ...fee, gas: 0n })],
   ["a priority fee above the max fee", POLYGON, "priority fee exceeds maxFeePerGas", () => assertEvmFee(polygonLimit, { ...fee, maxPriorityFeePerGas: fee.maxFeePerGas + 1n })],
   ["gas above the chain limit", POLYGON, "EVM gas limit exceeds the signing policy", () => assertEvmFee(polygonLimit, { ...fee, gas: polygonLimit!.maxGas + 1n })],
@@ -80,6 +84,7 @@ const refusals: Refusal[] = [
 
 const accepted: [string, () => void][] = [
   ["a fee within the polygon limit", () => assertEvmFee(polygonLimit, fee)],
+  ["a fee within the base limit and its L1 fee budget", () => assertEvmFee(baseLimit, baseFee)],
   ["a kyber swap to the hot wallet", () => assertEvmSigning(swap)],
   ["a 0x exec into a pinned Settler", () => assertEvmSigning({ ...swap, data: zeroExData("0x01", terms(OWNER), { token: TOKEN, amount: 1000n }) })],
   ["an opaque swap that is opted in", () => assertEvmSigning({ ...swap, data: "0x12345678", allowOpaqueSwap: true })],

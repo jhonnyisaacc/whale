@@ -1,5 +1,6 @@
 use crate::abi;
 use crate::evm::{self, Call};
+use crate::jupiter;
 use crate::solana::{self, Message};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
@@ -196,12 +197,27 @@ impl Policy {
                 .push(format!("chain {chain} is not in the policy"));
             return decision;
         }
-        if matches!(chain, 10 | 8453 | 81457 | 534352) {
-            decision.reasons.push(format!(
-                "chain {chain} charges a separate L1 data fee that the signer cannot bound; it is refused"
-            ));
-            return decision;
-        }
+        let l1_budget = match evm::l1_data_fee(chain) {
+            evm::L1DataFee::None => 0,
+            evm::L1DataFee::Unbounded => {
+                decision.reasons.push(format!(
+                    "chain {chain} charges a separate L1 data fee that has no budget; it is refused"
+                ));
+                return decision;
+            }
+            evm::L1DataFee::Budget {
+                max_data_bytes,
+                max_fee_wei,
+            } => {
+                if tx.data.len() > max_data_bytes {
+                    decision.reasons.push(format!(
+                        "calldata of {} bytes is above the {max_data_bytes}-byte cap the L1 fee budget covers",
+                        tx.data.len()
+                    ));
+                }
+                max_fee_wei
+            }
+        };
         let routers = self.routers.get(&chain).cloned().unwrap_or_default();
         let key = |token: [u8; 20]| format!("{chain}:0x{}", hex::encode(token));
         let native = format!("{chain}:native");
@@ -210,10 +226,13 @@ impl Policy {
                 .reasons
                 .push("maxPriorityFeePerGas is above maxFeePerGas".into());
         }
-        match u128::from(tx.gas).checked_mul(tx.max_fee) {
+        match u128::from(tx.gas)
+            .checked_mul(tx.max_fee)
+            .and_then(|fee| fee.checked_add(l1_budget))
+        {
             Some(fee) if fee <= self.max_fee_wei => self.spend(&mut decision, native.clone(), fee),
             fee => decision.reasons.push(format!(
-                "gas times maxFeePerGas, {}, is above the {} wei fee cap",
+                "gas times maxFeePerGas plus the L1 fee budget, {}, is above the {} wei fee cap",
                 fee.map_or("more than 2^128".to_string(), |fee| fee.to_string()),
                 self.max_fee_wei
             )),
@@ -338,7 +357,12 @@ impl Policy {
         decision
     }
 
-    pub fn check_solana(&self, message: &Message, own: [u8; 32]) -> Decision {
+    pub fn check_solana(
+        &self,
+        message: &Message,
+        own: [u8; 32],
+        buy_mint: Option<[u8; 32]>,
+    ) -> Decision {
         let mut decision = Decision {
             reasons: vec![],
             spend: vec![],
@@ -361,6 +385,12 @@ impl Policy {
             &known(ASSOCIATED_TOKEN),
         );
         let static_key = |index: usize| message.keys.get(index).copied();
+        let limited_mints: Vec<[u8; 32]> = self
+            .daily_limits
+            .keys()
+            .filter_map(|key| key.strip_prefix("solana:"))
+            .filter_map(|mint| solana::key(mint).ok())
+            .collect();
         let (mut unit_limit, mut unit_price, mut tipped) = (1_400_000u128, 0u128, 0u128);
         for (position, instruction) in message.instructions.iter().enumerate() {
             let Some(program) = static_key(instruction.program) else {
@@ -473,6 +503,18 @@ impl Policy {
                         "solana:native".into(),
                         MAX_TOKEN_ACCOUNT_RENT_LAMPORTS,
                     );
+                }
+            } else if program_name == jupiter::PROGRAM {
+                match jupiter::shared_accounts_route(&jupiter::Swap {
+                    data,
+                    accounts: &instruction.accounts,
+                    keys: &message.keys,
+                    own,
+                    buy_mint,
+                    limited_mints: &limited_mints,
+                }) {
+                    Ok((key, sold)) => self.spend(&mut decision, key, sold),
+                    Err(reason) => refuse(&mut decision, &reason),
                 }
             } else {
                 refuse(
