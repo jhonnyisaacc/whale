@@ -1,17 +1,21 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const dist = path.join(root, "dist");
 const server = path.join(dist, "src/mcp-server.js");
 const stampFile = path.join(dist, ".mcp-stamp.json");
-const lockFile = path.join(dist, ".mcp-build.lock");
+const lockDir = path.join(dist, ".mcp-build-lock");
 const logFile = path.join(dist, ".mcp-build.log");
 const lockfile = path.join(root, "pnpm-lock.yaml");
 const installedLockfile = path.join(root, "node_modules/.pnpm/lock.yaml");
+const heartbeatMs = 1000;
+const staleMs = 15000;
+const waitMs = 600000;
 const inputs = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json", "src"];
 
 function walk(entry) {
@@ -57,70 +61,111 @@ function buildReady() {
   return existsSync(server) && stamp.inputs === inputHash() && stamp.output === outputHash();
 }
 
-function pnpm(args, log) {
+async function pnpm(args, log, signal) {
   for (const command of [["pnpm"], ["corepack", "pnpm"]]) {
-    const result = spawnSync(command[0], [...command.slice(1), ...args], { cwd: root, stdio: ["ignore", log, log], env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" } });
-    if (result.error?.code === "ENOENT") continue;
-    if (result.status === 0) return;
-    throw new Error(`pnpm ${args.join(" ")} exited with ${result.status ?? result.signal}`);
+    const child = spawn(command[0], [...command.slice(1), ...args], { cwd: root, stdio: ["ignore", log, log], env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" }, signal });
+    const outcome = await new Promise((resolve) => {
+      child.once("error", (error) => resolve({ error }));
+      child.once("exit", (code, exitSignal) => resolve({ code, exitSignal }));
+    });
+    if (outcome.error?.code === "ENOENT") continue;
+    if (signal.aborted) throw signal.reason;
+    if (outcome.error) throw outcome.error;
+    if (outcome.code === 0) return;
+    throw new Error(`pnpm ${args.join(" ")} exited with ${outcome.code ?? outcome.exitSignal}`);
   }
   throw new Error("neither pnpm nor corepack is on PATH");
 }
 
-function alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
+const generationFile = (generation) => path.join(lockDir, String(generation));
+
+function topGeneration() {
+  return Math.max(-1, ...readdirSync(lockDir).filter((name) => /^\d+$/.test(name)).map(Number));
 }
 
-function lockHolder() {
+function lastBeat(generation) {
+  if (generation < 0) return 0;
   try {
-    return Number(readFileSync(lockFile, "utf8"));
+    return statSync(generationFile(generation)).mtimeMs;
   } catch (error) {
     if (error.code === "ENOENT") return undefined;
     throw error;
   }
 }
 
-function takeLock() {
-  const mine = `${lockFile}.${process.pid}`;
-  writeFileSync(mine, String(process.pid));
+function claim(generation) {
   try {
-    for (;;) {
-      try {
-        linkSync(mine, lockFile);
-        return;
-      } catch (error) {
-        if (error.code !== "EEXIST") throw error;
-      }
-      const holder = lockHolder();
-      if (holder === undefined) continue;
-      if (alive(holder)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
-      else rmSync(lockFile, { force: true });
-    }
-  } finally {
-    rmSync(mine, { force: true });
+    writeFileSync(generationFile(generation), String(process.pid), { flag: "wx" });
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
   }
 }
 
-function build() {
-  mkdirSync(dist, { recursive: true });
-  takeLock();
+async function takeLock() {
+  mkdirSync(lockDir, { recursive: true });
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const top = topGeneration();
+    const beat = lastBeat(top);
+    if (beat === undefined) continue;
+    if (Date.now() - beat > staleMs) {
+      if (!claim(top + 1)) continue;
+      if (topGeneration() === top + 1) {
+        for (const name of readdirSync(lockDir)) if (Number(name) <= top) rmSync(path.join(lockDir, name), { force: true });
+        return top + 1;
+      }
+      rmSync(generationFile(top + 1), { force: true });
+      continue;
+    }
+    if (Date.now() > deadline) {
+      const holder = readFileSync(generationFile(top), "utf8");
+      throw new Error(`whale: gave up after ${waitMs / 1000} s waiting for the build lock ${generationFile(top)}, which pid ${holder} still renews. Stop that process, or delete ${lockDir} if no build is running`);
+    }
+    await sleep(250);
+  }
+}
+
+function hold(generation, lost) {
+  const file = generationFile(generation);
+  const renew = setInterval(() => {
+    try {
+      if (topGeneration() !== generation) throw new Error(`whale: another builder took over the build lock ${file} after it went ${staleMs / 1000} s without a heartbeat`);
+      const now = Date.now() / 1000;
+      utimesSync(file, now, now);
+    } catch (error) {
+      clearInterval(renew);
+      lost.abort(error);
+    }
+  }, heartbeatMs);
+  return () => {
+    clearInterval(renew);
+    try {
+      utimesSync(file, 0, 0);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  };
+}
+
+async function build() {
+  const generation = await takeLock();
+  const lost = new AbortController();
+  const release = hold(generation, lost);
   try {
     if (depsReady() && buildReady()) return;
     const log = openSync(logFile, "w");
-    if (!depsReady()) pnpm(["install", "--frozen-lockfile"], log);
+    if (!depsReady()) await pnpm(["install", "--frozen-lockfile"], log, lost.signal);
     if (!buildReady()) {
       const before = inputHash();
-      pnpm(["exec", "tsc", "-p", "tsconfig.json", "--noEmitOnError"], log);
+      await pnpm(["exec", "tsc", "-p", "tsconfig.json", "--noEmitOnError"], log, lost.signal);
+      lost.signal.throwIfAborted();
       writeFileSync(`${stampFile}.tmp`, JSON.stringify({ inputs: before, output: outputHash() }));
       renameSync(`${stampFile}.tmp`, stampFile);
     }
   } finally {
-    rmSync(lockFile, { force: true });
+    release();
   }
 }
 
@@ -131,7 +176,7 @@ function runBuilder() {
 
 if (process.argv[2] === "--build") {
   try {
-    build();
+    await build();
   } catch (error) {
     writeFileSync(logFile, `${error.message}\n`, { flag: "a" });
     process.exit(1);
