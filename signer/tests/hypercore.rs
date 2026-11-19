@@ -1,4 +1,5 @@
 use serde_json::{Value, json};
+use sha3::Digest;
 use whale_signer::hypercore;
 
 fn sdk_key() -> k256::ecdsa::SigningKey {
@@ -206,8 +207,6 @@ impl Drop for Signer {
         let _ = std::fs::remove_file(&self.ledger);
     }
 }
-
-use sha3::Digest;
 
 fn ioc(asset: u64, price: &str, size: &str) -> Value {
     sdk_order("Ioc", price, size, asset)

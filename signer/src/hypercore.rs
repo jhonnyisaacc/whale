@@ -80,17 +80,21 @@ pub struct Job {
 
 pub const SIGNATURE_CHAIN_ID: u64 = 0x66eee;
 
-fn exactly<'a>(value: &'a Value, keys: &[&str], what: &str) -> Result<Vec<&'a Value>, String> {
+fn exactly<'a, const N: usize>(
+    value: &'a Value,
+    keys: [&str; N],
+    what: &str,
+) -> Result<[&'a Value; N], String> {
     let object = value
         .as_object()
         .ok_or_else(|| format!("{what} must be an object"))?;
-    if object.len() != keys.len() || keys.iter().any(|key| !object.contains_key(*key)) {
+    if object.len() != N || keys.iter().any(|key| !object.contains_key(*key)) {
         return Err(format!(
             "{what} must have exactly the fields {}",
             keys.join(", ")
         ));
     }
-    Ok(keys.iter().map(|key| &object[*key]).collect())
+    Ok(keys.map(|key| &object[key]))
 }
 
 fn whole(value: &Value, what: &str) -> Result<u64, String> {
@@ -127,16 +131,9 @@ fn decimal(value: &Value, what: &str, max_decimals: usize) -> Result<String, Str
 }
 
 fn parse_order(value: &Value) -> Result<Order, String> {
-    let [a, b, p, s, r, t] = exactly(value, &["a", "b", "p", "s", "r", "t"], "an order")?[..]
-    else {
-        unreachable!()
-    };
-    let [limit] = exactly(t, &["limit"], "an order type")?[..] else {
-        unreachable!()
-    };
-    let [tif] = exactly(limit, &["tif"], "a limit order type")?[..] else {
-        unreachable!()
-    };
+    let [a, b, p, s, r, t] = exactly(value, ["a", "b", "p", "s", "r", "t"], "an order")?;
+    let [limit] = exactly(t, ["limit"], "an order type")?;
+    let [tif] = exactly(limit, ["tif"], "a limit order type")?;
     Ok(Order {
         asset: whole(a, "order.a")?,
         buy: flag(b, "order.b")?,
@@ -157,10 +154,7 @@ fn parse_action(action: &Value, network: Network, nonce: u64) -> Result<Action, 
     match kind {
         "order" => {
             let [_, orders, grouping] =
-                exactly(action, &["type", "orders", "grouping"], "an order action")?[..]
-            else {
-                unreachable!()
-            };
+                exactly(action, ["type", "orders", "grouping"], "an order action")?;
             if grouping.as_str() != Some("na") {
                 return Err("order grouping must be na".into());
             }
@@ -176,17 +170,13 @@ fn parse_action(action: &Value, network: Network, nonce: u64) -> Result<Action, 
             Ok(Action::Order(orders))
         }
         "cancel" => {
-            let [_, cancels] = exactly(action, &["type", "cancels"], "a cancel action")?[..] else {
-                unreachable!()
-            };
+            let [_, cancels] = exactly(action, ["type", "cancels"], "a cancel action")?;
             let cancels = cancels
                 .as_array()
                 .ok_or("cancels must be a list")?
                 .iter()
                 .map(|cancel| {
-                    let [a, o] = exactly(cancel, &["a", "o"], "a cancel")?[..] else {
-                        unreachable!()
-                    };
+                    let [a, o] = exactly(cancel, ["a", "o"], "a cancel")?;
                     Ok((whole(a, "cancel.a")?, whole(o, "cancel.o")?))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
@@ -198,11 +188,9 @@ fn parse_action(action: &Value, network: Network, nonce: u64) -> Result<Action, 
         "updateLeverage" => {
             let [_, asset, is_cross, leverage] = exactly(
                 action,
-                &["type", "asset", "isCross", "leverage"],
+                ["type", "asset", "isCross", "leverage"],
                 "an updateLeverage action",
-            )?[..] else {
-                unreachable!()
-            };
+            )?;
             Ok(Action::UpdateLeverage {
                 asset: whole(asset, "asset")?,
                 is_cross: flag(is_cross, "isCross")?,
@@ -212,7 +200,7 @@ fn parse_action(action: &Value, network: Network, nonce: u64) -> Result<Action, 
         "withdraw3" => {
             let [_, chain, signature_chain, destination, amount, time] = exactly(
                 action,
-                &[
+                [
                     "type",
                     "hyperliquidChain",
                     "signatureChainId",
@@ -221,9 +209,7 @@ fn parse_action(action: &Value, network: Network, nonce: u64) -> Result<Action, 
                     "time",
                 ],
                 "a withdraw3 action",
-            )?[..] else {
-                unreachable!()
-            };
+            )?;
             if chain.as_str() != Some(network.chain_name()) {
                 return Err(format!(
                     "withdraw3 hyperliquidChain must be {}",
