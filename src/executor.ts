@@ -1,6 +1,6 @@
 import { holdingsForTrade, type BalanceReader } from "./balances.js";
 import type { ChainRef, ExecutionReport, HyperliquidMarket, Latency, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
-import { addressKey, chainByKey } from "./chains.js";
+import { addressKey } from "./chains.js";
 import { checkLimits, type LimitConfig, type Liquidity } from "./limits.js";
 import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
@@ -263,7 +263,6 @@ async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], de
   });
   if (!allowed.ok) return none;
   if (flagged(deps, token.chainKey, token.address)) return none;
-  if (deps.mode === "live" && chainByKey(token.chainKey)?.liveSend === "disabled") return none;
   if (liveTierBlocked(deps.mode, deps.supportTierFor, token.chainKey)) return none;
   try {
     let quoted = intent;
@@ -315,7 +314,6 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   let primaryBlocked: string | null = null;
   let latency: Latency = { alertReceivedMs: intent.receivedAtMs };
   latency = stamp(latency, "resolvedMs", now());
-  const spec = chainByKey(intent.token.chainKey);
   const liquidityOf = await lookup;
   const liquidity = liquidityOf(intent.token);
   const liquidAlternate = alternates.some((token) => (liquidityOf(token).usd ?? 0) >= deps.config.minLiquidityUsd);
@@ -334,9 +332,9 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   if (!limits.ok && !(/^(chain |liquidity unknown$)/.test(limits.reason) && alternates.length > 0)) return blockReport(intent, deps, latency, venueKey, limits.reason);
   if (!limits.ok) primaryBlocked = limits.reason;
   const tierOff = liveTierBlocked(deps.mode, deps.supportTierFor, intent.token.chainKey);
-  if (deps.mode === "live" && !useHyper && (spec?.liveSend === "disabled" || tierOff)) {
-    const other = alternates.some((token) => chainByKey(token.chainKey)?.liveSend !== "disabled" && !liveTierBlocked(deps.mode, deps.supportTierFor, token.chainKey));
-    const reason = tierOff ? "chain is not enabled for live sends" : (spec?.gap ?? "live send disabled for this chain");
+  if (deps.mode === "live" && !useHyper && tierOff) {
+    const other = alternates.some((token) => !liveTierBlocked(deps.mode, deps.supportTierFor, token.chainKey));
+    const reason = "chain is not enabled for live sends";
     if (!other) return blockReport(intent, deps, latency, venueKey, reason);
     primaryBlocked = reason;
   }

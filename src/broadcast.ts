@@ -104,7 +104,6 @@ export async function broadcastRoute(
   const spec = chainByEvmId(request.chain.chainId);
   const rpcs = spec ? rpcsFor(config, spec.key) : [];
   if (!spec || rpcs.length === 0) throw new BroadcastError("evm rpc is not configured", false);
-  if (spec.liveSend === "disabled") throw new BroadcastError(spec.gap ?? "live send disabled", false);
   const evm = evmContext(ctx, spec.key, rpcs);
   return runLegs((leg, slippageBps, next) => prepareEvmLeg(evm, leg, slippageBps, next, capBps, request.provider), request.legs, capBps, ctx);
 }
