@@ -63,9 +63,9 @@ const refusals: Refusal[] = [
   ["an associated account for a stranger", "solana", "associated account owner is not allowlisted", () => sign([ix(ATA, [PAYER, MINT, STRANGER, MINT], Buffer.from([1]))])],
   ["a jito tip above the cap", "solana", "solana jito tip exceeds the signing policy", () => sign([sol(PAYER, TIP, 10_001n)])],
   ["a priority fee above the cap", "solana", "solana priority fee exceeds the signing policy", () => sign([ix(COMPUTE, [], Buffer.concat([Buffer.from([3]), u64(10n ** 12n)]))])],
-  ["a hyperliquid withdraw", "hypercore", "refusing hyperliquid action withdraw3", () => assertHyperliquidSigning({ type: "withdraw3" }, { maxLeverage: 5, maxOrderUsd: 100 })],
-  ["an unknown hyperliquid action", "hypercore", "unsupported hyperliquid action noop", () => assertHyperliquidSigning({ type: "noop" }, { maxLeverage: 5, maxOrderUsd: 100 })],
-  ["leverage above the cap", "hypercore", "leverage exceeds the signing policy", () => assertHyperliquidSigning(leverage, { maxLeverage: 2, maxOrderUsd: 100 })],
+  ["a hyperliquid withdraw", "hypercore", "refusing hyperliquid action withdraw3", () => assertHyperliquidSigning({ type: "withdraw3" }, { maxLeverage: 5, maxOrderUsd: 100, sellLimits: {} })],
+  ["an unknown hyperliquid action", "hypercore", "unsupported hyperliquid action noop", () => assertHyperliquidSigning({ type: "noop" }, { maxLeverage: 5, maxOrderUsd: 100, sellLimits: {} })],
+  ["leverage above the cap", "hypercore", "leverage exceeds the signing policy", () => assertHyperliquidSigning(leverage, { maxLeverage: 2, maxOrderUsd: 100, sellLimits: {} })],
 ];
 
 const accepted: [string, () => void][] = [
@@ -78,8 +78,8 @@ const accepted: [string, () => void][] = [
   ["an associated account for the hot wallet", () => sign([ix(ATA, [PAYER, MINT, PAYER, MINT], Buffer.from([1]))])],
   ["a jupiter route into wrapped SOL", () => sign([route(PAYER, wrappedSolAccount(PAYER))])],
   ["a jupiter route into the hot wallet's token account", () => sign([route(PAYER, associatedTokenAddress(PAYER, MINT, TOKEN))])],
-  ["leverage within the cap", () => assertHyperliquidSigning(leverage, { maxLeverage: 3, maxOrderUsd: 100 })],
-  ["a hyperliquid cancel", () => assertHyperliquidSigning({ type: "cancel", cancels: [{ a: 0, o: 1 }] } as { type: string }, { maxLeverage: 3, maxOrderUsd: 100 })],
+  ["leverage within the cap", () => assertHyperliquidSigning(leverage, { maxLeverage: 3, maxOrderUsd: 100, sellLimits: {} })],
+  ["a hyperliquid cancel", () => assertHyperliquidSigning({ type: "cancel", cancels: [{ a: 0, o: 1 }] } as { type: string }, { maxLeverage: 3, maxOrderUsd: 100, sellLimits: {} })],
 ];
 
 test("every Solana and Hyperliquid signing refusal names its chain and keeps its reason", () => {

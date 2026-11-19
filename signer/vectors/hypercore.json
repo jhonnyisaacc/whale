@@ -268,8 +268,70 @@
           "grouping": "na"
         }
       },
+      "expect": "signed",
+      "signature": {
+        "r": "0xa09ab25486996aa53c8ef1cc3d0ae5c25620519434e591cbff9d4f3bddf94ad4",
+        "s": "0x03932d3e141ff3560cfb3ec7995e7f1c512f30661ff2f5ab00ab3e7a5679b30a",
+        "v": 28
+      }
+    },
+    {
+      "name": "a perp short with no size limit",
+      "job": {
+        "id": "a perp short with no size limit",
+        "kind": "hypercore",
+        "network": "testnet",
+        "nonce": 1793664000000,
+        "action": {
+          "type": "order",
+          "orders": [
+            {
+              "a": 5,
+              "b": false,
+              "p": "0.2",
+              "s": "250",
+              "r": false,
+              "t": {
+                "limit": {
+                  "tif": "Ioc"
+                }
+              }
+            }
+          ],
+          "grouping": "na"
+        }
+      },
       "expect": "refused",
-      "reason": "must be reduce-only"
+      "reason": "no daily limit is set for hypercore:perp:5:sold"
+    },
+    {
+      "name": "a reduce-only perp dump at a near-zero price",
+      "job": {
+        "id": "a reduce-only perp dump at a near-zero price",
+        "kind": "hypercore",
+        "network": "testnet",
+        "nonce": 1793664000000,
+        "action": {
+          "type": "order",
+          "orders": [
+            {
+              "a": 4,
+              "b": false,
+              "p": "0.00000001",
+              "s": "99999999999",
+              "r": true,
+              "t": {
+                "limit": {
+                  "tif": "Ioc"
+                }
+              }
+            }
+          ],
+          "grouping": "na"
+        }
+      },
+      "expect": "refused",
+      "reason": "above its whole 50000000000 daily limit"
     }
   ]
 }

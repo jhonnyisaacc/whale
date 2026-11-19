@@ -21,7 +21,8 @@ const ATTACKER = "0x00000000000000000000000000000000000bad00";
 const TESTNET = "https://api.hyperliquid-testnet.xyz";
 const word = (hex: string) => `0x${hex.slice(2).padStart(64, "0")}`;
 const sdkOrder = (tif: "Ioc" | "Gtc", p: string, s: string, a: number): HyperliquidAction => ({ type: "order", orders: [{ a, b: true, p, s, r: false, t: { limit: { tif } } }], grouping: "na" });
-const limits = { maxLeverage: 1, maxOrderUsd: 100 };
+const limits = { maxLeverage: 1, maxOrderUsd: 100, sellLimits: { "hypercore:perp:4:sold": 50_000_000_000n } };
+const perpSell = (a: number, p: string, s: string, r: boolean) => ({ type: "order", orders: [{ a, b: false, p, s, r, t: { limit: { tif: "Ioc" } } }], grouping: "na" });
 
 test("the app hashes and signs L1 actions to the Hyperliquid SDK vectors", async () => {
   assert.equal(actionHash(sdkOrder("Ioc", "1670.1", "0.0147", 4), null, 1677777606040, null), "0x0fcbeda5ae3c4950a548021552a4fea2226858c4453571bf3f24ba017eac2908");
@@ -42,6 +43,7 @@ test("the signing policy bounds every HyperCore action Whale builds and refuses 
   assertHyperliquidSigning(buildLeverage(4, 1), limits);
   assertHyperliquidSigning(buildOrder({ asset: 4, isBuy: true, limitPx: 1670.1, size: 0.0147 }), limits);
   assertHyperliquidSigning(buildOrder({ asset: 4, isBuy: false, limitPx: 0.2, size: 250, reduceOnly: true }), limits);
+  assertHyperliquidSigning(buildOrder({ asset: 4, isBuy: false, limitPx: 0.2, size: 250 }), limits);
   assertHyperliquidSigning({ type: "cancel", cancels: [{ a: 4, o: 9 }] } as { type: string }, limits);
   const refusals: [string, unknown, string][] = [
     ["a resting order", sdkOrder("Gtc", "1", "1", 4), "only immediate-or-cancel limit orders are signed"],
@@ -49,7 +51,10 @@ test("the signing policy bounds every HyperCore action Whale builds and refuses 
     ["a builder-deployed perp", sdkOrder("Ioc", "1", "1", 110_000), "builder-deployed perps are not signed"],
     ["an order with a client id", { type: "order", orders: [{ a: 4, b: true, p: "1", s: "1", r: false, t: { limit: { tif: "Ioc" } }, c: "0x01" }], grouping: "na" }, "order has fields the signer does not decode"],
     ["an order paying a builder fee", { ...sdkOrder("Ioc", "1", "1", 4), builder: { b: ATTACKER, f: 10 } }, "order action has fields the signer does not decode"],
-    ["a perp short", { type: "order", orders: [{ a: 4, b: false, p: "0.2", s: "250", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "a perp sell must be reduce-only, because a short's loss is not bounded by its limit price"],
+    ["a reduce-only perp dump at a near-zero price", perpSell(4, "0.00000001", "99999999999", true), "9999999999900000000 of hypercore:perp:4:sold is above its 50000000000 limit"],
+    ["a reduce-only perp dump below the per-trade notional", perpSell(4, "0.0000000001", "99999999999", true), "9999999999900000000 of hypercore:perp:4:sold is above its 50000000000 limit"],
+    ["a perp short with no size limit", perpSell(5, "0.2", "250", false), "no limit is set for hypercore:perp:5:sold"],
+    ["two perp sells past the size limit together", { type: "order", orders: [...perpSell(4, "0.2", "250", false).orders, ...perpSell(4, "0.2", "251", true).orders], grouping: "na" }, "50100000000 of hypercore:perp:4:sold is above its 50000000000 limit"],
     ["cross leverage", { type: "updateLeverage", asset: 4, isCross: true, leverage: 1 }, "only isolated leverage is signed"],
     ["leverage above the cap", buildLeverage(4, 2), "leverage exceeds the signing policy"],
     ["a withdrawal through the agent path", { type: "withdraw3" }, "refusing hyperliquid action withdraw3"],
@@ -109,7 +114,7 @@ test("a HyperCore withdrawal to this wallet's Arbitrum address is signed by it a
   assert.equal(posts.length, 3);
 });
 
-test("a HyperCore perp sell from Whale only closes a position, so it never opens a short", async () => {
+test("a HyperCore perp sell with no long opens a short, as on main, and the signing policy charges it by size", async () => {
   const sent: SendRequest[] = [];
   const intent = (side: "buy" | "sell"): SwapIntent => ({
     idempotencyKey: `hyper-${side}`,
@@ -150,6 +155,19 @@ test("a HyperCore perp sell from Whale only closes a position, so it never opens
     assert.equal((await execute(intent(side), deps)).decision, "sent", side);
   }
   const orders = sent.map((request) => request.hyperliquidActions.find((action) => action.type === "order"));
-  assert.deepEqual(orders.map((order) => order?.type === "order" && [order.orders[0]?.b, order.orders[0]?.r]), [[true, false], [false, true]]);
-  for (const request of sent) for (const action of request.hyperliquidActions) assertHyperliquidSigning(action, { maxLeverage: 1, maxOrderUsd: 5.15 });
+  assert.deepEqual(orders.map((order) => order?.type === "order" && [order.orders[0]?.b, order.orders[0]?.r, order.orders[0]?.s]), [[true, false, "5"], [false, false, "5"]]);
+  for (const request of sent) for (const action of request.hyperliquidActions) assertHyperliquidSigning(action, { maxLeverage: 1, maxOrderUsd: 5.15, sellLimits: { "hypercore:perp:4:sold": 500_000_000n } });
+  assert.throws(() => assertHyperliquidSigning(orders[1]!, { maxLeverage: 1, maxOrderUsd: 5.15, sellLimits: {} }), /^Error: hypercore: no limit is set for hypercore:perp:4:sold$/);
+});
+
+test("HYPERCORE_SELL_LIMITS sets each perp sell size limit in 1e-8 units, and the policy refuses a perp sell without one", async () => {
+  assert.deepEqual(loadConfig({}).hypercoreSellLimits, {});
+  assert.deepEqual(loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:perp:4:sold":"500000000"}' }).hypercoreSellLimits, { "hypercore:perp:4:sold": 500_000_000n });
+  assert.throws(() => loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:perp:4:sold":"5.5"}' }), /^Error: HYPERCORE_SELL_LIMITS/);
+  assert.throws(() => loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:spot:4:sold":"5"}' }), /^Error: HYPERCORE_SELL_LIMITS/);
+  const material = { evm: null, solana: null, hyperliquid: new Secret(WALLET_KEY), evmAddress: null, solanaAddress: null };
+  const short = buildOrder({ asset: 4, isBuy: false, limitPx: 1, size: 5 });
+  await assert.rejects(() => withPolicy(keystoreSigner(material), loadConfig({})).signHyperliquid(short, 1, false), /^Error: hypercore: no limit is set for hypercore:perp:4:sold$/);
+  const signed = await withPolicy(keystoreSigner(material), loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:perp:4:sold":"500000000"}' })).signHyperliquid(short, 1, false);
+  assert.deepEqual(signed, await signL1Action(new Secret(WALLET_KEY), short, 1, false));
 });

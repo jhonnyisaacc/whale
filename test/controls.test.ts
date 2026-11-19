@@ -249,7 +249,7 @@ test("signing policy denies an empty router list, a foreign router, and a hyperl
       }),
     /not an allowlisted router/,
   );
-  assert.throws(() => assertHyperliquidSigning({ type: "withdraw3" }, { maxLeverage: 1, maxOrderUsd: 100 }), /withdraw3/);
+  assert.throws(() => assertHyperliquidSigning({ type: "withdraw3" }, { maxLeverage: 1, maxOrderUsd: 100, sellLimits: {} }), /withdraw3/);
 });
 
 test("live mode refuses the local keystore", () => {

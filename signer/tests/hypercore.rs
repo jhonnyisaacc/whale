@@ -348,15 +348,31 @@ fn sell(asset: u64, price: &str, size: &str, reduce_only: bool) -> Value {
 }
 
 #[test]
-fn a_sell_is_never_charged_at_its_own_limit_price() {
-    let signer = Signer::fixture("sells");
+fn a_perp_sell_is_charged_by_size_whether_it_closes_a_long_or_opens_a_short() {
+    let signer = Signer::fixture("perp sells");
     signer.refused(
-        "short",
-        sell(4, "0.2", "250", false),
-        "a perp sell must be reduce-only",
+        "dump",
+        sell(4, "0.00000001", "99999999999", true),
+        "9999999999900000000 of hypercore:perp:4:sold is above its whole 50000000000 daily limit",
     );
-    signer.signed("close a long", NONCE, sell(4, "0.2", "250", true));
-    signer.signed("forty nine", NONCE + 1, ioc(4, "49", "1"));
+    signer.refused(
+        "short without a size limit",
+        sell(5, "0.2", "250", false),
+        "no daily limit is set for hypercore:perp:5:sold",
+    );
+    signer.signed("short", NONCE, sell(4, "0.2", "250", false));
+    signer.signed("close a long", NONCE + 1, sell(4, "0.2", "250", true));
+    signer.refused(
+        "past the size limit",
+        sell(4, "0.2", "1", true),
+        "would be 50100000000, above the 50000000000 limit",
+    );
+    signer.signed("forty nine", NONCE + 2, ioc(4, "49", "1"));
+}
+
+#[test]
+fn a_spot_sell_is_never_charged_at_its_own_limit_price() {
+    let signer = Signer::fixture("spot sells");
     signer.refused(
         "spot sell without a size limit",
         sell(10107, "0.01", "1", false),

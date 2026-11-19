@@ -174,7 +174,7 @@ const policy = {
   hypercore: {
     network: "testnet",
     maxLeverage: 1,
-    dailyLimits: { "hypercore:usdc": "50000000", "hypercore:spot:10107": "20000000" },
+    dailyLimits: { "hypercore:usdc": "50000000", "hypercore:spot:10107": "20000000", "hypercore:perp:4:sold": "50000000000" },
   },
 };
 const HL_NONCE = 1_793_664_000_000;
@@ -207,7 +207,9 @@ const hypercoreCases = [
   ["a withdrawal to an attacker", hlWithdraw(ATTACKER, "1"), "refused", "may only pay this wallet or a listed destination"],
   ["a resting order", hlOrder(4, "1", "1", "Gtc"), "refused", "only immediate-or-cancel"],
   ["a reduce-only perp sell", { type: "order", orders: [{ a: 4, b: false, p: "0.995", s: "5", r: true, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "signed"],
-  ["a perp short", { type: "order", orders: [{ a: 4, b: false, p: "0.2", s: "250", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "refused", "must be reduce-only"],
+  ["a perp short", { type: "order", orders: [{ a: 4, b: false, p: "0.2", s: "250", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "signed"],
+  ["a perp short with no size limit", { type: "order", orders: [{ a: 5, b: false, p: "0.2", s: "250", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "refused", "no daily limit is set for hypercore:perp:5:sold"],
+  ["a reduce-only perp dump at a near-zero price", { type: "order", orders: [{ a: 4, b: false, p: "0.00000001", s: "99999999999", r: true, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "refused", "above its whole 50000000000 daily limit"],
 ];
 const hypercore = [];
 for (const [name, action, expect, reason] of hypercoreCases) {
