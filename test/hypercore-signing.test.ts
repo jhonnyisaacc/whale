@@ -65,6 +65,17 @@ test("the signing policy bounds every HyperCore action Whale builds and refuses 
   }
 });
 
+test("the signing policy charges every spot sell by its size, as whale-signer does", () => {
+  const spotDump = { type: "order", orders: [{ a: 10107, b: false, p: "0.00000001", s: "5000000000", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" };
+  assert.throws(() => assertHyperliquidSigning(spotDump, { maxLeverage: 1, maxOrderUsd: 50.5, sellLimits: {} }), /^Error: hypercore: no limit is set for hypercore:spot:10107:sold$/);
+  const spotLimits = { maxLeverage: 1, maxOrderUsd: 50.5, sellLimits: { "hypercore:spot:10107:sold": 100_000_000_000n } };
+  assert.throws(() => assertHyperliquidSigning(spotDump, spotLimits), /^Error: hypercore: 500000000000000000 of hypercore:spot:10107:sold is above its 100000000000 limit$/);
+  const split = { type: "order", orders: [...perpSell(10107, "0.01", "600", false).orders, ...perpSell(10107, "0.01", "500", false).orders], grouping: "na" };
+  assert.throws(() => assertHyperliquidSigning(split, spotLimits), /^Error: hypercore: 110000000000 of hypercore:spot:10107:sold is above its 100000000000 limit$/);
+  assertHyperliquidSigning(perpSell(10107, "0.01", "1000", false), spotLimits);
+  assert.throws(() => assertHyperliquidSigning(perpSell(10107, "0.01", "1000", false), { ...spotLimits, sellLimits: { "hypercore:perp:10107:sold": 100_000_000_000n } }), /^Error: hypercore: no limit is set for hypercore:spot:10107:sold$/);
+});
+
 test("the withdraw policy pays only this wallet or the allowlist, within the cap", () => {
   const policy = { owner: OWN, withdrawAllowlist: [LISTED], maxWithdrawUsd: 25, isMainnet: false };
   const at = (destination: string, amountUsd = 10) => buildWithdraw({ destination, amountUsd, time: 5, isMainnet: false });
@@ -160,11 +171,15 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
   assert.throws(() => assertHyperliquidSigning(orders[1]!, { maxLeverage: 1, maxOrderUsd: 5.15, sellLimits: {} }), /^Error: hypercore: no limit is set for hypercore:perp:4:sold$/);
 });
 
-test("HYPERCORE_SELL_LIMITS sets each perp sell size limit in 1e-8 units, and the policy refuses a perp sell without one", async () => {
+test("HYPERCORE_SELL_LIMITS sets each perp and spot sell size limit in 1e-8 units, refuses keys no sell would use, and the policy refuses a sell without one", async () => {
   assert.deepEqual(loadConfig({}).hypercoreSellLimits, {});
   assert.deepEqual(loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:perp:4:sold":"500000000"}' }).hypercoreSellLimits, { "hypercore:perp:4:sold": 500_000_000n });
   assert.throws(() => loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:perp:4:sold":"5.5"}' }), /^Error: HYPERCORE_SELL_LIMITS/);
   assert.throws(() => loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:spot:4:sold":"5"}' }), /^Error: HYPERCORE_SELL_LIMITS/);
+  assert.deepEqual(loadConfig({ HYPERCORE_SELL_LIMITS: '{"hypercore:spot:10107:sold":"500000000","hypercore:perp:0:sold":"1"}' }).hypercoreSellLimits, { "hypercore:spot:10107:sold": 500_000_000n, "hypercore:perp:0:sold": 1n });
+  for (const key of ["hypercore:perp:04:sold", "hypercore:spot:010107:sold", "hypercore:perp:99999:sold", "hypercore:perp:10000:sold", "hypercore:spot:9999:sold", "hypercore:spot:100000:sold", "hypercore:perp:100000:sold", "hypercore:usdc"]) {
+    assert.throws(() => loadConfig({ HYPERCORE_SELL_LIMITS: JSON.stringify({ [key]: "5" }) }), (error: unknown) => error instanceof Error && error.message.startsWith(`HYPERCORE_SELL_LIMITS key ${key} `), key);
+  }
   const material = { evm: null, solana: null, hyperliquid: new Secret(WALLET_KEY), evmAddress: null, solanaAddress: null };
   const short = buildOrder({ asset: 4, isBuy: false, limitPx: 1, size: 5 });
   await assert.rejects(() => withPolicy(keystoreSigner(material), loadConfig({})).signHyperliquid(short, 1, false), /^Error: hypercore: no limit is set for hypercore:perp:4:sold$/);
