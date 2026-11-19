@@ -86,7 +86,30 @@ Every Solana transaction also pays its fee from the wallet. The 5000 lamport sig
 
 A rule that needs an account loaded from an address lookup table refuses.
 
-A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.
+A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked.
+
+The signer parses a message the way the runtime does. It refuses an account index at or past the static plus lookup-table account count, a compact length that is not canonical or is above u16, bytes after the lookups, and any message version other than legacy and v0.
+
+### Jupiter
+
+When Jupiter v6 is in `solana.programs`, the signer signs only its `shared_accounts_route` instruction. It refuses `route`, the token ledger, exact-out, v2 and attestation routes, and every other Jupiter instruction. A Solana job that holds a Jupiter swap must name the bought mint in `buyMint`. The signer reads these accounts of the instruction, and each must be a static key:
+
+| Slot | Account | Rule |
+| --- | --- | --- |
+| 2 | Transfer authority | This wallet |
+| 3 | Source | This wallet's wrapped SOL account, which counts against `solana:native`, or its Token account for a mint with a `solana:<mint>` daily limit |
+| 6 | Destination | This wallet's Token account for `buyMint`. A Token-2022 `buyMint` is refused for now |
+| 9 | Platform fee | Unset, which Jupiter encodes as its own program id |
+
+This wallet's key may appear in no other slot of the instruction, at index 0 or at any other static index. A signer cannot be loaded from a lookup table, so a route step cannot use this wallet's signature to move its tokens. Every other slot may come from a lookup table, because the rule does not read it. The signer never resolves lookup tables.
+
+`buyMint` binds the destination by derivation. The signer derives this wallet's associated token account for `buyMint` under the Token program and requires the destination to equal it. A false `buyMint` derives another address, and the swap is refused. The signer trusts `buyMint` for nothing else. The signed bytes, and so the ledger's work digest, stay the message alone.
+
+The signer decodes the whole argument list: every route plan step with its `Swap` variant, `percent`, `inputIndex` and `outputIndex`, then `inAmount`, `quotedOutAmount`, `slippageBps` and `platformFeeBps`, with no bytes left over. `inAmount` counts against the source token's daily limit. A step through a `Swap` variant the signer does not know, or one whose payload it cannot size, is refused. Today that is `DynamicV1` and `DynamicV2`. The payload sizes in `src/jupiter_swaps.rs` come from Jupiter's on-chain Anchor IDL, read from account `C88XWfp26heEmDkmfSzeXP7Fd7GQJ2j9dDTUsyiZbUTa` at slot 469066528 on 2026-11-13 and unchanged at slot 471382659 on 2026-11-19. The inflated IDL JSON has SHA-256 `11e04af55c8b102ac4230b55cb77df7ab1ce30295f18e5cdb2432d8279e7b981`. `node vectors/jupiter-swaps.mjs` reads the current IDL and rewrites the table.
+
+**The Jupiter rule bounds what a swap sells, not what it gets back.** A compromised Whale can set `quotedOutAmount` to 0 and route through a pool it controls, so each swap can lose its whole `inAmount`. That amount counts against the sold token's daily limit, as an EVM swap's does. A token with no `solana:<mint>` limit cannot be sold through Jupiter. Set each limit to what you accept losing in a day.
+
+Some real Jupiter routes pass this wallet to a step, for example a Manifest step. The signer refuses those. `vectors/jupiter-capture.mjs` rebuilds `vectors/jupiter.json` from `lite-api.jup.ag` for a public key whose seed is in that file and for a funded public address, and `vectors/jupiter-simulate.mjs` simulates the funded cases on mainnet with `sigVerify` off, as is and with a foreign token program in slot 0.
 
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom. The ledger also records each charged job id with a digest of what it signed. A job the gateway hands out again after a lost answer is signed again without a second charge. The same id with different work is refused.
 

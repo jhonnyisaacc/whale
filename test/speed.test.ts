@@ -139,7 +139,7 @@ test("a 429 with Retry-After opens that provider until the given time", async ()
   assert.equal(retryAfterAt("soon", clock), null);
 });
 
-test("the Jupiter swap body asks for a capped veryHigh priority fee, or a Jito tip when Jito is on", async () => {
+test("the Jupiter swap body asks for sharedAccountsRoute and a capped veryHigh priority fee, or a Jito tip when Jito is on", async () => {
   resetProviderGuards();
   const bodies: Array<Record<string, unknown>> = [];
   const fetchImpl: typeof fetch = async (_input, init) => {
@@ -149,6 +149,7 @@ test("the Jupiter swap body asks for a capped veryHigh priority fee, or a Jito t
   const built = await jupiterSwap(loadConfig({}), { outAmount: "1" }, "owner", fetchImpl);
   assert.equal(built?.lastValidBlockHeight, 10);
   assert.deepEqual(bodies[0]?.prioritizationFeeLamports, { priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "veryHigh" } });
+  assert.equal(bodies[0]?.useSharedAccounts, true, "the signing policy accepts only sharedAccountsRoute");
   await jupiterSwap(loadConfig({ JITO_ENABLED: "true" }), { outAmount: "1" }, "owner", fetchImpl);
   assert.deepEqual(bodies[1]?.prioritizationFeeLamports, { jitoTipLamports: 10_000 });
   assert.throws(() => loadConfig({ JITO_TIP_LAMPORTS: "999" }), /at least 1000/);
