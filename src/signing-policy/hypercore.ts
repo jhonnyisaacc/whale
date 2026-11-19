@@ -7,6 +7,10 @@ const WITHDRAW_FIELDS = ["type", "hyperliquidChain", "signatureChainId", "destin
 export type HypercoreLimits = { maxLeverage: number; maxOrderUsd: number; sellLimits: Readonly<Record<string, bigint>> };
 export type HypercoreWithdrawPolicy = { owner: string; withdrawAllowlist: readonly string[]; maxWithdrawUsd: number; isMainnet: boolean };
 
+export function hypercoreSellKey(asset: number): string {
+  return `hypercore:${asset < SPOT_ASSETS ? "perp" : "spot"}:${asset}:sold`;
+}
+
 function refuse(reason: string): never {
   throw new Error(`hypercore: ${reason}`);
 }
@@ -37,8 +41,8 @@ function orderNotional(order: unknown, sold: Map<string, bigint>): number {
   if ((row.a as number) >= BUILDER_ASSETS) refuse("builder-deployed perps are not signed");
   if (typeof row.b !== "boolean" || typeof row.r !== "boolean") refuse("order side or reduce-only is not a boolean");
   const notional = wireNumber(row.p, "order price") * wireNumber(row.s, "order size");
-  if (!row.b && (row.a as number) < SPOT_ASSETS) {
-    const key = `hypercore:perp:${row.a as number}:sold`;
+  if (!row.b) {
+    const key = hypercoreSellKey(row.a as number);
     sold.set(key, (sold.get(key) ?? 0n) + sizeUnits(row.s as string));
   }
   return notional;

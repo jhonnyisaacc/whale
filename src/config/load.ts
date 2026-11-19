@@ -1,6 +1,6 @@
 import { CHAINS, QUOTE_ASSETS, chainByKey, evmFeeLimits, type QuoteAsset, type QuoteAssets } from "../chains.js";
 import { kyberSupports } from "../aggregators.js";
-import { DEFAULT_MAX_VALUE_WEI, SOLANA_BASE_PROGRAMS } from "../signing-policy.js";
+import { DEFAULT_MAX_VALUE_WEI, SOLANA_BASE_PROGRAMS, hypercoreSellKey } from "../signing-policy.js";
 import { chainAddressMap, reorgDepths, routerAllowlist, spendTimezone, splitList } from "./guard.js";
 import { isSolanaAddress } from "../signer.js";
 import { DEFAULT_KYBER_CLIENT_ID, type AppConfig, type ApprovalSeed } from "./types.js";
@@ -254,7 +254,8 @@ function hypercoreSellLimits(env: NodeJS.ProcessEnv): Record<string, bigint> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("HYPERCORE_SELL_LIMITS must be an object");
   const out: Record<string, bigint> = {};
   for (const [key, value] of Object.entries(parsed)) {
-    if (!/^hypercore:perp:\d+:sold$/.test(key)) throw new Error(`HYPERCORE_SELL_LIMITS key ${key} is not hypercore:perp:<asset>:sold`);
+    const asset = /^hypercore:(?:perp|spot):(0|[1-9]\d{0,4}):sold$/.exec(key)?.[1];
+    if (asset === undefined || hypercoreSellKey(Number(asset)) !== key) throw new Error(`HYPERCORE_SELL_LIMITS key ${key} is not hypercore:perp:<0-9999>:sold or hypercore:spot:<10000-99999>:sold`);
     if (typeof value !== "string" || !/^\d+$/.test(value)) throw new Error(`HYPERCORE_SELL_LIMITS ${key} must be a whole number of 1e-8 units`);
     out[key] = BigInt(value);
   }
