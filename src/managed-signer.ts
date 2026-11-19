@@ -47,6 +47,7 @@ function policyConfig(config: AppConfig) {
     solanaPrograms: config.solanaProgramAllowlist,
     maxLeverage: config.maxLeverage,
     maxOrderUsd: config.maxUsdPerTrade * (1 + config.slippageHardMaxBps / 10_000),
+    sellLimits: config.hypercoreSellLimits,
     recoveryTokens: config.tokenRecoveryAllowlist,
     allowOpaqueSwap: config.lifiLive,
   };

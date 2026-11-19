@@ -359,7 +359,6 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
         isBuy,
         limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), szDecimals, market.market, isBuy),
         size: orderSize(intent.notionalUsd, mark, szDecimals),
-        reduceOnly: !isBuy && market.market === "perp",
       });
     } catch (error) {
       const report = skipped(intent, latency, error instanceof Error ? error.message : "hyperliquid order sizing failed", "hypercore", deps.mode);

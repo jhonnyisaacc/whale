@@ -605,34 +605,27 @@ impl Policy {
                         }
                     };
                     let charge = match (order.buy, spot) {
-                        (true, false) => Some((
+                        (true, false) => (
                             "hypercore:usdc".to_string(),
                             notional(&order.price, &order.size),
-                        )),
-                        (true, true) => Some((
+                        ),
+                        (true, true) => (
                             format!("hypercore:spot:{}", order.asset),
                             notional(&order.price, &order.size),
-                        )),
-                        (false, true) => Some((
+                        ),
+                        (false, true) => (
                             format!("hypercore:spot:{}:sold", order.asset),
                             scaled(&order.size, 8),
-                        )),
-                        (false, false) if order.reduce_only => None,
-                        (false, false) => {
-                            refuse(
-                                &mut decision,
-                                "a perp sell must be reduce-only, because a short's loss is not bounded by its limit price".into(),
-                            );
-                            None
-                        }
+                        ),
+                        (false, false) => (
+                            format!("hypercore:perp:{}:sold", order.asset),
+                            scaled(&order.size, 8),
+                        ),
                     };
                     match charge {
-                        None => {}
-                        Some((_, Some(0))) => {
-                            refuse(&mut decision, "the order has no notional".into())
-                        }
-                        Some((key, Some(value))) => self.spend(&mut decision, key, value),
-                        Some((_, None)) => {
+                        (_, Some(0)) => refuse(&mut decision, "the order has no notional".into()),
+                        (key, Some(value)) => self.spend(&mut decision, key, value),
+                        (_, None) => {
                             refuse(&mut decision, "the order notional does not fit".into())
                         }
                     }

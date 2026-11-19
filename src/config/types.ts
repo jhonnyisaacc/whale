@@ -69,6 +69,7 @@ export type AppConfig = LimitConfig & {
   withdrawEnabled: boolean;
   maxWithdrawAmount: number;
   maxWithdrawDailyAmount: number;
+  hypercoreSellLimits: Record<string, bigint>;
   tokenRecoveryAllowlist: string[];
   spendTimezone: string;
   minPoolAgeHours: number;

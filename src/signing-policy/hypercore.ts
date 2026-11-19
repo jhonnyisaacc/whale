@@ -4,7 +4,7 @@ const SPOT_ASSETS = 10_000;
 const BUILDER_ASSETS = 100_000;
 const WITHDRAW_FIELDS = ["type", "hyperliquidChain", "signatureChainId", "destination", "amount", "time"];
 
-export type HypercoreLimits = { maxLeverage: number; maxOrderUsd: number };
+export type HypercoreLimits = { maxLeverage: number; maxOrderUsd: number; sellLimits: Readonly<Record<string, bigint>> };
 export type HypercoreWithdrawPolicy = { owner: string; withdrawAllowlist: readonly string[]; maxWithdrawUsd: number; isMainnet: boolean };
 
 function refuse(reason: string): never {
@@ -23,15 +23,25 @@ function wireNumber(value: unknown, what: string): number {
   return Number(value);
 }
 
-function orderNotional(order: unknown): number {
+function sizeUnits(size: string): bigint {
+  const [whole = "", fraction = ""] = size.split(".");
+  if (fraction.length > 8) refuse("order size has more than 8 decimals");
+  return BigInt(whole + fraction.padEnd(8, "0"));
+}
+
+function orderNotional(order: unknown, sold: Map<string, bigint>): number {
   const row = exactly(order, ["a", "b", "p", "s", "r", "t"], "order");
   const limit = exactly(exactly(row.t, ["limit"], "order").limit, ["tif"], "order");
   if (limit.tif !== "Ioc") refuse("only immediate-or-cancel limit orders are signed");
   if (!Number.isSafeInteger(row.a) || (row.a as number) < 0) refuse("order asset is not an index");
   if ((row.a as number) >= BUILDER_ASSETS) refuse("builder-deployed perps are not signed");
   if (typeof row.b !== "boolean" || typeof row.r !== "boolean") refuse("order side or reduce-only is not a boolean");
-  if (!row.b && !row.r && (row.a as number) < SPOT_ASSETS) refuse("a perp sell must be reduce-only, because a short's loss is not bounded by its limit price");
-  return wireNumber(row.p, "order price") * wireNumber(row.s, "order size");
+  const notional = wireNumber(row.p, "order price") * wireNumber(row.s, "order size");
+  if (!row.b && (row.a as number) < SPOT_ASSETS) {
+    const key = `hypercore:perp:${row.a as number}:sold`;
+    sold.set(key, (sold.get(key) ?? 0n) + sizeUnits(row.s as string));
+  }
+  return notional;
 }
 
 export function assertHyperliquidSigning(action: { type: string }, limits: HypercoreLimits): asserts action is HyperliquidAction {
@@ -44,7 +54,13 @@ export function assertHyperliquidSigning(action: { type: string }, limits: Hyper
     const row = exactly(action, ["type", "orders", "grouping"], "order action");
     if (row.grouping !== "na") refuse("order grouping is not na");
     if (!Array.isArray(row.orders) || row.orders.length === 0) refuse("order action has no orders");
-    const notional = row.orders.reduce((sum: number, order: unknown) => sum + orderNotional(order), 0);
+    const sold = new Map<string, bigint>();
+    const notional = row.orders.reduce((sum: number, order: unknown) => sum + orderNotional(order, sold), 0);
+    for (const [key, units] of sold) {
+      const limit = limits.sellLimits[key];
+      if (limit === undefined) refuse(`no limit is set for ${key}`);
+      if (units > limit) refuse(`${units} of ${key} is above its ${limit} limit`);
+    }
     if (!(notional > 0)) refuse("order notional is not positive");
     if (notional > limits.maxOrderUsd) refuse(`order notional ${notional} USD exceeds the ${limits.maxOrderUsd} USD signing policy`);
     return;
