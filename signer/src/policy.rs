@@ -1,5 +1,6 @@
 use crate::abi;
 use crate::evm::{self, Call};
+use crate::jupiter;
 use crate::solana::{self, Message};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
@@ -338,7 +339,12 @@ impl Policy {
         decision
     }
 
-    pub fn check_solana(&self, message: &Message, own: [u8; 32]) -> Decision {
+    pub fn check_solana(
+        &self,
+        message: &Message,
+        own: [u8; 32],
+        buy_mint: Option<[u8; 32]>,
+    ) -> Decision {
         let mut decision = Decision {
             reasons: vec![],
             spend: vec![],
@@ -361,6 +367,12 @@ impl Policy {
             &known(ASSOCIATED_TOKEN),
         );
         let static_key = |index: usize| message.keys.get(index).copied();
+        let limited_mints: Vec<[u8; 32]> = self
+            .daily_limits
+            .keys()
+            .filter_map(|key| key.strip_prefix("solana:"))
+            .filter_map(|mint| solana::key(mint).ok())
+            .collect();
         let (mut unit_limit, mut unit_price, mut tipped) = (1_400_000u128, 0u128, 0u128);
         for (position, instruction) in message.instructions.iter().enumerate() {
             let Some(program) = static_key(instruction.program) else {
@@ -473,6 +485,18 @@ impl Policy {
                         "solana:native".into(),
                         MAX_TOKEN_ACCOUNT_RENT_LAMPORTS,
                     );
+                }
+            } else if program_name == jupiter::PROGRAM {
+                match jupiter::shared_accounts_route(&jupiter::Swap {
+                    data,
+                    accounts: &instruction.accounts,
+                    keys: &message.keys,
+                    own,
+                    buy_mint,
+                    limited_mints: &limited_mints,
+                }) {
+                    Ok((key, sold)) => self.spend(&mut decision, key, sold),
+                    Err(reason) => refuse(&mut decision, &reason),
                 }
             } else {
                 refuse(
