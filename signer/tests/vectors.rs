@@ -65,6 +65,14 @@ fn run(file: &str) {
                 "{name}: node signed different bytes"
             );
         }
+        if let Some(expected) = case.get("spent") {
+            let written: Value =
+                serde_json::from_str(&std::fs::read_to_string(&ledger).expect("ledger")).unwrap();
+            assert_eq!(
+                &written["spent"], expected,
+                "{name}: the ledger charged something else"
+            );
+        }
         let _ = std::fs::remove_file(ledger);
     }
 }
