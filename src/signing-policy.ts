@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { isAllowanceHolderExec, swapTerms, type SwapTerms } from "./signing-policy/swap-terms.js";
-import { chainByEvmId, CHAINS, type EvmFeeLimit } from "./chains.js";
+import { chainByEvmId, CHAINS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from "./chains.js";
 import { assertTradableAction, type HyperliquidAction } from "./hyperliquid.js";
 
 export * from "./signing-policy/swap-terms.js";
@@ -84,16 +84,21 @@ function refusedOn<T>(chain: string, check: () => T): T {
   }
 }
 
-export function assertEvmFee(limit: EvmFeeLimit | undefined, tx: { chainId: number; gas: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }): void {
+type EvmFeeFields = { chainId: number; gas: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint; data: Hex };
+
+export function assertEvmFee(limit: EvmFeeLimit | undefined, tx: EvmFeeFields): void {
   refusedOn(evmChain(tx.chainId), () => checkEvmFee(limit, tx));
 }
 
-function checkEvmFee(limit: EvmFeeLimit | undefined, tx: { gas: bigint; maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }): void {
+function checkEvmFee(limit: EvmFeeLimit | undefined, tx: EvmFeeFields): void {
   if (!limit) throw new Error("chain has no EVM fee limit in the signing policy");
   if (tx.gas <= 0n || tx.maxPriorityFeePerGas < 0n) throw new Error("EVM fee fields are invalid");
   if (tx.maxPriorityFeePerGas > tx.maxFeePerGas) throw new Error("priority fee exceeds maxFeePerGas");
   if (tx.gas > limit.maxGas) throw new Error("EVM gas limit exceeds the signing policy");
   if (tx.maxFeePerGas > limit.maxFeePerGas) throw new Error("EVM maxFeePerGas exceeds the signing policy");
+  if (!L1_DATA_FEE_CHAIN_IDS.has(tx.chainId)) return;
+  if (!limit.l1) throw new Error("chain charges an L1 data fee and has no L1 fee budget in the signing policy");
+  if ((tx.data.length - 2) / 2 > limit.l1.maxDataBytes) throw new Error(`calldata is above the ${limit.l1.maxDataBytes}-byte cap the L1 fee budget covers`);
 }
 
 export function assertEvmSigning(input: EvmSigningInput): void {

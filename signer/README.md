@@ -59,7 +59,15 @@ Direct `Settler.execute` is refused while its `actions` are not decoded: a recip
 
 So each swap can lose its whole sold amount. What a compromised Whale can move in a day is bounded by the daily limits, the fee caps, and `evm.maxValueWei`, not by who the calldata names. [ADR 0004](../docs/adr/0004-smart-account-level.md) reaches the same conclusion for the smart account level. Set each limit to what you accept losing in a day. `allowUndecodedRouterCalls` lifts this bound for tokens: an undecoded call to a listed router can spend an allowance approved on an earlier day without charging today, so keep it false unless you accept that.
 
-Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. Chains 10 (Optimism), 8453 (Base), 81457 (Blast), and 534352 (Scroll) are currently refused because each charges a separate L1 data fee that cannot be bounded from the transaction alone; charging only the L2 gas would understate the native spend.
+Every EVM transaction also pays its fee from the native balance. `gas` times `maxFeePerGas` must be at or under `evm.maxFeeWei`, and that amount counts against the `<chainId>:native` daily limit. `maxPriorityFeePerGas` may not exceed `maxFeePerGas`. Chains 10 (Optimism), 8453 (Base), 81457 (Blast), and 534352 (Scroll) also charge a separate L1 data fee, which the transaction does not cap and the signer cannot read from the chain. On Optimism, Base, and Scroll the signer adds a fixed L1 fee budget to `gas` times `maxFeePerGas`, both for the `evm.maxFeeWei` check and for the `<chainId>:native` charge, and refuses calldata above the cap that budget covers:
+
+| Chain | Calldata cap | L1 fee budget |
+| --- | --- | --- |
+| Optimism (10) | 20,480 bytes | 70,000,000,000,000 wei |
+| Base (8453) | 20,480 bytes | 60,000,000,000,000 wei |
+| Scroll (534352) | 4,096 bytes | 5,000,000,000,000,000 wei |
+
+The network still charges the real L1 fee. The budget is bookkeeping, so the native daily limit fills faster than the real spend. Each budget covers a transaction at the cap with random calldata at an L1 base fee of 20 gwei and a blob base fee of 2 gwei, measured with `node scripts/l1-fee-budget.mjs`. Above those prices the real fee can pass the budget. Blast is refused: its fee oracle could not be measured, so it has no budget. The table lives in `l1_data_fee` in `src/evm.rs`. `tests/l1_fee.rs` checks it against `vectors/chains.json`, which `generate.mjs` writes from the app's `DEFAULT_EVM_FEE_LIMITS`.
 
 On Solana, every program must be one of these:
 - System, Compute Budget, Token, Token-2022, or Associated Token Account;

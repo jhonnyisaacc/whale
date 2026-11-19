@@ -4,7 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import { encodeFunctionData, maxUint256, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { CHAINS } from "../../src/chains.ts";
+import { DEFAULT_EVM_FEE_LIMITS, signerChainTable } from "../../src/chains.ts";
 
 const out = new URL(".", import.meta.url).pathname;
 const EVM_KEY = `0x${"11".repeat(32)}`;
@@ -38,6 +38,10 @@ const settlerCall = (recipient) => encodeFunctionData({ abi: settlerAbi, functio
 const tx = (to, data = "0x", value = 0n, chainId = CHAIN_ID, fees = {}) => ({ chainId, nonce: 7, to, value, data, gas: 300000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n, type: "eip1559", ...fees });
 const job = (name, transaction) => ({ id: name, kind: "evm", chainId: transaction.chainId, tx: { nonce: String(transaction.nonce), to: transaction.to, value: String(transaction.value), data: transaction.data, gas: String(transaction.gas), maxFeePerGas: String(transaction.maxFeePerGas), maxPriorityFeePerGas: String(transaction.maxPriorityFeePerGas) } });
 
+const BASE = 8453;
+const BASE_L1 = DEFAULT_EVM_FEE_LIMITS[BASE].l1;
+const baseSwap = tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 5_000_000n), "0x", "0x"] }), 0n, BASE);
+
 const evmCases = [
   ["kyber simple swap to this wallet", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 5_000_000n), "0x", "0x"] })), "signed", null, own],
   ["kyber swap paying an attacker", tx(KYBER, kyberSwap(desc(ATTACKER, 5_000_000n))), "refused", "not this wallet", ATTACKER],
@@ -69,10 +73,10 @@ const evmCases = [
   ["native transfer to anyone else", tx(ATTACKER, "0x", 1n), "refused", "listed destination"],
   ["an undecoded router call", tx(LIFI, "0x12345678"), "refused", "not one the signer can read"],
   ["a chain outside the policy", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 137), "refused", "chain 137 is not in the policy"],
-  ["an OP Stack transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 8453), "refused", "separate L1 data fee"],
-  ["an Optimism transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 10), "refused", "separate L1 data fee"],
-  ["a Blast transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 81457), "refused", "separate L1 data fee"],
-  ["a Scroll transaction whose L1 data fee cannot be bounded", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 534352), "refused", "separate L1 data fee"],
+  ["a Base kyber swap charged its gas plus the L1 fee budget", baseSwap, "signed", null, own, { [`${BASE}:native`]: String(baseSwap.gas * baseSwap.maxFeePerGas + BASE_L1.maxFeeWei), [`${BASE}:${USDC.toLowerCase()}`]: "5000000" }],
+  ["a Base swap whose calldata is above the L1 fee budget cap", tx(KYBER, kyberSwap(desc(own, 1n), { targetData: `0x${"ab".repeat(BASE_L1.maxDataBytes)}` }), 0n, BASE), "refused", `above the ${BASE_L1.maxDataBytes}-byte cap the L1 fee budget covers`, own],
+  ["a Scroll swap whose L1 fee budget lifts the fee over the cap", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 534352), "refused", "above the 1000000000000000 wei fee cap"],
+  ["a Blast transaction whose L1 data fee has no budget", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 0n, 81457), "refused", "separate L1 data fee"],
   ["a swap with native value above the cap", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 1n), "0x", "0x"] }), 10n ** 18n), "refused", "above the"],
   ["a usdc transfer that sends native value", tx(USDC, encodeFunctionData({ abi: erc20, functionName: "transfer", args: [DESTINATION, 1_000_000n] }), 1n), "refused", "must send no native value"],
   ["an approval naming a pinned Settler", tx(USDC, encodeFunctionData({ abi: erc20, functionName: "approve", args: [SETTLER, 5_000_000n] })), "refused", "a pinned Settler, whose actions can spend it"],
@@ -82,8 +86,8 @@ const evmCases = [
 
 const account = privateKeyToAccount(EVM_KEY);
 const evm = [];
-for (const [name, transaction, expect, reason, recipient] of evmCases) {
-  const entry = { name, job: job(name, transaction), expect, ...(reason ? { reason } : {}), ...(recipient ? { recipient } : {}) };
+for (const [name, transaction, expect, reason, recipient, spent] of evmCases) {
+  const entry = { name, job: job(name, transaction), expect, ...(reason ? { reason } : {}), ...(recipient ? { recipient } : {}), ...(spent ? { spent } : {}) };
   if (expect === "signed") entry.signedTransaction = await account.signTransaction(transaction);
   evm.push(entry);
 }
@@ -151,14 +155,14 @@ const solana = solanaCases.map(([name, bytes, expect, reason]) => ({
 const policy = {
   version: 1,
   evm: {
-    chains: [CHAIN_ID, 10, 8453, 81457, 534352],
-    routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER] },
+    chains: [CHAIN_ID, 10, BASE, 81457, 534352],
+    routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER], [BASE]: [KYBER] },
     settlers: { [CHAIN_ID]: [SETTLER] },
-    kyberExecutors: { [CHAIN_ID]: [EXECUTOR] },
+    kyberExecutors: { [CHAIN_ID]: [EXECUTOR], [BASE]: [EXECUTOR] },
     destinations: [DESTINATION],
     maxValueWei: "2000000000000000",
     maxFeeWei: "1000000000000000",
-    dailyLimits: { [`${CHAIN_ID}:${USDC}`]: "10000000", [`${CHAIN_ID}:native`]: "5000000000000000" },
+    dailyLimits: { [`${CHAIN_ID}:${USDC}`]: "10000000", [`${CHAIN_ID}:native`]: "5000000000000000", [`${BASE}:${USDC}`]: "10000000", [`${BASE}:native`]: "5000000000000000" },
   },
   solana: {
     programs: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
@@ -167,8 +171,7 @@ const policy = {
     dailyLimits: { "solana:native": "2000000000" },
   },
 };
-const chains = CHAINS.flatMap(({ key, chain }) => (chain.kind === "evm" ? [{ key, chainId: chain.chainId }] : []));
-writeFileSync(`${out}chains.json`, `${JSON.stringify(chains, null, 2)}\n`);
+writeFileSync(`${out}chains.json`, `${JSON.stringify(signerChainTable(), null, 2)}\n`);
 writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);
 const registration = "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31\ncode:wreg_example";
 const personalSign = { message: registration, signature: await account.signMessage({ message: registration }) };

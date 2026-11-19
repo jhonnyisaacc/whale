@@ -174,13 +174,25 @@ test("swap calldata must pay the hot wallet unless opaque swaps are opted in", (
 
 test("the EVM fee policy bounds gas and fee per gas on each chain and refuses a chain without limits", () => {
   const polygon = DEFAULT_EVM_FEE_LIMITS[137];
-  const swap = { chainId: 137, gas: 300_000n, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n };
+  const swap = { chainId: 137, gas: 300_000n, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n, data: "0x" as Hex };
   assert.doesNotThrow(() => assertEvmFee(polygon, swap));
   assert.doesNotThrow(() => assertEvmFee(polygon, { ...swap, gas: polygon!.maxGas, maxFeePerGas: polygon!.maxFeePerGas }));
   assert.throws(() => assertEvmFee(polygon, { ...swap, gas: polygon!.maxGas + 1n }), /gas limit exceeds/);
   assert.throws(() => assertEvmFee(polygon, { ...swap, maxFeePerGas: polygon!.maxFeePerGas + 1n }), /maxFeePerGas exceeds/);
   assert.throws(() => assertEvmFee(polygon, { ...swap, maxPriorityFeePerGas: swap.maxFeePerGas + 1n }), /priority fee exceeds/);
-  for (const chainId of [10, 8453, 81457, 534352]) assert.throws(() => assertEvmFee(DEFAULT_EVM_FEE_LIMITS[chainId], { ...swap, chainId }), /no EVM fee limit/);
+  assert.throws(() => assertEvmFee(DEFAULT_EVM_FEE_LIMITS[81457], { ...swap, chainId: 81457 }), /no EVM fee limit/);
+});
+
+test("an L1 data fee chain signs only calldata its L1 fee budget covers", () => {
+  for (const chainId of [10, 8453, 534352]) {
+    const limit = DEFAULT_EVM_FEE_LIMITS[chainId]!;
+    const cap = limit.l1!.maxDataBytes;
+    const swap = { chainId, gas: limit.maxGas, maxFeePerGas: limit.maxFeePerGas, maxPriorityFeePerGas: 1n };
+    assert.doesNotThrow(() => assertEvmFee(limit, { ...swap, data: `0x${"ab".repeat(cap)}` }), `chain ${chainId} signs calldata at the cap`);
+    assert.throws(() => assertEvmFee(limit, { ...swap, data: `0x${"ab".repeat(cap + 1)}` }), new RegExp(`calldata is above the ${cap}-byte cap`));
+    const { maxGas, maxFeePerGas } = limit;
+    assert.throws(() => assertEvmFee({ maxGas, maxFeePerGas }, { ...swap, data: "0x" }), /charges an L1 data fee and has no L1 fee budget/);
+  }
 });
 
 test("a 0x exec must lend the allowance to a pinned Settler and call it", () => {
@@ -373,7 +385,7 @@ test("the signing wrapper applies the chain's fee limit before the inner signer 
   const policy = withPolicy(inner, loadConfig({ OWNER_WITHDRAW_ADDRESSES: destination }));
   const send = { to: destination as Hex, data: "0x" as Hex, value: 1n, gas: 21_000n, nonce: 0, maxFeePerGas: 100n * 10n ** 9n, maxPriorityFeePerGas: 30n * 10n ** 9n, purpose: "withdraw" as const };
   await policy.signEvm({ ...send, chainId: 137 });
-  await assert.rejects(policy.signEvm({ ...send, chainId: 8453 }), /no EVM fee limit/);
+  await assert.rejects(policy.signEvm({ ...send, chainId: 81457 }), /no EVM fee limit/);
   await assert.rejects(policy.signEvm({ ...send, chainId: 1 }), /maxFeePerGas exceeds/);
   assert.deepEqual(signed, [137]);
 });

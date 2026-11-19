@@ -5,7 +5,11 @@
   },
   {
     "key": "optimism",
-    "chainId": 10
+    "chainId": 10,
+    "l1DataFee": {
+      "maxDataBytes": 20480,
+      "maxFeeWei": "70000000000000"
+    }
   },
   {
     "key": "bnb",
@@ -21,7 +25,11 @@
   },
   {
     "key": "base",
-    "chainId": 8453
+    "chainId": 8453,
+    "l1DataFee": {
+      "maxDataBytes": 20480,
+      "maxFeeWei": "60000000000000"
+    }
   },
   {
     "key": "arbitrum",
@@ -33,11 +41,16 @@
   },
   {
     "key": "blast",
-    "chainId": 81457
+    "chainId": 81457,
+    "l1DataFee": null
   },
   {
     "key": "scroll",
-    "chainId": 534352
+    "chainId": 534352,
+    "l1DataFee": {
+      "maxDataBytes": 4096,
+      "maxFeeWei": "5000000000000000"
+    }
   },
   {
     "key": "robinhood",
