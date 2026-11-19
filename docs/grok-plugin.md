@@ -4,7 +4,7 @@ The wallet ships as a Grok plugin named `rocket`. The manifest sits in `.grok-pl
 
 ## Tools
 
-An MCP server runs from `dist/src/mcp-server.js` over stdio. It holds no keys and signs nothing. Start it with `pnpm run start:mcp`.
+The `.mcp.json` entry runs `node scripts/mcp-server.mjs` over stdio. The launcher builds the wallet on its first start, so a fresh clone works. The server holds no keys and signs nothing.
 
 | Tool | What it does | Broadcast |
 | --- | --- | --- |
@@ -17,12 +17,12 @@ An MCP server runs from `dist/src/mcp-server.js` over stdio. It holds no keys an
 
 ## Install
 
-Build the wallet. Start the executor, then start MCP.
+Start the executor. The plugin then starts MCP through `.mcp.json`. From a checkout, `pnpm run start:mcp` starts it after `pnpm run build`.
 
 ```bash
+pnpm install --frozen-lockfile
 pnpm run build
 pnpm run start:executor
-pnpm run start:mcp
 ```
 
 `pnpm run start:cli` runs `node dist/src/cli.js` for the same command names. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read the executor. The default URL in `.mcp.json` is `http://127.0.0.1:8788`.

@@ -6,7 +6,7 @@ import { rpcListEnv } from "../src/config/load.js";
 
 type Json = Record<string, unknown>;
 type SkillSource = { kind: "dir"; path: string } | { kind: "file"; path: string };
-type McpSource = { kind: "config"; path: string } | { kind: "agent-plugins"; path: string } | { kind: "inline"; id: string; command: unknown };
+type McpSource = { kind: "config"; path: string } | { kind: "agent-plugins"; path: string } | { kind: "inline"; id: string; command: unknown } | { kind: "claude"; servers: Record<string, Json> };
 type HostRefs = { skills: SkillSource[]; mcp: McpSource[]; errors: string[] };
 
 const agentPluginSchema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
@@ -15,8 +15,8 @@ const agentStdioFields = ["type", "command", "args", "env", "cwd"];
 const retiredEnv = ["AUTH_TOKEN"];
 
 const hosts: Record<string, (manifest: Json) => HostRefs> = {
-  ".claude-plugin/plugin.json": (manifest) => pointerHost(manifest, { skills: "./skills/", mcpServers: "./.mcp.json" }),
-  ".codex-plugin/plugin.json": (manifest) => pointerHost(manifest, {}),
+  ".claude-plugin/plugin.json": claudeHost,
+  ".codex-plugin/plugin.json": pointerHost,
   ".grok-plugin/plugin.json": () => ({ skills: [{ kind: "dir", path: "skills" }], mcp: [], errors: [] }),
   ".muse-plugin/plugin.json": museHost,
   "plugin.json": hermesHost,
@@ -44,10 +44,10 @@ export function validateHostManifests(root: string): string[] {
   return errors;
 }
 
-function pointerHost(manifest: Json, defaults: { skills?: string; mcpServers?: string }): HostRefs {
+function pointerHost(manifest: Json): HostRefs {
   const errors: string[] = [];
   const pointer = (field: "skills" | "mcpServers"): string | undefined => {
-    const value = manifest[field] ?? defaults[field];
+    const value = manifest[field];
     if (typeof value === "string") return value;
     errors.push(`${field} must be a path string`);
     return undefined;
@@ -59,6 +59,13 @@ function pointerHost(manifest: Json, defaults: { skills?: string; mcpServers?: s
     mcp: mcpServers === undefined ? [] : [{ kind: "config", path: mcpServers }],
     errors,
   };
+}
+
+function claudeHost(manifest: Json): HostRefs {
+  const skills: SkillSource[] = [{ kind: "dir", path: "./skills/" }];
+  const inline = manifest.mcpServers ?? {};
+  if (typeof inline !== "object" || inline === null || Array.isArray(inline)) return { skills, mcp: [], errors: ["mcpServers must be an inline server map"] };
+  return { skills, mcp: [{ kind: "claude", servers: inline as Record<string, Json> }], errors: [] };
 }
 
 function museHost(manifest: Json): HostRefs {
@@ -132,6 +139,7 @@ function checkSkillFile(root: string, rel: string): string[] {
 function checkMcp(root: string, source: McpSource): string[] {
   if (source.kind === "inline") return checkCommand(root, source.id, source.command);
   if (source.kind === "agent-plugins") return checkAgentPluginMcp(root, source.path);
+  if (source.kind === "claude") return checkClaudeMcp(root, source.servers);
   const rel = inside(source.path);
   if (rel === undefined) return [`mcpServers ${source.path} points outside the plugin root`];
   const config = readJson(path.join(root, rel)) as Json | undefined;
@@ -140,6 +148,18 @@ function checkMcp(root: string, source: McpSource): string[] {
   if (typeof servers !== "object" || servers === null || Object.keys(servers).length === 0) return [`${rel} declares no MCP server`];
   return Object.entries(servers as Record<string, Json>).flatMap(([id, server]) => {
     const args = Array.isArray(server.args) ? server.args : [];
+    return checkCommand(root, id, [server.command, ...args]);
+  });
+}
+
+function checkClaudeMcp(root: string, inline: Record<string, Json>): string[] {
+  const rootConfig = readJson(path.join(root, ".mcp.json")) as Json | undefined;
+  const servers = { ...((rootConfig?.mcpServers ?? {}) as Record<string, Json>), ...inline };
+  if (Object.keys(servers).length === 0) return ["declares no MCP server in .mcp.json or mcpServers"];
+  return Object.entries(servers).flatMap(([id, server]) => {
+    const args = Array.isArray(server.args) ? server.args : [];
+    const script = args.find((arg) => typeof arg !== "string" || !arg.startsWith("-"));
+    if (typeof script === "string" && !script.startsWith("${CLAUDE_PLUGIN_ROOT}/")) return [`MCP server ${id} runs ${script} from the project directory, where Claude Code starts plugin servers. Prefix it with \${CLAUDE_PLUGIN_ROOT}/`];
     return checkCommand(root, id, [server.command, ...args]);
   });
 }
@@ -191,11 +211,20 @@ function checkCommand(root: string, id: string, command: unknown, rootVar = "CLA
   const prefix = "${" + rootVar + "}/";
   const rel = inside(script.startsWith(prefix) ? script.slice(prefix.length) : script);
   if (rel === undefined) return [`MCP server ${id} runs ${script}, which is outside the plugin root`];
-  const errors: string[] = [];
-  if (!existsSync(path.join(root, rel))) errors.push(`MCP server ${id} runs ${rel}, which does not exist`);
-  const built = /^dist\/(.+)\.js$/.exec(rel);
-  if (built !== null && !existsSync(path.join(root, `${built[1]}.ts`))) errors.push(`MCP server ${id} runs ${rel}, built from ${built[1]}.ts, which does not exist`);
-  return errors;
+  const ignored = ignoredDirs(root).find((dir) => rel === dir || rel.startsWith(`${dir}/`));
+  if (ignored !== undefined) return [`MCP server ${id} runs ${rel}, which a clone lacks because .gitignore ignores ${ignored}/`];
+  if (!existsSync(path.join(root, rel))) return [`MCP server ${id} runs ${rel}, which does not exist`];
+  return [];
+}
+
+function ignoredDirs(root: string): string[] {
+  let text: string;
+  try {
+    text = readFileSync(path.join(root, ".gitignore"), "utf8");
+  } catch {
+    return [];
+  }
+  return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => /^[^#!*]+\/$/.test(line)).map((line) => line.replace(/^\//, "").replace(/\/$/, ""));
 }
 
 function inside(target: string): string | undefined {
