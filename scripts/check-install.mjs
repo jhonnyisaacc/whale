@@ -1,5 +1,5 @@
-import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -25,9 +25,10 @@ const hosts = [
 ];
 const codex = hosts[1];
 
-function listTools({ cwd, argv }, timeoutMs) {
+function listTools(entry, timeoutMs) {
+  const { cwd, argv } = entry;
   return new Promise((resolve) => {
-    const child = spawn(argv[0], argv.slice(1).map(expand), { cwd, stdio: ["pipe", "pipe", "pipe"], env, detached: true });
+    const child = spawn(argv[0], argv.slice(1).map(expand), { cwd, stdio: ["pipe", "pipe", "pipe"], env: entry.env ?? env, detached: true });
     let out = "";
     let err = "";
     let done = false;
@@ -113,6 +114,57 @@ async function interruptedFirstStarts() {
   failures.push("no 2000 ms start listed tools after the first start was stopped mid-build");
 }
 
+const shimDir = path.join(scratch, "bin");
+const pnpmRuns = path.join(scratch, "pnpm-runs");
+const realPnpm = spawnSync("sh", ["-c", "command -v pnpm"], { encoding: "utf8" }).stdout.trim();
+mkdirSync(shimDir);
+writeFileSync(path.join(shimDir, "pnpm"), `#!/bin/sh\necho "$*" >> '${pnpmRuns}'\nexec ${realPnpm ? `'${realPnpm}'` : "corepack pnpm"} "$@"\n`);
+chmodSync(path.join(shimDir, "pnpm"), 0o755);
+const counted = { ...codex, env: { ...env, PATH: `${shimDir}:${env.PATH}` } };
+
+function countRuns() {
+  const runs = existsSync(pnpmRuns) ? readFileSync(pnpmRuns, "utf8").trim().split("\n").filter(Boolean) : [];
+  return { installs: runs.filter((run) => run.startsWith("install")).length, builds: runs.filter((run) => run.startsWith("exec tsc")).length };
+}
+
+function plantCrashedLock(pid, ageMs) {
+  writeFileSync(path.join(root, "dist/.mcp-build.lock"), String(pid));
+  const dir = path.join(root, "dist/.mcp-build-lock");
+  mkdirSync(dir, { recursive: true });
+  const lock = path.join(dir, String(Math.max(-1, ...readdirSync(dir).map(Number)) + 1));
+  writeFileSync(lock, String(pid));
+  const at = (Date.now() - ageMs) / 1000;
+  utimesSync(lock, at, at);
+}
+
+function deadPid() {
+  return spawnSync("sh", ["-c", "sh -c 'echo $$'"], { encoding: "utf8" }).stdout.trim();
+}
+
+async function crashedBuilderWithReusedPid() {
+  const marker = "whale-check: built past a crashed lock";
+  await withSource(`\nprocess.stderr.write("${marker}\\n");\n`, async () => {
+    plantCrashedLock(1, 0);
+    const result = await expectTools("with a crashed builder's lock whose pid 1 is alive", codex, 60000);
+    if (result.tools.length > 0 && !result.stderr.includes(marker)) failures.push("the start past a crashed builder's lock did not rebuild the edited source");
+  });
+}
+
+async function racingStartsPastADeadLock(trial) {
+  const installsWanted = trial === 0 ? 1 : 0;
+  if (installsWanted) rmSync(path.join(root, "node_modules"), { recursive: true, force: true });
+  rmSync(pnpmRuns, { force: true });
+  await withSource(`\nexport const touched = ${trial + 2};\n`, async () => {
+    plantCrashedLock(deadPid(), 60000);
+    const results = await Promise.all(Array.from({ length: 12 }, () => listTools(counted, 600000)));
+    const listed = results.filter((result) => result.tools.length > 0).length;
+    const { installs, builds } = countRuns();
+    console.log(`12 starts past a dead lock, trial ${trial + 1}: ${listed} listed tools, ${installs} pnpm install, ${builds} tsc`);
+    if (listed < 12) failures.push(`trial ${trial + 1}: only ${listed} of 12 racing starts listed tools\n${tail(results.find((result) => result.tools.length === 0).stderr)}`);
+    if (installs !== installsWanted || builds !== 1) failures.push(`trial ${trial + 1}: 12 racing starts ran pnpm install ${installs} times and tsc ${builds} times, not ${installsWanted} and 1`);
+  });
+}
+
 function manualBuild() {
   execFileSync("sh", ["-c", "pnpm run build || corepack pnpm run build"], { cwd: root, env, stdio: ["ignore", "ignore", "ignore"] });
 }
@@ -145,6 +197,9 @@ try {
 
   rmSync(path.join(root, "node_modules"), { recursive: true, force: true });
   await expectTools("after node_modules is deleted", codex, 600000);
+
+  await crashedBuilderWithReusedPid();
+  for (let trial = 0; trial < 8; trial += 1) await racingStartsPastADeadLock(trial);
 } finally {
   writeFileSync(server, original);
   rmSync(scratch, { recursive: true, force: true });
@@ -153,4 +208,4 @@ if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exit(1);
 }
-console.log(`install ok: every host manifest starts the MCP server from ${given ? root : "a clean archive of HEAD"} and lists its tools, and the build recovers from a stopped start, a failed build, a manual build and a deleted node_modules`);
+console.log(`install ok: every host manifest starts the MCP server from ${given ? root : "a clean archive of HEAD"} and lists its tools, and the build recovers from a stopped start, a failed build, a manual build, a deleted node_modules, a crashed builder's lock and 12 racing starts`);
