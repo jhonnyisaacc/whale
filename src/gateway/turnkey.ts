@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { chainByKey, evmFeeLimits, type EvmFeeLimit } from "../chains.js";
+import { chainByKey, evmFeeLimits, withDefaultRouters, type EvmFeeLimit } from "../chains.js";
 import { DEFAULT_MAX_VALUE_WEI, turnkeyPolicyDocument } from "../signing-policy/turnkey.js";
 import type { WalletPolicy } from "./policy.js";
 
@@ -98,7 +98,7 @@ export function delegationFromEnv(env: NodeJS.ProcessEnv): DelegationConfig | nu
   if (!delegatePublicKey) return null;
   if (!/^0[23][0-9a-f]{64}$/i.test(delegatePublicKey)) throw new Error("TURNKEY_DELEGATE_API_PUBLIC_KEY must be a compressed P-256 public key in hex");
   const parsed = routersSchema.parse(JSON.parse(env.ROUTER_ALLOWLIST_JSON ?? "{}"));
-  const routers = Object.fromEntries(Object.entries(parsed).map(([id, list]) => [Number(id), list]));
+  const routers = withDefaultRouters(parsed);
   return { delegatePublicKey: delegatePublicKey.toLowerCase(), routers, maxValueWei: BigInt(env.MAX_NATIVE_VALUE_WEI ?? DEFAULT_MAX_VALUE_WEI.toString()), feeLimits: evmFeeLimits(env.EVM_FEE_LIMITS_JSON) };
 }
 

@@ -24,7 +24,7 @@ Set these Turnkey variables on the executor.
 
 - `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PUBLIC_KEY`, `TURNKEY_API_PRIVATE_KEY`
 - `TURNKEY_EVM_ADDRESS`, `TURNKEY_SOLANA_ADDRESS`, `TURNKEY_HYPERLIQUID_ADDRESS`
-- `ROUTER_ALLOWLIST_JSON` as a map of chain id to router addresses, and `APPROVAL_CACHE_JSON` after the router approval in the [runbook](runbook.md)
+- `ROUTER_ALLOWLIST_JSON` as a map of chain id to router addresses (Monad 143 defaults to the 0x AllowanceHolder and the KyberSwap router from `DEFAULT_ROUTERS` when the map does not name it), and `APPROVAL_CACHE_JSON` after the router approval in the [runbook](runbook.md)
 
 Live mode refuses `KEYSTORE_PATH` and `KEYSTORE_PASSPHRASE`.
 
