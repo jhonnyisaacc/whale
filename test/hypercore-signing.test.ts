@@ -9,6 +9,9 @@ import { keystoreSigner, withPolicy } from "../src/managed-signer.js";
 import { loadConfig } from "../src/config.js";
 import { Secret } from "../src/redact.js";
 import { createMemoryWithdrawJournal } from "../src/withdraw-journal.js";
+import { execute, resetExecutorState, type ExecutorDeps, type SendRequest } from "../src/executor.js";
+import { buildPairMap } from "../src/pairs.js";
+import type { SwapIntent } from "../src/domain.js";
 
 const SDK_KEY = new Secret(`0x${"0123456789".repeat(6)}0123`);
 const WALLET_KEY = `0x${"11".repeat(32)}` as Hex;
@@ -38,6 +41,7 @@ test("the app builds and signs a withdrawal to the Hyperliquid SDK vector", asyn
 test("the signing policy bounds every HyperCore action Whale builds and refuses the rest", () => {
   assertHyperliquidSigning(buildLeverage(4, 1), limits);
   assertHyperliquidSigning(buildOrder({ asset: 4, isBuy: true, limitPx: 1670.1, size: 0.0147 }), limits);
+  assertHyperliquidSigning(buildOrder({ asset: 4, isBuy: false, limitPx: 0.2, size: 250, reduceOnly: true }), limits);
   assertHyperliquidSigning({ type: "cancel", cancels: [{ a: 4, o: 9 }] } as { type: string }, limits);
   const refusals: [string, unknown, string][] = [
     ["a resting order", sdkOrder("Gtc", "1", "1", 4), "only immediate-or-cancel limit orders are signed"],
@@ -45,6 +49,7 @@ test("the signing policy bounds every HyperCore action Whale builds and refuses 
     ["a builder-deployed perp", sdkOrder("Ioc", "1", "1", 110_000), "builder-deployed perps are not signed"],
     ["an order with a client id", { type: "order", orders: [{ a: 4, b: true, p: "1", s: "1", r: false, t: { limit: { tif: "Ioc" } }, c: "0x01" }], grouping: "na" }, "order has fields the signer does not decode"],
     ["an order paying a builder fee", { ...sdkOrder("Ioc", "1", "1", 4), builder: { b: ATTACKER, f: 10 } }, "order action has fields the signer does not decode"],
+    ["a perp short", { type: "order", orders: [{ a: 4, b: false, p: "0.2", s: "250", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "a perp sell must be reduce-only, because a short's loss is not bounded by its limit price"],
     ["cross leverage", { type: "updateLeverage", asset: 4, isCross: true, leverage: 1 }, "only isolated leverage is signed"],
     ["leverage above the cap", buildLeverage(4, 2), "leverage exceeds the signing policy"],
     ["a withdrawal through the agent path", { type: "withdraw3" }, "refusing hyperliquid action withdraw3"],
@@ -102,4 +107,49 @@ test("a HyperCore withdrawal to this wallet's Arbitrum address is signed by it a
   reply({ status: "ok", response: { type: "default" } });
   await send("w5", LISTED, 10);
   assert.equal(posts.length, 3);
+});
+
+test("a HyperCore perp sell from Whale only closes a position, so it never opens a short", async () => {
+  const sent: SendRequest[] = [];
+  const intent = (side: "buy" | "sell"): SwapIntent => ({
+    idempotencyKey: `hyper-${side}`,
+    side,
+    notionalUsd: 5,
+    slippageBps: 50,
+    token: {
+      symbol: "TKN",
+      address: "mint",
+      decimals: 6,
+      chain: { kind: "solana" },
+      chainKey: "solana",
+      pairMap: buildPairMap([{ poolAddress: "p", dex: "raydium", chainKey: "solana", baseSymbol: "TKN", baseAddress: "mint", quoteSymbol: "SOL", quoteAddress: "So11111111111111111111111111111111111111112", liquidityUsd: 100, priceUsd: 0.5, baseDecimals: 6 }]),
+    },
+    holdings: [{ symbol: "USDC", address: "usdc", amount: 20, usd: 20, native: false, decimals: 6, chainKey: "solana" }],
+    hyperliquid: { coin: "TKN", assetIndex: 4, market: "perp", maxLeverage: 5 },
+    receivedAtMs: 0,
+  });
+  const deps: ExecutorDeps = {
+    config: { maxUsdPerTrade: 5, dailyUsdCap: 25, maxSlippageBps: 100, slippageHardMaxBps: 300, maxLeverage: 1, minLiquidityUsd: 75_000, killSwitch: false, enabledChainKeys: new Set(["solana", "hypercore"]) },
+    mode: "live",
+    liquidityOf: async () => 100,
+    spentTodayUsd: 0,
+    quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
+    markPrice: async () => 1,
+    szDecimals: async () => 2,
+    send: async (request) => {
+      sent.push(request);
+      return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };
+    },
+    readBalance: async () => 20,
+    priceOf: () => 1,
+    supportTierFor: () => "live",
+    now: () => 1_050,
+  };
+  for (const side of ["buy", "sell"] as const) {
+    resetExecutorState();
+    assert.equal((await execute(intent(side), deps)).decision, "sent", side);
+  }
+  const orders = sent.map((request) => request.hyperliquidActions.find((action) => action.type === "order"));
+  assert.deepEqual(orders.map((order) => order?.type === "order" && [order.orders[0]?.b, order.orders[0]?.r]), [[true, false], [false, true]]);
+  for (const request of sent) for (const action of request.hyperliquidActions) assertHyperliquidSigning(action, { maxLeverage: 1, maxOrderUsd: 5.15 });
 });

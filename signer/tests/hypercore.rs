@@ -338,3 +338,37 @@ fn a_resent_job_signs_again_without_a_second_charge() {
     );
     signer.signed("ten", NONCE + 1, ioc(4, "10", "1"));
 }
+
+fn sell(asset: u64, price: &str, size: &str, reduce_only: bool) -> Value {
+    json!({
+        "type": "order",
+        "orders": [{ "a": asset, "b": false, "p": price, "s": size, "r": reduce_only, "t": { "limit": { "tif": "Ioc" } } }],
+        "grouping": "na"
+    })
+}
+
+#[test]
+fn a_sell_is_never_charged_at_its_own_limit_price() {
+    let signer = Signer::fixture("sells");
+    signer.refused(
+        "short",
+        sell(4, "0.2", "250", false),
+        "a perp sell must be reduce-only",
+    );
+    signer.signed("close a long", NONCE, sell(4, "0.2", "250", true));
+    signer.signed("forty nine", NONCE + 1, ioc(4, "49", "1"));
+    signer.refused(
+        "spot sell without a size limit",
+        sell(10107, "0.01", "1", false),
+        "no daily limit is set for hypercore:spot:10107:sold",
+    );
+    let mut file = load("policy.json");
+    file["hypercore"]["dailyLimits"]["hypercore:spot:10107:sold"] = "300000000".into();
+    let sized = Signer::new("sized sells", file);
+    sized.signed("sell two", NONCE, sell(10107, "0.01", "2", false));
+    sized.refused(
+        "sell two more",
+        sell(10107, "0.01", "2", false),
+        "would be 400000000, above the 300000000 limit",
+    );
+}

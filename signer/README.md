@@ -85,12 +85,16 @@ On HyperCore, the policy needs a `hypercore` section. The signer signs only for 
 
 | Action | Rule |
 | --- | --- |
-| `order` | Every order is an immediate-or-cancel limit order. A perp (asset below 10000) charges price times size, rounded up to micro-USD, against `hypercore:usdc`. A spot order (asset 10000 to 99999) charges against `hypercore:spot:<asset>` in micro-units of its quote token, because the action does not prove that the quote is USDC. A builder-deployed perp (asset 100000 and up) is refused |
+| `order` | Every order is an immediate-or-cancel limit order. A builder-deployed perp (asset 100000 and up) is refused. What is charged depends on the side, because a sell's limit price is only a floor and can sit far below where it fills. A perp buy (asset below 10000) charges price times size, rounded up to micro-USD, against `hypercore:usdc`. A spot buy (asset 10000 to 99999) charges the same product against `hypercore:spot:<asset>` in micro-units of its quote token, because the action does not prove that the quote is USDC. A spot sell charges its size, in 1e-8 units of the sold token, against `hypercore:spot:<asset>:sold`. A perp sell must be reduce-only and is not charged, since it can only close a long that a buy already paid for. A perp short is refused |
 | `updateLeverage` | Isolated only, from 1 to `hypercore.maxLeverage` (default 1) |
 | `cancel` | Allowed, with no charge |
 | `withdraw3` | `destination` is this wallet's EVM address or in `evm.destinations`, written as lowercase hex. `hyperliquidChain` matches the network, `signatureChainId` is `0x66eee`, and `time` equals the job nonce. The amount, at most 6 decimals, counts against `hypercore:usdc` |
 
 Trading fees are not charged. Hyperliquid takes them from the account on top of the notional.
+
+The signer cannot see the account's current leverage, so an order runs at whatever leverage the account already has. A long cannot lose more than its notional at any leverage, and shorts are refused, so the charge still bounds the loss. `updateLeverage` is bounded so that Whale's own leverage step stays isolated and small.
+
+Hyperliquid pays every `withdraw3` on Arbitrum. Before you list an address in `evm.destinations`, check that you control that address on Arbitrum. A contract deployed only on another chain may have no owner there.
 
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom. The ledger also records each charged job id with a digest of what it signed. A job the gateway hands out again after a lost answer is signed again without a second charge. The same id with different work is refused.
 

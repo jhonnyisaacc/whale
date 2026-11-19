@@ -1,5 +1,6 @@
 import { assertTradableAction, type HyperliquidAction, type WithdrawAction } from "../hyperliquid.js";
 
+const SPOT_ASSETS = 10_000;
 const BUILDER_ASSETS = 100_000;
 const WITHDRAW_FIELDS = ["type", "hyperliquidChain", "signatureChainId", "destination", "amount", "time"];
 
@@ -29,6 +30,7 @@ function orderNotional(order: unknown): number {
   if (!Number.isSafeInteger(row.a) || (row.a as number) < 0) refuse("order asset is not an index");
   if ((row.a as number) >= BUILDER_ASSETS) refuse("builder-deployed perps are not signed");
   if (typeof row.b !== "boolean" || typeof row.r !== "boolean") refuse("order side or reduce-only is not a boolean");
+  if (!row.b && !row.r && (row.a as number) < SPOT_ASSETS) refuse("a perp sell must be reduce-only, because a short's loss is not bounded by its limit price");
   return wireNumber(row.p, "order price") * wireNumber(row.s, "order size");
 }
 

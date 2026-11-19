@@ -90,6 +90,10 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
   return { type: "updateLeverage", asset, isCross: false, leverage };
 }
 
+export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction): HyperliquidAction[] {
+  return market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, 1), order];
+}
+
 export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): number {
   if (!(mark > 0)) throw new Error("mark price missing");
   if (!Number.isInteger(capBps) || capBps < 0) throw new Error("slippage cap is negative");

@@ -202,6 +202,8 @@ const hypercoreCases = [
   ["a withdrawal to a listed destination", hlWithdraw(DESTINATION, "1.5"), "signed"],
   ["a withdrawal to an attacker", hlWithdraw(ATTACKER, "1"), "refused", "may only pay this wallet or a listed destination"],
   ["a resting order", hlOrder(4, "1", "1", "Gtc"), "refused", "only immediate-or-cancel"],
+  ["a reduce-only perp sell", { type: "order", orders: [{ a: 4, b: false, p: "0.995", s: "5", r: true, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "signed"],
+  ["a perp short", { type: "order", orders: [{ a: 4, b: false, p: "0.2", s: "250", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "refused", "must be reduce-only"],
 ];
 const hypercore = [];
 for (const [name, action, expect, reason] of hypercoreCases) {

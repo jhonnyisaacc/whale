@@ -548,9 +548,9 @@ impl Policy {
                             "only immediate-or-cancel limit orders are signed".into(),
                         );
                     }
-                    let key = match order.asset {
-                        0..PERP_ASSETS => "hypercore:usdc".to_string(),
-                        PERP_ASSETS..BUILDER_ASSETS => format!("hypercore:spot:{}", order.asset),
+                    let spot = match order.asset {
+                        0..PERP_ASSETS => false,
+                        PERP_ASSETS..BUILDER_ASSETS => true,
                         _ => {
                             refuse(
                                 &mut decision,
@@ -562,10 +562,37 @@ impl Policy {
                             continue;
                         }
                     };
-                    match notional(&order.price, &order.size) {
-                        Some(0) => refuse(&mut decision, "the order has no notional".into()),
-                        Some(value) => self.spend(&mut decision, key, value),
-                        None => refuse(&mut decision, "the order notional does not fit".into()),
+                    let charge = match (order.buy, spot) {
+                        (true, false) => Some((
+                            "hypercore:usdc".to_string(),
+                            notional(&order.price, &order.size),
+                        )),
+                        (true, true) => Some((
+                            format!("hypercore:spot:{}", order.asset),
+                            notional(&order.price, &order.size),
+                        )),
+                        (false, true) => Some((
+                            format!("hypercore:spot:{}:sold", order.asset),
+                            scaled(&order.size, 8),
+                        )),
+                        (false, false) if order.reduce_only => None,
+                        (false, false) => {
+                            refuse(
+                                &mut decision,
+                                "a perp sell must be reduce-only, because a short's loss is not bounded by its limit price".into(),
+                            );
+                            None
+                        }
+                    };
+                    match charge {
+                        None => {}
+                        Some((_, Some(0))) => {
+                            refuse(&mut decision, "the order has no notional".into())
+                        }
+                        Some((key, Some(value))) => self.spend(&mut decision, key, value),
+                        Some((_, None)) => {
+                            refuse(&mut decision, "the order notional does not fit".into())
+                        }
                     }
                 }
             }
