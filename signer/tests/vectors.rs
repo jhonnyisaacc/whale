@@ -93,6 +93,11 @@ fn solana_vectors_match_node() {
 }
 
 #[test]
+fn hypercore_vectors_match_viem_and_msgpack() {
+    run("hypercore.json");
+}
+
+#[test]
 fn the_daily_ledger_refuses_the_spend_that_crosses_the_limit() {
     let policy = Policy::parse(&load("policy.json")).expect("policy");
     let keys = keys();

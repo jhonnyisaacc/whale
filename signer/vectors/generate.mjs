@@ -2,7 +2,8 @@ import { createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
-import { encodeFunctionData, maxUint256, parseAbi } from "viem";
+import { encode } from "@msgpack/msgpack";
+import { encodeFunctionData, keccak256, maxUint256, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { CHAINS } from "../../src/chains.ts";
 
@@ -172,6 +173,41 @@ const policy = {
     dailyLimits: { "hypercore:usdc": "50000000", "hypercore:spot:10107": "20000000" },
   },
 };
+const HL_NONCE = 1_793_664_000_000;
+const zero = "0x0000000000000000000000000000000000000000";
+const splitSig = (hex) => ({ r: `0x${hex.slice(2, 66)}`, s: `0x${hex.slice(66, 130)}`, v: Number.parseInt(hex.slice(130, 132), 16) });
+const l1Signature = async (action, nonce) => {
+  const tail = Buffer.alloc(9);
+  tail.writeBigUInt64BE(BigInt(nonce));
+  const connectionId = keccak256(Buffer.concat([Buffer.from(encode(action)), tail]));
+  return splitSig(await account.signTypedData({ domain: { name: "Exchange", version: "1", chainId: 1337, verifyingContract: zero }, types: { Agent: [{ name: "source", type: "string" }, { name: "connectionId", type: "bytes32" }] }, primaryType: "Agent", message: { source: "b", connectionId } }));
+};
+const withdrawSignature = async (action) =>
+  splitSig(
+    await account.signTypedData({
+      domain: { name: "HyperliquidSignTransaction", version: "1", chainId: 0x66eee, verifyingContract: zero },
+      types: { "HyperliquidTransaction:Withdraw": [{ name: "hyperliquidChain", type: "string" }, { name: "destination", type: "string" }, { name: "amount", type: "string" }, { name: "time", type: "uint64" }] },
+      primaryType: "HyperliquidTransaction:Withdraw",
+      message: { hyperliquidChain: action.hyperliquidChain, destination: action.destination, amount: action.amount, time: BigInt(action.time) },
+    }),
+  );
+const hlOrder = (a, p, sz, tif = "Ioc") => ({ type: "order", orders: [{ a, b: true, p, s: sz, r: false, t: { limit: { tif } } }], grouping: "na" });
+const hlWithdraw = (destination, amount) => ({ type: "withdraw3", hyperliquidChain: "Testnet", signatureChainId: "0x66eee", destination, amount, time: HL_NONCE });
+const hypercoreCases = [
+  ["isolated leverage 1", { type: "updateLeverage", asset: 4, isCross: false, leverage: 1 }, "signed"],
+  ["a perp ioc order", hlOrder(4, "1670.1", "0.0147"), "signed"],
+  ["a spot ioc order", hlOrder(10107, "12.5", "1"), "signed"],
+  ["a cancel with a large order id", { type: "cancel", cancels: [{ a: 4, o: 91_000_000_000 }, { a: 300, o: 70_000 }] }, "signed"],
+  ["a withdrawal to this wallet", hlWithdraw(own.toLowerCase(), "10"), "signed"],
+  ["a withdrawal to a listed destination", hlWithdraw(DESTINATION, "1.5"), "signed"],
+  ["a withdrawal to an attacker", hlWithdraw(ATTACKER, "1"), "refused", "may only pay this wallet or a listed destination"],
+  ["a resting order", hlOrder(4, "1", "1", "Gtc"), "refused", "only immediate-or-cancel"],
+];
+const hypercore = [];
+for (const [name, action, expect, reason] of hypercoreCases) {
+  const signature = expect !== "signed" ? null : action.type === "withdraw3" ? await withdrawSignature(action) : await l1Signature(action, HL_NONCE);
+  hypercore.push({ name, job: { id: name, kind: "hypercore", network: "testnet", nonce: HL_NONCE, action }, expect, ...(reason ? { reason } : {}), ...(signature ? { signature } : {}) });
+}
 const chains = CHAINS.flatMap(({ key, chain }) => (chain.kind === "evm" ? [{ key, chainId: chain.chainId }] : []));
 writeFileSync(`${out}chains.json`, `${JSON.stringify(chains, null, 2)}\n`);
 writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);
@@ -179,4 +215,5 @@ const registration = "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-
 const personalSign = { message: registration, signature: await account.signMessage({ message: registration }) };
 writeFileSync(`${out}evm.json`, `${JSON.stringify({ evmKey: EVM_KEY, own, personalSign, cases: evm }, null, 2)}\n`);
 writeFileSync(`${out}solana.json`, `${JSON.stringify({ seed: SOLANA_SEED.toString("hex"), own: bs58.encode(solanaOwn), cases: solana }, null, 2)}\n`);
-console.log(`wrote ${evm.length} evm and ${solana.length} solana vectors for ${own} and ${bs58.encode(solanaOwn)}`);
+writeFileSync(`${out}hypercore.json`, `${JSON.stringify({ cases: hypercore }, null, 2)}\n`);
+console.log(`wrote ${evm.length} evm, ${solana.length} solana and ${hypercore.length} hypercore vectors for ${own} and ${bs58.encode(solanaOwn)}`);

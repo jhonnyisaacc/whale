@@ -35,9 +35,10 @@ An EVM key (secp256k1) and a Solana key (ed25519) are generated from the OS rand
 ```json
 { "id": "...", "kind": "evm", "chainId": 1, "tx": { "nonce": "7", "to": "0x...", "value": "0", "data": "0x...", "gas": "300000", "maxFeePerGas": "...", "maxPriorityFeePerGas": "..." } }
 { "id": "...", "kind": "solana", "message": "<base64 message bytes>" }
+{ "id": "...", "kind": "hypercore", "network": "testnet", "nonce": 1793664000000, "action": { "type": "order", ... } }
 ```
 
-An EVM job returns `signedTransaction`, an EIP-1559 transaction the signer encoded from the fields it checked. A Solana job returns the base58 `signature` over the exact message it parsed. The signer only signs as the sole signer and fee payer.
+An EVM job returns `signedTransaction`, an EIP-1559 transaction the signer encoded from the fields it checked. A Solana job returns the base58 `signature` over the exact message it parsed. The signer only signs as the sole signer and fee payer. A HyperCore job returns `signature` as `{ r, s, v }`, the form Hyperliquid's `/exchange` takes. The signer decodes `order`, `cancel`, `updateLeverage`, and `withdraw3`. It refuses every other action type and any field it does not decode, such as a client order id, a builder fee, or a vault. It re-encodes the decoded action as canonical msgpack and signs the L1 phantom agent, or for `withdraw3` the `HyperliquidTransaction:Withdraw` typed data. The HyperCore account is this wallet's EVM key, so it signs withdrawals as the account owner.
 
 ## Policy
 
@@ -80,6 +81,17 @@ A rule that needs an account loaded from an address lookup table refuses.
 
 A program in `solana.programs` must also have an instruction rule in the signer, or every instruction to it is refused. Listing a program never trusts it unchecked. Jupiter has no rule yet, so Jupiter swaps are refused until the signer decodes their routes.
 
+On HyperCore, the policy needs a `hypercore` section. The signer signs only for its `network` (`mainnet` or `testnet`). It refuses a job for the other network.
+
+| Action | Rule |
+| --- | --- |
+| `order` | Every order is an immediate-or-cancel limit order. A perp (asset below 10000) charges price times size, rounded up to micro-USD, against `hypercore:usdc`. A spot order (asset 10000 to 99999) charges against `hypercore:spot:<asset>` in micro-units of its quote token, because the action does not prove that the quote is USDC. A builder-deployed perp (asset 100000 and up) is refused |
+| `updateLeverage` | Isolated only, from 1 to `hypercore.maxLeverage` (default 1) |
+| `cancel` | Allowed, with no charge |
+| `withdraw3` | `destination` is this wallet's EVM address or in `evm.destinations`, written as lowercase hex. `hyperliquidChain` matches the network, `signatureChainId` is `0x66eee`, and `time` equals the job nonce. The amount, at most 6 decimals, counts against `hypercore:usdc` |
+
+Trading fees are not charged. Hyperliquid takes them from the account on top of the notional.
+
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom. The ledger also records each charged job id with a digest of what it signed. A job the gateway hands out again after a lost answer is signed again without a second charge. The same id with different work is refused.
 
 ## Supply chain
@@ -92,4 +104,4 @@ The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushe
 
 ## Tests
 
-`vectors/generate.mjs` builds the cases with viem and `node:crypto`. The Rust tests then require the same decision for every case, and byte-identical signed transactions and signatures where one is signed. `test/signer-vectors.test.ts` checks that the app's swap decoder reads the same recipients from the same calldata.
+`vectors/generate.mjs` builds the cases with viem, `@msgpack/msgpack`, and `node:crypto`. `tests/hypercore.rs` also checks the Hyperliquid Python SDK's published signing vectors. The Rust tests then require the same decision for every case, and byte-identical signed transactions and signatures where one is signed. `test/signer-vectors.test.ts` checks that the app's swap decoder reads the same recipients from the same calldata.
