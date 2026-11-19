@@ -24,7 +24,7 @@
         "transport": "stdio",
         "command": [
           "node",
-          "dist/src/mcp-server.js"
+          "scripts/mcp-server.mjs"
         ]
       }
     ],
