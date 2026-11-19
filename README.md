@@ -13,10 +13,10 @@ The public shape is `WalletCommand` in `src/commands.ts`. An `Asset` names a cha
 | Command | Result |
 | --- | --- |
 | `quote` | A route quote, or `skipped` when no provider is injected. |
-| `swap` | `would_swap` with the best signable route a dry run quotes, or `skipped` with the reason. Nothing is signed or broadcast. |
+| `swap` | `would_swap` with the best signable route a dry run quotes, or `skipped` with the reason. Nothing is signed or broadcast. With whale-signer, `mode: "live"` and `notionalUsd` run the live path below. |
 | `bridge` | Routes fetched from LI.FI, Across, and Relay, ranked by fee, and a plan. `broadcast` stays false. |
 | `balance` | Holdings for one chain and address. |
-| `transfer` | `would_send` in dry-run. Live is `skipped`. |
+| `transfer` | `would_send` in dry-run. With whale-signer, `mode: "live"` runs the live path below. Without it, live is `skipped`. |
 
 Under that boundary the existing engines stay. `src/aggregators/` races quotes. `src/routing.ts` plans hops. `src/executor.ts` is the swap state machine. `src/broadcast/` sends a signed transaction when a caller has already chosen live mode inside the engine. `src/signing-policy.ts` is the last check before a signature. `src/chains.ts` is the chain table.
 
@@ -49,4 +49,14 @@ pnpm run check
 
 Live bridging. `bridge` fetches and ranks routes but never signs or sends one. deBridge is not called, because its fixed fee is charged in the native coin outside the quote and this path has no native price.
 
-Local signing for live transfers. The keystore can decrypt for a dry-run. `loadManagedSigner` refuses raw keys when the process is live and requires Turnkey. A live `transfer` command returns `skipped`. The TODO is in `src/commands.ts`.
+Host manifests do not forward `WHALE_SIGNER_KEYSTORE` or the cap and allowlist variables a local live send reads. Set them in the environment that starts `mcp-server.js`.
+
+## Local live sends with whale-signer
+
+Set `WHALE_SIGNER_KEYSTORE` to a whale-signer keystore and the stdio MCP server listens on `127.0.0.1:8790` (`WHALE_SIGNER_PORT`) for `whale-signer serve`. The token is the `.token` file beside the keystore, the one `serve` reads. A live `swap` or `transfer` then runs these steps in order:
+1. Whale builds the transaction. A swap goes through the executor in live mode: screening, liquidity, the per-trade and daily USD caps, the firm quote, and the minimum output. A transfer must pay an `OWNER_WITHDRAW_ADDRESSES` entry inside the same USD caps.
+2. Whale simulates it and applies its app signing policy.
+3. Whale hands the job to whale-signer. Its refusal is a tool error that names the job and the signer's reasons. Whale verifies every signature against the keystore's address.
+4. With `WHALE_BROADCAST` unset, the result is `signed` with the job id and hash. The signed bytes are not returned and nothing is sent.
+
+The daily USD total for local sends lives in the MCP process and starts at zero when it restarts. whale-signer's own ledger is the limit that survives a restart.

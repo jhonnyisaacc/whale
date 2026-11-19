@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import { run, type WalletCommand } from "./commands.js";
+import type { LocalSend, LocalSendResult } from "./local-sends.js";
 import { bridgeRequestSchema } from "./schemas.js";
 
 export type McpDeps = {
@@ -8,6 +9,7 @@ export type McpDeps = {
   executorAuthToken: string | null;
   fetchImpl?: typeof fetch;
   runCommand?: typeof run;
+  localSend?: (command: LocalSend) => Promise<LocalSendResult>;
 };
 
 const assetSchema = {
@@ -25,10 +27,10 @@ const assetSchema = {
 export const TOOLS = [
   { name: "wallet_status", description: "Read executor status. It shows the mode, the enabled chains, and the caps. It moves no money.", inputSchema: { type: "object", properties: {} } },
   { name: "quote", description: "Quote a swap. With no provider this skips and does not hit the network.", inputSchema: { type: "object", properties: { sell: assetSchema, buy: assetSchema, sellAmount: { type: "string" }, taker: { type: ["string", "null"] }, slippageBps: { type: "number" } }, required: ["sell", "buy", "sellAmount", "slippageBps"] } },
-  { name: "swap", description: "Dry-run a swap. It quotes the best signable route and returns would_swap, or skipped with the reason. A live swap quotes again with a price check. It signs and broadcasts nothing.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, sell: assetSchema, buy: assetSchema, sellAmount: { type: "string" }, slippageBps: { type: "number" } }, required: ["idempotencyKey", "sell", "buy", "sellAmount", "slippageBps"] } },
+  { name: "swap", description: "Swap on one chain. The default dry_run quotes the best signable route and returns would_swap, or skipped with the reason, and signs nothing. mode live needs whale-signer: Whale sizes the trade from notionalUsd, checks its caps, builds and simulates the transaction, and asks whale-signer, whose refusal is final. With WHALE_BROADCAST off the signed job is reported and not sent.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, sell: assetSchema, buy: assetSchema, sellAmount: { type: "string" }, slippageBps: { type: "number" }, mode: { type: "string", enum: ["dry_run", "live"] }, notionalUsd: { type: "number" } }, required: ["idempotencyKey", "sell", "buy", "sellAmount", "slippageBps"] } },
   { name: "bridge", description: "Fetch bridge routes from LI.FI, Across, and Relay and rank them by fee. amount is in the asset's smallest unit. The destination must be an owner address on an enabled chain. The plan never broadcasts.", inputSchema: z.toJSONSchema(bridgeRequestSchema) },
   { name: "balance", description: "Read holdings for one chain and address. On Solana this includes SPL tokens. With no reader this fails.", inputSchema: { type: "object", properties: { chainKey: { type: "string" }, address: { type: "string" } }, required: ["chainKey", "address"] } },
-  { name: "transfer", description: "Dry-run a transfer. Live mode is skipped because local signing is not wired for live sends.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, asset: assetSchema, to: { type: "string" }, amount: { type: "string" }, mode: { type: "string" } }, required: ["idempotencyKey", "asset", "to", "amount"] } },
+  { name: "transfer", description: "Transfer to an owner address. amount is in the asset's smallest unit. The default dry_run sends nothing. mode live needs whale-signer: the destination must be in OWNER_WITHDRAW_ADDRESSES and inside Whale's USD caps, and whale-signer's refusal is final. With WHALE_BROADCAST off the signed job is reported and not sent.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, asset: assetSchema, to: { type: "string" }, amount: { type: "string" }, mode: { type: "string", enum: ["dry_run", "live"] } }, required: ["idempotencyKey", "asset", "to", "amount"] } },
 ] as const;
 
 async function callHttp(deps: McpDeps, route: string): Promise<unknown> {
@@ -44,19 +46,23 @@ async function callHttp(deps: McpDeps, route: string): Promise<unknown> {
   }
 }
 
-function commandFrom(name: string, args: Record<string, unknown>): WalletCommand {
+function commandFrom(name: string, args: Record<string, unknown>, liveSigner: boolean): WalletCommand {
+  if (name === "swap" && args.mode === "live" && liveSigner) {
+    if (!(typeof args.notionalUsd === "number" && args.notionalUsd > 0)) throw new Error("a live swap needs notionalUsd, a positive USD amount");
+    return { ...args, kind: "swap", mode: "live", notionalUsd: args.notionalUsd } as WalletCommand;
+  }
   if (name === "swap") return { ...args, kind: "swap", mode: "dry_run" } as WalletCommand;
   if (name === "bridge") return { kind: "bridge", ...bridgeRequestSchema.parse(args) };
-  if (name === "quote" || name === "balance" || name === "transfer") {
-    return { ...args, kind: name } as WalletCommand;
-  }
+  if (name === "transfer") return { ...args, kind: name, mode: args.mode === "live" ? "live" : "dry_run" } as WalletCommand;
+  if (name === "quote" || name === "balance") return { ...args, kind: name } as WalletCommand;
   throw new Error(`unknown tool ${name}`);
 }
 
 export async function callTool(deps: McpDeps, name: string, args: Record<string, unknown>): Promise<unknown> {
   if (name === "wallet_status") return callHttp(deps, "/status");
   const execute = deps.runCommand ?? run;
-  const command = commandFrom(name, args);
+  const command = commandFrom(name, args, Boolean(deps.localSend));
+  if (deps.localSend && (command.kind === "transfer" || command.kind === "swap") && command.mode === "live") return deps.localSend(command);
   if (command.kind === "transfer" || (command.kind === "swap" && command.mode !== "dry_run")) return execute(command);
   const { commandDeps } = await import("./command-callers.js");
   return execute(command, commandDeps(process.env, command));
@@ -114,6 +120,27 @@ if (entry.endsWith("mcp-server.js")) {
       const reason = error instanceof TypeError ? "is not a URL" : "must be an https URL (http only for localhost) with no credentials, query, fragment, or API key in it";
       process.stderr.write(`whale: WHALE_GATEWAY_URL ${reason}\n`);
       process.exit(1);
+    }
+  }
+  if (!gatewayUrl) {
+    const { whaleSignerSetup } = await import("./whale-signer.js");
+    let setup: ReturnType<typeof whaleSignerSetup> = null;
+    try {
+      setup = whaleSignerSetup(process.env);
+    } catch (error) {
+      process.stderr.write(`whale: whale-signer is not usable: ${error instanceof Error ? error.message : String(error)}\n`);
+      process.exit(1);
+    }
+    if (setup) {
+      const { startSignerQueue } = await import("./signer-queue.js");
+      const { localSender } = await import("./local-sends.js");
+      const queue = await startSignerQueue({ token: setup.token, port: setup.port, answerTimeoutMs: setup.answerTimeoutMs }).catch((error: unknown) => {
+        process.stderr.write(`whale: cannot listen for whale-signer on 127.0.0.1:${setup.port}: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.exit(1);
+      });
+      deps.localSend = localSender(process.env, queue, setup);
+      process.stdin.once("end", () => void queue.close());
+      process.stderr.write(`whale: live sends go to whale-signer. run: whale-signer serve --gateway ${queue.url} --keystore <keystore> --policy <policy> --ledger <ledger>\n`);
     }
   }
   const handle = gatewayUrl && apiKey ? createBridge({ gatewayUrl, apiKey }) : createHandler(deps);

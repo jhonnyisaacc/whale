@@ -19,6 +19,14 @@ To work with a hosted gateway, ask the dashboard for a connection code (it takes
 ./target/release/whale-signer serve --keystore keystore.json --gateway https://<gateway> --policy policy.json --ledger ledger.json
 ```
 
+To work with the local Whale MCP server instead, write a random token of at least 32 characters to `keystore.token` with mode 0600, start the MCP server with `WHALE_SIGNER_KEYSTORE=keystore.json`, then:
+
+```bash
+./target/release/whale-signer serve --keystore keystore.json --gateway http://127.0.0.1:8790 --policy policy.json --ledger ledger.json
+```
+
+The MCP server reads only the public addresses from the keystore. It never holds the passphrase or the policy.
+
 `connect` signs the registration text (wallet id plus code) with both keys. The EVM key uses EIP-191. The gateway checks both signatures before it takes these addresses, and stores the returned token next to the keystore with owner-only permissions. `serve` long-polls `/signer/v1/jobs` over https, so no inbound port is opened. It checks each job with the same code as `sign` and posts the decision back. `--once` handles at most one job, for testing.
 
 `init` refuses if the file already exists. On Unix it creates the keystore readable only by its owner (mode 0600). Other platforms have no such mode, so the file inherits the permissions of its directory, and `init` prints a warning to stderr. `sign` prints one JSON decision and exits:

@@ -68,7 +68,7 @@ export type SendIo = {
   pollMs: number;
 };
 
-export type SendHooks = { io?: SendIo; onTx?: (tx: TxRecord) => Promise<void> };
+export type SendHooks = { io?: SendIo; onTx?: (tx: TxRecord) => Promise<void>; hold?: boolean };
 
 export type Confirmed = { records: TxRecord[]; received: bigint | null };
 export type Submitted = { record: TxRecord; confirm(): Promise<Confirmed> };
@@ -82,6 +82,7 @@ export type Ctx = {
   onTx: (tx: TxRecord) => Promise<void>;
   fetchImpl: typeof fetch;
   secrets: readonly string[];
+  hold?: boolean;
 };
 
 export function evmChain(chainId: number, rpcs: readonly string[]) {

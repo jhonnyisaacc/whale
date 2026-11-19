@@ -353,7 +353,7 @@ test("concurrent evm sends get distinct nonces and a rejected nonce resyncs", as
   const signed: EvmSignInput[] = [];
   const io = clockIo(chain.rpc);
   const signer = evmSigner(signed);
-  const send = () => withdrawNative({ config: evmConfig, signer, chainKey: "base", to: DEST, amount: 0.0001, io });
+  const send = () => withdrawNative({ config: evmConfig, signer, chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
   await Promise.all([send(), send(), send()]);
   assert.deepEqual(
     signed.map((input) => input.nonce).sort(),
@@ -389,7 +389,7 @@ test("a rejected or unconfirmed evm send leaves no nonce gap", async () => {
   };
   const signed: EvmSignInput[] = [];
   const io = clockIo(chain.rpc);
-  const send = () => withdrawNative({ config: evmConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 0.0001, io });
+  const send = () => withdrawNative({ config: evmConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
   await assert.rejects(send, (error: unknown) => error instanceof BroadcastError && !error.broadcast);
   await assert.rejects(send, (error: unknown) => error instanceof BroadcastError && error.broadcast);
   const stuck = await send();
@@ -434,7 +434,7 @@ test("a receipt timeout sends one replacement at the same nonce with fees bumped
     signer: evmSigner(signed),
     chainKey: "base",
     to: DEST,
-    amount: 0.0001,
+    amount: 100_000_000_000_000n,
     io: clockIo(chain.rpc),
     onTx: async (record) => {
       records.push(record);
@@ -454,7 +454,7 @@ test("a receipt timeout sends one replacement at the same nonce with fees bumped
 test("a reverted receipt is reported as reverted and releases the spend", async () => {
   const chain = fakeChain();
   chain.onSend = (_signed, hash) => chain.receipts.set(hash, { ...success, status: "reverted" });
-  const tx = await withdrawNative({ config: evmConfig, signer: evmSigner([]), chainKey: "base", to: DEST, amount: 0.0001, io: clockIo(chain.rpc) });
+  const tx = await withdrawNative({ config: evmConfig, signer: evmSigner([]), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io: clockIo(chain.rpc) });
   assert.equal(tx.outcome, "reverted");
   resetExecutorState();
   approveRouter();
@@ -510,7 +510,7 @@ test("a solana send whose blockhash expires is reported as expired", async () =>
     signer,
     chainKey: "solana",
     to: Keypair.generate().publicKey.toBase58(),
-    amount: 0.01,
+    amount: 10_000_000n,
     io: clockIo(null, rpc),
   });
   assert.equal(sent.length, 1);
@@ -654,7 +654,7 @@ test("a solana expiry is rechecked on every rpc before it is declared", async ()
     signer,
     chainKey: "solana",
     to: Keypair.generate().publicKey.toBase58(),
-    amount: 0.01,
+    amount: 10_000_000n,
     io: clockIo(null, solanaRpcOver([connection(false), connection(true)])),
   });
   assert.ok(height > 100, "the blockhash had expired on the first rpc");
@@ -739,7 +739,7 @@ test("a definite rejection for a hash some RPC already has is treated as broadca
     throw new Error("nonce too low");
   };
   const io = clockIo(chain.rpc);
-  const send = () => withdrawNative({ config: evmConfig, signer: evmSigner([]), chainKey: "base", to: DEST, amount: 0.0001, io });
+  const send = () => withdrawNative({ config: evmConfig, signer: evmSigner([]), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
   await assert.rejects(send, (error: unknown) => error instanceof BroadcastError && error.broadcast);
   chain.known.clear();
   chain.rpc.sendRaw = async () => {
@@ -758,6 +758,21 @@ test("a definite rejection from a private relay keeps the send counted as broadc
     throw new Error("nonce too low");
   };
   const config = loadConfig({ RPC_URL_8453: "http://fake.invalid", MEV_RPC_URL_8453: "http://relay.invalid", ZEROX_API_KEY: "zeroex-key" });
-  const send = () => withdrawNative({ config, signer: evmSigner([]), chainKey: "base", to: DEST, amount: 0.0001, io: clockIo(chain.rpc) });
+  const send = () => withdrawNative({ config, signer: evmSigner([]), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io: clockIo(chain.rpc) });
   await assert.rejects(send, (error: unknown) => error instanceof BroadcastError && error.broadcast);
+});
+
+test("a held send signs, journals the signed record, sends nothing, and gives the nonce back", async () => {
+  const chain = fakeChain();
+  const signed: EvmSignInput[] = [];
+  const journaled: TxRecord[] = [];
+  const io = clockIo(chain.rpc);
+  const held = await withdrawNative({ config: evmConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io, hold: true, onTx: async (tx) => void journaled.push(tx) });
+  assert.equal(held.outcome, "signed");
+  assert.equal(chain.sent.length, 0);
+  assert.ok(journaled.every((tx) => tx.outcome === "signed"));
+  chain.onSend = (_signed, hash) => chain.receipts.set(hash, success);
+  const sent = await withdrawNative({ config: evmConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
+  assert.equal(sent.outcome, "landed");
+  assert.deepEqual(signed.map((input) => input.nonce), [7, 7], "the held signature did not use up the nonce");
 });
