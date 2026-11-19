@@ -12,7 +12,7 @@ import { execute, resetExecutorState, type ExecutorDeps } from "../src/executor.
 import { createExecutor } from "../src/executor-server.js";
 import { localSender } from "../src/local-sends.js";
 import { startSignerQueue, type SignerQueue } from "../src/signer-queue.js";
-import { resetTokenDecimals } from "../src/token-decimals.js";
+import { resetTokenDecimals, resolveTokenDecimals } from "../src/token-decimals.js";
 
 const TOKEN = "t".repeat(40);
 const evm = privateKeyToAccount(`0x${"11".repeat(32)}` as Hex);
@@ -62,7 +62,7 @@ function rpcResult(method: string, params: unknown[], sent: string[]): unknown {
   }
 }
 
-async function fakeChain(): Promise<Chain> {
+async function fakeChain(sendFails = false): Promise<Chain> {
   const sent: string[] = [];
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -76,7 +76,12 @@ async function fakeChain(): Promise<Chain> {
         return response.end(JSON.stringify({ [address]: { usd: 1 }, [address.toLowerCase()]: { usd: 1 } }));
       }
       if (url.pathname.startsWith("/token-pairs")) return response.end("[]");
-      const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "null") as unknown;
+      const text = Buffer.concat(chunks).toString("utf8");
+      if (sendFails && text.includes("eth_sendRawTransaction")) {
+        response.statusCode = 502;
+        return response.end("{}");
+      }
+      const body = JSON.parse(text || "null") as unknown;
       const one = (call: { id: number; method: string; params?: unknown[] }) => ({ jsonrpc: "2.0", id: call.id, result: rpcResult(call.method, call.params ?? [], sent) });
       response.end(JSON.stringify(Array.isArray(body) ? body.map(one) : one(body as { id: number; method: string })));
     });
@@ -104,10 +109,10 @@ function signEveryJob(queue: SignerQueue, seen: Job[]): () => void {
   };
 }
 
-async function withLocalSender(env: Record<string, string>, run: (send: ReturnType<typeof localSender>, chain: Chain, jobs: Job[]) => Promise<void>): Promise<void> {
+async function withLocalSender(env: Record<string, string>, run: (send: ReturnType<typeof localSender>, chain: Chain, jobs: Job[]) => Promise<void>, sendFails = false): Promise<void> {
   resetSendClients();
   resetTokenDecimals();
-  const chain = await fakeChain();
+  const chain = await fakeChain(sendFails);
   const queue = await startSignerQueue({ token: TOKEN, port: 0, answerTimeoutMs: 5_000 });
   const jobs: Job[] = [];
   const stop = signEveryJob(queue, jobs);
@@ -155,6 +160,13 @@ test("a refused or held transfer gives its reservation back", () =>
     assert.equal(first.status, "signed");
     assert.equal(second.status, "signed", "a held transfer spent nothing, so it does not use up the cap");
   }));
+
+test("a transfer whose broadcast may have gone out keeps its reservation", () =>
+  withLocalSender({ WHALE_BROADCAST: "true", MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "5" }, async (send) => {
+    const one = (key: string) => send({ kind: "transfer", idempotencyKey: key, mode: "live", asset: onBase(ETH, "ETH", 18), to: DEST, amount: "1500000000000000" });
+    await assert.rejects(one("lost"));
+    assert.equal((await one("next")).reason, "daily cap 5 USD");
+  }, true));
 
 function swapIntent(key: string, sellDecimals: number, buyDecimals: number | null): SwapIntent {
   const pairMap = { pools: [], top: { poolAddress: "", dex: "whale-price", chainKey: "base", baseSymbol: "TKN", baseAddress: TKN, quoteSymbol: "USD", quoteAddress: "", liquidityUsd: 0, priceUsd: 1, baseDecimals: buyDecimals } };
@@ -223,4 +235,28 @@ test("concurrent live swaps reserve the daily cap before sending", async () => {
   const reports = await Promise.all(["s1", "s2", "s3"].map((key) => executor.execute(swapIntent(key, 6, 6), overrides)));
   assert.equal(sends.length, 2, JSON.stringify(reports.map((report) => [report.decision, report.reason])));
   assert.equal(reports.filter((report) => report.reason === "daily cap 10 USD").length, 1);
+});
+
+test("solana mint decimals are read from the parsed mint account", async () => {
+  resetTokenDecimals();
+  const mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk) => chunks.push(chunk as Buffer));
+    request.on("end", () => {
+      const call = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { id: number; params: [string] };
+      const data = call.params[0] === mint ? { program: "spl-token", parsed: { type: "mint", info: { decimals: 6 } }, space: 82 } : { program: "spl-token", parsed: { type: "account", info: {} }, space: 165 };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: call.id, result: { context: { slot: 1 }, value: { data, executable: false, lamports: 1, owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", rentEpoch: 0 } } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const rpc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    assert.equal(await resolveTokenDecimals("solana", mint, { kind: "solana" }, rpc), 6);
+    assert.equal(await resolveTokenDecimals("solana", solana.publicKey.toBase58(), { kind: "solana" }, rpc), null, "a token account is not a mint");
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

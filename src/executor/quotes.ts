@@ -1,7 +1,8 @@
 import { QUOTE_ASSETS, chainByKey, feeRankOf } from "../chains.js";
-import type { RaceQuote, RouteLeg, RoutePlan, RouteQuote, SwapIntent } from "../domain.js";
+import type { Holding, RaceQuote, RouteLeg, RoutePlan, RouteQuote, SwapIntent } from "../domain.js";
 import { combineHopImpact, planRoutes } from "../routing.js";
-import { acceptDecimals, cachedTokenDecimals, rememberTokenDecimals } from "../token-decimals.js";
+import { holdingFitsChain, holdingsForTrade } from "../balances.js";
+import { acceptDecimals, cachedTokenDecimals, checkedDecimals, rememberTokenDecimals } from "../token-decimals.js";
 import type { ExecutorDeps, HopQuote } from "../executor.js";
 
 function raceQuoteOf(hop: { sellAmount: string }, quote: HopQuote): RaceQuote | undefined {
@@ -34,10 +35,7 @@ function decorate(quote: RouteQuote, token: SwapIntent["token"]): RouteQuote {
 
 async function buyDecimals(token: SwapIntent["token"], deps: ExecutorDeps): Promise<number | null> {
   const known = acceptDecimals(token.decimals);
-  if (known !== null) {
-    rememberTokenDecimals(token.chainKey, token.address, known);
-    return known;
-  }
+  if (known !== null) return known;
   const cached = cachedTokenDecimals(token.chainKey, token.address);
   if (cached !== null) return cached;
   if (!deps.readTokenDecimals) return null;
@@ -49,6 +47,35 @@ async function buyDecimals(token: SwapIntent["token"], deps: ExecutorDeps): Prom
   } catch {
     return null;
   }
+}
+
+async function withChainDecimals(
+  token: SwapIntent["token"],
+  holdings: SwapIntent["holdings"],
+  deps: ExecutorDeps,
+): Promise<{ token: SwapIntent["token"]; holdings: SwapIntent["holdings"] } | string> {
+  const readDecimals = deps.readTokenDecimals;
+  if (!readDecimals) return { token, holdings };
+  const read = (address: string) => () => readDecimals({ chainKey: token.chainKey, chain: token.chain, address });
+  const onTradeChain = (holding: Holding) => !holding.native && (!holding.chainKey || holding.chainKey === token.chainKey) && holdingFitsChain(holding, token.chainKey);
+  const checkHolding = async (holding: Holding): Promise<Holding | string> => {
+    if (!onTradeChain(holding)) return holding;
+    const decimals = await checkedDecimals(holding.symbol, holding.decimals, read(holding.address));
+    return typeof decimals === "string" ? decimals : { ...holding, decimals };
+  };
+  const [buy, checked] = await Promise.all([checkedDecimals(token.symbol, token.decimals, read(token.address)), Promise.all(holdings.map(checkHolding))]);
+  if (typeof buy === "string") return buy;
+  const refused = checked.find((row): row is string => typeof row === "string");
+  if (refused) return refused;
+  return { token: { ...token, decimals: buy }, holdings: checked.filter((row): row is Holding => typeof row !== "string") };
+}
+
+export async function sizedLive(intent: SwapIntent, token: SwapIntent["token"], deps: ExecutorDeps): Promise<{ intent: SwapIntent; token: SwapIntent["token"] } | string> {
+  const checked = await withChainDecimals(token, intent.holdings, deps);
+  if (typeof checked === "string") return checked;
+  const sized = await holdingsForTrade(true, checked.holdings, deps.readBalance ?? null, token.chainKey, deps.priceOf ?? null);
+  if (!sized.ok) return sized.reason;
+  return { intent: { ...intent, holdings: sized.holdings }, token: checked.token };
 }
 
 async function quoteOnePlan(

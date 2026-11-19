@@ -7,10 +7,10 @@ import { broadcastRoute, NATIVE_SELL, recoverToken, withdrawNative } from "./bro
 import { createBalanceCache } from "./balances.js";
 import { chainReader } from "./executor-server/chain-reader.js";
 import { createExecutor } from "./executor-server.js";
-import { restoreSpent, spentToday } from "./executor.js";
+import { BroadcastError } from "./executor.js";
 import { withPolicy, type TransactionSigner } from "./managed-signer.js";
 import { coingeckoLoader, createPriceCache, pricedHoldings, type PriceOf } from "./prices.js";
-import { spendDay } from "./spend.js";
+import { checkedDecimals } from "./token-decimals.js";
 import { withTimeout } from "./timeout.js";
 import { readVendorText, vendorResponse } from "./vendor-fetch.js";
 import { WSOL_MINT } from "./signing-policy.js";
@@ -84,7 +84,6 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     secrets,
   });
   const hold = !config.live;
-  const day = () => spendDay(new Date(), config.spendTimezone);
 
   async function swap(command: Extract<LocalSend, { kind: "swap" }>): Promise<LocalSendResult> {
     const priceOf = await usdPrices(config, [command.sell, command.buy]);
@@ -110,23 +109,32 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     const { asset } = command;
     const spec = chainByKey(asset.chainKey);
     if (!spec || !config.enabledChainKeys.has(spec.key)) return skip(`chain ${asset.chainKey} is disabled`);
-    const native = isNativeAsset(asset);
-    const decimals = native ? (spec.chain.kind === "solana" ? 9 : 18) : asset.decimals;
-    if (decimals === null) return skip("a token transfer needs the token's decimals");
     if (!config.withdrawAllowlist.some((item) => item.toLowerCase() === command.to.toLowerCase())) return skip("destination is not in OWNER_WITHDRAW_ADDRESSES");
-    const unit = (await usdPrices(config, [asset]))(holdingOf(asset));
+    const native = isNativeAsset(asset);
+    const read = async () => (await executor.deps.readTokenDecimals?.({ chainKey: spec.key, chain: spec.chain, address: asset.address })) ?? null;
+    const decimals = native ? (spec.chain.kind === "solana" ? 9 : 18) : await checkedDecimals(asset.symbol, asset.decimals, read);
+    if (typeof decimals === "string") return skip(decimals);
+    const unit = (await usdPrices(config, [asset]))(holdingOf({ ...asset, decimals }));
     if (unit === null) return skip(`no USD price for ${asset.symbol}, so the caps cannot be checked`);
     const usd = (Number(command.amount) / 10 ** decimals) * unit;
     if (!(usd <= config.maxUsdPerTrade)) return skip(`notional exceeds ${config.maxUsdPerTrade} USD`);
-    if (spentToday(executor.state, day()) + usd > config.dailyUsdCap) return skip(`daily cap ${config.dailyUsdCap} USD`);
+    const reserved = await executor.spend.reserve(command.idempotencyKey, usd);
+    if (reserved === "cap") return skip(`daily cap ${config.dailyUsdCap} USD`);
+    if (reserved === "exists") return skip("duplicate spend");
     const jobs: SignerJobRecord[] = [];
     const txs: TxRecord[] = [];
     const input = { config, signer: signerFor(jobs), chainKey: spec.key, to: command.to, amount: BigInt(command.amount), secrets, hold, onTx: async (tx: TxRecord) => void txs.push(tx) };
-    const done = await (native ? withdrawNative(input) : recoverToken({ ...input, mint: asset.address, decimals })).catch((error: unknown) => {
-      if (jobs.some((job) => job.decision === "refused")) return null;
-      throw error;
-    });
-    if (done && done.outcome !== "signed") restoreSpent(executor.state, spentToday(executor.state, day()) + usd, day());
+    let done: TxRecord | null;
+    try {
+      done = await (native ? withdrawNative(input) : recoverToken({ ...input, mint: asset.address, decimals }));
+    } catch (error) {
+      const maybeSent = error instanceof BroadcastError ? error.broadcast : txs.some((tx) => tx.outcome === "pending");
+      if (!maybeSent) await executor.spend.release(command.idempotencyKey).catch(() => undefined);
+      if (!jobs.some((job) => job.decision === "refused")) throw error;
+      done = null;
+    }
+    if (done?.outcome === "landed") await executor.spend.commit(command.idempotencyKey).catch(() => undefined);
+    else if (done?.outcome !== "pending") await executor.spend.release(command.idempotencyKey).catch(() => undefined);
     return settled("transfer", jobs, done ? [done] : txs, done ? `transfer ${done.outcome}` : "transfer refused");
   }
 

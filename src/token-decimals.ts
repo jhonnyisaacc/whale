@@ -1,7 +1,9 @@
+import { PublicKey } from "@solana/web3.js";
 import { erc20Abi } from "viem";
+import { z } from "zod";
 import { addressKey } from "./chains.js";
 import type { ChainRef, TokenRecord } from "./domain.js";
-import { evmReadClient } from "./rpc.js";
+import { evmReadClient, solanaConnection } from "./rpc.js";
 
 const cache = new Map<string, number>();
 
@@ -42,6 +44,25 @@ export async function readErc20Decimals(chainId: number, rpc: string, contract: 
   }
 }
 
+const parsedMint = z.object({ parsed: z.object({ type: z.literal("mint"), info: z.object({ decimals: z.number() }).loose() }).loose() }).loose();
+
+export async function readMintDecimals(rpc: string, mint: string): Promise<number | null> {
+  try {
+    const account = await solanaConnection(rpc).getParsedAccountInfo(new PublicKey(mint));
+    const parsed = parsedMint.safeParse(account.value?.data);
+    return parsed.success ? acceptDecimals(parsed.data.parsed.info.decimals) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function checkedDecimals(symbol: string, declared: number | null | undefined, read: () => Promise<number | null>): Promise<number | string> {
+  const onChain = acceptDecimals(await read().catch(() => null));
+  if (onChain === null) return `${symbol} decimals could not be read from the chain`;
+  if (declared !== null && declared !== undefined && declared !== onChain) return `${symbol} decimals ${declared} do not match the chain's ${onChain}`;
+  return onChain;
+}
+
 export async function resolveTokenDecimals(
   chainKey: string,
   contract: string,
@@ -51,8 +72,8 @@ export async function resolveTokenDecimals(
 ): Promise<number | null> {
   const hit = cachedTokenDecimals(chainKey, contract);
   if (hit !== null) return hit;
-  if (chain.kind !== "evm" || !rpc) return null;
-  const decimals = acceptDecimals(await read(chain.chainId, rpc, contract));
+  if (!rpc || (chain.kind !== "evm" && chain.kind !== "solana")) return null;
+  const decimals = acceptDecimals(chain.kind === "evm" ? await read(chain.chainId, rpc, contract) : await readMintDecimals(rpc, contract));
   if (decimals === null) return null;
   rememberTokenDecimals(chainKey, contract, decimals);
   return decimals;
@@ -66,11 +87,7 @@ export async function fillTokenDecimals(
   const out = tokens.slice();
   const jobs: number[] = [];
   tokens.forEach((token, index) => {
-    const known = acceptDecimals(token.decimals);
-    if (known !== null) {
-      rememberTokenDecimals(token.chainKey, token.contract, known);
-      return;
-    }
+    if (acceptDecimals(token.decimals) !== null) return;
     if (token.chain.kind !== "evm" || token.pairMap.pools.length === 0 || !rpcByChainKey[token.chainKey]) return;
     jobs.push(index);
   });
