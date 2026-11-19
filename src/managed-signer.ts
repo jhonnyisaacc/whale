@@ -21,6 +21,7 @@ export type EvmSignInput = {
   purpose: EvmPurpose;
   nativeSell?: boolean;
   approval?: EvmApproval;
+  charge?: EvmApproval;
 };
 
 export interface TransactionSigner {
