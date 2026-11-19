@@ -156,8 +156,11 @@ export const CHAINS: readonly ChainSpec[] = [
       "https://docs.0x.org/docs/introduction/supported-chains",
       "https://docs.kyberswap.com/developer-guide/aggregator-api/aggregator-api-specification/evm-swaps",
       "https://docs.monad.xyz/tooling-and-infra/dex-aggregators",
+      "https://docs.monad.xyz/developer-essentials/network-information/tokens-and-bridges",
+      "https://github.com/0xProject/0x-settler/blob/master/chain_config.json",
+      "https://docs.kyberswap.com/developer-guide/aggregator-api/contracts",
     ],
-    "Monad mainnet is chain 143. The network page lists https://rpc.monad.xyz. 0x lists Swap API support for 143. KyberSwap lists the aggregator slug monad. Monad's aggregator page names LI.FI. DexScreener's slug was not on those pages, so pool refresh ignores Monad until DEXSCREENER_CHAIN_SLUGS sets one. The chain stays off until ENABLED_CHAINS includes monad. No swap router address is shipped. Set ROUTER_ALLOWLIST_JSON for 143. feeRankOf returns 1000 because Monad is not in the rank table.",
+    "Monad mainnet is chain 143. The network page lists https://rpc.monad.xyz. 0x lists Swap API support for 143. KyberSwap lists the aggregator slug monad. Monad's aggregator page names LI.FI. DexScreener's slug was not on those pages, so pool refresh ignores Monad until DEXSCREENER_CHAIN_SLUGS sets one. The chain stays off until ENABLED_CHAINS includes monad. DEFAULT_ROUTERS ships the 0x AllowanceHolder and the KyberSwap MetaAggregationRouterV2 for 143. ROUTER_ALLOWLIST_JSON naming 143 replaces them. feeRankOf returns 1000 because Monad is not in the rank table.",
     false,
   ),
   {
@@ -284,6 +287,17 @@ export const DEFAULT_EVM_FEE_LIMITS: Readonly<Record<number, EvmFeeLimit>> = {
   42161: { maxGas: 5_000_000n, maxFeePerGas: GWEI },
   59144: { maxGas: 1_500_000n, maxFeePerGas: 5n * GWEI },
 };
+
+export const DEFAULT_ROUTERS: Readonly<Record<number, readonly string[]>> = {
+  143: ["0x0000000000001fF3684f28c67538d4D072C22734", "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5"],
+};
+
+export function withDefaultRouters(routers: Readonly<Record<number, readonly string[]>>): Record<number, string[]> {
+  const out: Record<number, string[]> = {};
+  for (const [id, list] of Object.entries(DEFAULT_ROUTERS)) out[Number(id)] = list.map((item) => item.toLowerCase());
+  for (const [id, list] of Object.entries(routers)) out[Number(id)] = [...list];
+  return out;
+}
 
 export const L1_DATA_FEE_CHAIN_IDS: ReadonlySet<number> = new Set([10, 8453, 81457, 534352]);
 

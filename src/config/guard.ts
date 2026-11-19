@@ -1,4 +1,4 @@
-import { CHAINS, L1_DATA_FEE_CHAIN_IDS } from "../chains.js";
+import { CHAINS, L1_DATA_FEE_CHAIN_IDS, withDefaultRouters } from "../chains.js";
 import { isSolanaAddress } from "../signer.js";
 import { kyberSupports } from "../aggregators.js";
 import { DEFAULT_KYBER_CLIENT_ID } from "./types.js";
@@ -65,10 +65,10 @@ export function reorgDepths(raw: string | undefined): Record<number, number> {
 }
 
 export function routerAllowlist(env: NodeJS.ProcessEnv): Record<number, string[]> {
-  if (env.ROUTER_ALLOWLIST_JSON) return chainAddressMap(env.ROUTER_ALLOWLIST_JSON, "ROUTER_ALLOWLIST_JSON");
+  if (env.ROUTER_ALLOWLIST_JSON) return withDefaultRouters(chainAddressMap(env.ROUTER_ALLOWLIST_JSON, "ROUTER_ALLOWLIST_JSON"));
   const global = splitList(env.ROUTER_ALLOWLIST);
+  if (global.length === 0) return withDefaultRouters({});
   const map: Record<number, string[]> = {};
-  if (global.length === 0) return map;
   for (const chain of CHAINS) {
     if (chain.chain.kind === "evm") map[chain.chain.chainId] = [...global];
   }

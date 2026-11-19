@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { evmFeeLimits, type EvmFeeLimit } from "./chains.js";
+import { evmFeeLimits, withDefaultRouters, type EvmFeeLimit } from "./chains.js";
 import { turnkeyPolicyDocument, type TurnkeyPolicyInput } from "./signing-policy.js";
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
@@ -31,7 +31,7 @@ export function parseDeploymentManifest(raw: unknown): DeploymentManifest {
 export function manifestRouters(manifest: DeploymentManifest): Record<number, string[]> {
   const out: Record<number, string[]> = {};
   for (const [id, list] of Object.entries(manifest.routers)) out[Number(id)] = list.map((item) => item.toLowerCase());
-  return out;
+  return withDefaultRouters(out);
 }
 
 export function manifestFeeLimits(manifest: DeploymentManifest): Record<number, EvmFeeLimit> {
