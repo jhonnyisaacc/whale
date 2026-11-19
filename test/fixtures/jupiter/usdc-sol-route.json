@@ -1,0 +1,30 @@
+{
+  "captured": "2026-11-19",
+  "source": "https://lite-api.jup.ag/swap/v1/swap",
+  "request": {
+    "userPublicKey": "111111111111111111111111WhaLeWa11et",
+    "wrapAndUnwrapSol": true,
+    "dynamicComputeUnitLimit": true,
+    "prioritizationFeeLamports": {
+      "priorityLevelWithMaxLamports": {
+        "maxLamports": 1000000,
+        "priorityLevel": "veryHigh"
+      }
+    },
+    "useSharedAccounts": false
+  },
+  "quote": {
+    "inputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outputMint": "So11111111111111111111111111111111111111112",
+    "inAmount": "1000000",
+    "outAmount": "13379143",
+    "otherAmountThreshold": "13312248",
+    "swapMode": "ExactIn",
+    "slippageBps": 50
+  },
+  "steps": [
+    "Raydium CLMM",
+    "Byreal"
+  ],
+  "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAGCwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALGP5d6x8v6FMgCcEeSlRjviHhVYW7NAgTb17VZlBimIV58+MBBx+Po3oZqdrbXW0oNikQj3Mvx7cBqH+tvRUXSq3i2PvdMl3IodSpMkNgRimH/mseX0FtGBAZaDF55PiqPCaWLaD2jMuWzfcJlESl3TVHy1XXD9xVtikKjHKNmM7lgneYLjbjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABHnVW/IxwG7udMVuzmgVB/2xst6j9I5RArHNola8E48G3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqYyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZtD/6J/XX9kp0wJsfKVh53ksJqzbfyd1RSzIap7OM5eg05FAXmI8cn3vUrMhE+z9eoWq3djr5dudgNYNdcM+jQwYGAAUCwFwVAAYACQN/QgIAAAAAAAkGAAEAHQUIAQEJBgAEABsFCAEBBysIAAMEBxsHCgcgAB4XAwEREhMIFhgUFQcaACEPAQQLDA0IHBkdGx8OEAIHJ+UXy5d6460qAgAAABpkAAGcZAECQEIPAAAAAABHJswAAAAAADIAAAgDBAAAAQkCQ+Ospu0ZmHp3A4Sw3ZIlJWQ1Us14WO9K4irVKqi1qlMGV08uLFAxCVJTChlRc1ZyL6c3HG9tRSvT316RNDMsK/0MEh4kGQZg3KHHm0Sb4y6bCIqFhI2JhouOAA=="
+}
