@@ -1,0 +1,31 @@
+{
+  "captured": "2026-11-19",
+  "source": "https://lite-api.jup.ag/swap/v1/swap",
+  "request": {
+    "userPublicKey": "111111111111111111111111WhaLeWa11et",
+    "wrapAndUnwrapSol": true,
+    "dynamicComputeUnitLimit": true,
+    "prioritizationFeeLamports": {
+      "priorityLevelWithMaxLamports": {
+        "maxLamports": 1000000,
+        "priorityLevel": "veryHigh"
+      }
+    },
+    "useSharedAccounts": true
+  },
+  "quote": {
+    "inputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outputMint": "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
+    "inAmount": "1000000",
+    "outAmount": "1000094",
+    "otherAmountThreshold": "995094",
+    "swapMode": "ExactIn",
+    "slippageBps": 50
+  },
+  "steps": [
+    "ZeroFi",
+    "Raydium CLMM",
+    "Perena"
+  ],
+  "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAHDgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALGP5d6x8v6FBHgxJgcvQqnNZq3RjRuHuzEL9YMLzPVfai3xfAEc1AyKHUqTJDYEYph/5rHl9BbRgQGWgxeeT4qjwmli2g9ozJEaUMD6M4u6EStt4S16yrk/QNMOF330aVXSGMSZRX0N0Jma9ayQ7XJTeurqTvUEjByOL3+y007FpedI9bvzt4vt8bb6Ife3mBYa2q+/aRIB668TE/bopd4zp4RSn/mvPvGOrj7AQXyTVNhYuRhxljdFTxkdxmtDv/kwI8mocJfMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAAR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPFAwJw4hsHGqETzKTG88EqsMXhRmxwP5T1P8qcQ603jw1m2OIuCRRgmy7g7uUIXr5ZYYIYp+BY08KJEnea1CcdoyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZtD/6J/XX9kp0wJsfKVh53ksJqzbfyd1RSzIap7OM5egFTDqmLZj0RPILZHab29QFfuYuqiY/nFEHoKI6XfPCXAQIAAUCwFwVAAgACQPkZgMAAAAAAAwGAAMADgciAQEJOCEKAAIBAwMjDgkiDQkoHSkcHhobAQUKISAhIycLJQomFwUEFhkUIQYVExgJHw8SDgQDERAkCiEiLsEgmzNB1pyBAQMAAADDZAABGmQBAkcBAmQCA0BCDwAAAAAAnkIPAAAAAAAyAAAD3Rm4pBLZruDwNxfhWHFCZVAXIJLQvDZLEsSe53QXdCwFPz1HQz4GRQQPBUJE4q72kuDHBnLUrHFyEYrJFn+7wJyZLp2QUbSaTneL8N4HMCYvLikjLQInJOf2QVTxQ3OjJ6pWZXTnJQ0j9oyxAl8/T6f7wj6gzHsPBbqztLe4A7K1tg=="
+}
