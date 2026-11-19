@@ -166,6 +166,11 @@ const policy = {
     maxPriorityLamports: "100000",
     dailyLimits: { "solana:native": "2000000000" },
   },
+  hypercore: {
+    network: "testnet",
+    maxLeverage: 1,
+    dailyLimits: { "hypercore:usdc": "50000000", "hypercore:spot:10107": "20000000" },
+  },
 };
 const chains = CHAINS.flatMap(({ key, chain }) => (chain.kind === "evm" ? [{ key, chainId: chain.chainId }] : []));
 writeFileSync(`${out}chains.json`, `${JSON.stringify(chains, null, 2)}\n`);

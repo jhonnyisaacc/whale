@@ -1,5 +1,6 @@
 pub mod abi;
 pub mod evm;
+pub mod hypercore;
 pub mod keystore;
 pub mod ledger;
 pub mod net;
@@ -75,7 +76,23 @@ pub fn run_job(
                 Err(error) => return refused(vec![error]),
             }
         }
-        _ => return refused(vec!["kind must be evm or solana".into()]),
+        Some("hypercore") => match hypercore::parse(job) {
+            Ok(action) => {
+                let decision =
+                    policy.check_hypercore(&action, keystore::evm_address_bytes(&keys.evm));
+                let work = hypercore::signing_hash(&action).to_vec();
+                (
+                    "hypercore".into(),
+                    decision,
+                    work,
+                    Box::new(move || {
+                        Ok(json!({ "signature": hypercore::sign(&action, &keys.evm) }))
+                    }),
+                )
+            }
+            Err(error) => return refused(vec![format!("hypercore: {error}")]),
+        },
+        _ => return refused(vec!["kind must be evm, solana or hypercore".into()]),
     };
     let refused = |reasons: Vec<String>| {
         refused(
