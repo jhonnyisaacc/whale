@@ -71,10 +71,7 @@ async function fakeChain(sendFails = false): Promise<Chain> {
       const url = new URL(request.url ?? "/", "http://x");
       response.setHeader("content-type", "application/json");
       if (url.pathname.startsWith("/simple/price")) return response.end(JSON.stringify({ ethereum: { usd: 3000 } }));
-      if (url.pathname.startsWith("/simple/token_price")) {
-        const address = url.searchParams.get("contract_addresses") ?? "";
-        return response.end(JSON.stringify({ [address]: { usd: 1 }, [address.toLowerCase()]: { usd: 1 } }));
-      }
+      if (url.pathname.startsWith("/simple/token_price")) return response.end(JSON.stringify({ [USDC]: { usd: 1 }, [USDC.toLowerCase()]: { usd: 1 } }));
       if (url.pathname.startsWith("/token-pairs")) return response.end("[]");
       const text = Buffer.concat(chunks).toString("utf8");
       if (sendFails && text.includes("eth_sendRawTransaction")) {
