@@ -226,6 +226,52 @@ test("a live swap refuses a caller's buy decimals that differ from the chain's, 
   assert.deepEqual(sends, ["5000000"]);
 });
 
+const JUNK = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+async function swapWithExtraHolding(key: string, extra: SwapIntent["holdings"][number]) {
+  resetExecutorState();
+  resetTokenDecimals();
+  const sends: string[] = [];
+  const base = swapIntent(key, 6, 6);
+  const deps = { ...liveSwapDeps(sends), readTokenDecimals: async ({ address }: { address: string }) => (address.toLowerCase() === JUNK ? null : 6) };
+  const report = await execute({ ...base, holdings: [...base.holdings, extra] }, deps as ExecutorDeps);
+  return { report, sends };
+}
+
+test("a live swap drops a holding on the trade chain whose decimals cannot be read and trades from the rest", async () => {
+  const { report, sends } = await swapWithExtraHolding("junk-on-chain", { symbol: "JUNK", address: JUNK, amount: 0, usd: 0, native: false, decimals: 18, chainKey: "base" });
+  assert.equal(report.decision, "sent", report.reason);
+  assert.deepEqual(sends, ["5000000"]);
+});
+
+test("a live swap drops a holding with no chain key whose decimals cannot be read on the trade chain", async () => {
+  const { report, sends } = await swapWithExtraHolding("junk-no-chain", { symbol: "WETH", address: JUNK, amount: 0, usd: 0, native: false, decimals: 18 });
+  assert.equal(report.decision, "sent", report.reason);
+  assert.deepEqual(sends, ["5000000"]);
+});
+
+test("a live swap refuses when no holding's decimals can be read", async () => {
+  resetExecutorState();
+  resetTokenDecimals();
+  const sends: string[] = [];
+  const deps = { ...liveSwapDeps(sends), readTokenDecimals: async ({ address }: { address: string }) => (address === TKN ? 6 : null) };
+  const report = await execute(swapIntent("none-readable", 6, 6), deps as ExecutorDeps);
+  assert.equal(report.decision, "skipped");
+  assert.match(report.reason, /USDC decimals could not be read from the chain/);
+  assert.deepEqual(sends, []);
+});
+
+test("a live swap refuses when the buy token's decimals cannot be read", async () => {
+  resetExecutorState();
+  resetTokenDecimals();
+  const sends: string[] = [];
+  const deps = { ...liveSwapDeps(sends), readTokenDecimals: async ({ address }: { address: string }) => (address === TKN ? null : 6) };
+  const report = await execute(swapIntent("buy-unread", 6, null), deps as ExecutorDeps);
+  assert.equal(report.decision, "skipped");
+  assert.match(report.reason, /TKN decimals could not be read from the chain/);
+  assert.deepEqual(sends, []);
+});
+
 test("concurrent live swaps reserve the daily cap before sending", async () => {
   resetTokenDecimals();
   const config = loadConfig({ MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "10", ENABLED_CHAINS: "base", TOKEN_SCREENING: "false" });
