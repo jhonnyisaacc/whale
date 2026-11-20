@@ -30,6 +30,8 @@ test("MAX_PERP_LEVERAGE sets the ceiling, and the old MAX_LEVERAGE name is refus
   await signerFor({ MAX_PERP_LEVERAGE: "5" }).signHyperliquid(buildLeverage(4, 5), 1, false);
   await assert.rejects(() => signerFor({ MAX_PERP_LEVERAGE: "1" }).signHyperliquid(buildLeverage(4, 2), 1, false), /leverage 2 exceeds the 1x signing policy/);
   assert.throws(() => loadConfig({ MAX_LEVERAGE: "1" }), /^Error: MAX_LEVERAGE is renamed MAX_PERP_LEVERAGE$/);
+  assert.equal(loadConfig({ MAX_PERP_LEVERAGE: "50" }).maxLeverage, 50);
+  assert.throws(() => loadConfig({ MAX_PERP_LEVERAGE: "51" }), /^Error: MAX_PERP_LEVERAGE must be a whole number from 1 to 50$/);
 });
 
 test("the app policy and whale-signer agree on every leverage vector under the default ceiling", async () => {
@@ -57,10 +59,10 @@ const MAINNET = "https://api.hyperliquid.xyz";
 const metaFetch = (async () => new Response(JSON.stringify(captured.meta), { status: 200 })) as unknown as typeof fetch;
 const perp = (coin: string): HyperliquidMarket => ({ coin, assetIndex: captured.meta.universe.findIndex((row) => row.name === coin), market: "perp", maxLeverage: 50 });
 
-function perpIntent(coin: string, leverage: number | undefined, liquidityUsd = 100): SwapIntent {
+function perpIntent(coin: string, leverage: number | undefined, liquidityUsd = 100, side: "buy" | "sell" = "buy"): SwapIntent {
   return intentSchema.parse({
-    idempotencyKey: `${coin}-${leverage}-${liquidityUsd}`,
-    side: "buy",
+    idempotencyKey: `${coin}-${side}-${leverage}-${liquidityUsd}`,
+    side,
     notionalUsd: 5,
     slippageBps: 50,
     leverage,
@@ -105,7 +107,7 @@ test("a dry run on captured mainnet meta plans updateLeverage at the asked lever
   assert.equal(report.decision, "would_send");
   assert.equal(report.reason, "hypercore ETH leverage 2 isolated limit 1758.8 actions updateLeverage,order");
   const fallback = await execute(perpIntent("ETH", undefined), perpDeps("dry_run", {}, []));
-  assert.match(fallback.reason, /^hypercore ETH leverage 1 isolated /);
+  assert.equal(fallback.reason, "hypercore ETH account leverage limit 1758.8 actions order");
 });
 
 test("a 2x ETH buy sends isolated 2x and an order sized on its 5 USD notional, and both sign under the default policy", async () => {
@@ -147,4 +149,29 @@ test("leverage on a trade that routes to a DEX is refused, not dropped to 1x", a
   assert.equal(report.reason, "leverage above 1 applies only to a HyperCore perp");
   assert.throws(() => perpIntent("ETH", 1.5), /expected int/);
   assert.throws(() => perpIntent("ETH", 0), /Too small/);
+});
+
+test("closing a 3x long with a sell that leaves out leverage sends only the sell, never an updateLeverage decrease", async () => {
+  resetExecutorState();
+  resetAssetMeta();
+  const sent: SendRequest[] = [];
+  const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
+  assert.equal((await execute(perpIntent("ETH", 3), perpDeps("live", env, sent))).decision, "sent");
+  const close = await execute(perpIntent("ETH", undefined, 100, "sell"), perpDeps("live", env, sent));
+  assert.equal(close.decision, "sent", close.reason);
+  const label = (action: HyperliquidAction) => (action.type === "order" ? `order ${action.orders[0]!.b ? "buy" : "sell"}` : action.type === "updateLeverage" ? `updateLeverage ${action.leverage}` : action.type);
+  assert.deepEqual(sent.map((request) => request.hyperliquidActions.map(label)), [["updateLeverage 3", "order buy"], ["order sell"]]);
+});
+
+test("a buy that leaves out leverage runs at the account's setting, and leverage on a sell is refused", async () => {
+  resetExecutorState();
+  resetAssetMeta();
+  const sent: SendRequest[] = [];
+  const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
+  assert.equal((await execute(perpIntent("ETH", undefined), perpDeps("live", env, sent))).decision, "sent");
+  assert.deepEqual(sent[0]!.hyperliquidActions.map((action) => action.type), ["order"]);
+  const sell = await execute(perpIntent("ETH", 2, 100, "sell"), perpDeps("live", env, sent));
+  assert.equal(sell.decision, "skipped");
+  assert.equal(sell.reason, "leverage applies only to a HyperCore perp buy");
+  assert.equal(sent.length, 1);
 });

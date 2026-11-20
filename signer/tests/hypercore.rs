@@ -407,6 +407,18 @@ fn the_default_policy_signs_isolated_2x_and_refuses_4x() {
 }
 
 #[test]
+fn a_policy_ceiling_above_50x_is_refused_at_load() {
+    let mut file = load("policy.json");
+    file["hypercore"]["maxLeverage"] = 50.into();
+    assert!(whale_signer::policy::Policy::parse(&file).is_ok());
+    file["hypercore"]["maxLeverage"] = 51.into();
+    assert_eq!(
+        whale_signer::policy::Policy::parse(&file).err().as_deref(),
+        Some("hypercore.maxLeverage must be a whole number from 1 to 50")
+    );
+}
+
+#[test]
 fn a_3x_order_is_charged_its_notional_not_its_margin() {
     let signer = Signer::fixture("notional at 3x");
     signer.signed("3x", NONCE, leverage(4, 3));
