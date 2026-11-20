@@ -90,6 +90,10 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
   return { type: "updateLeverage", asset, isCross: false, leverage };
 }
 
+export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction): HyperliquidAction[] {
+  return market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, 1), order];
+}
+
 export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): number {
   if (!(mark > 0)) throw new Error("mark price missing");
   if (!Number.isInteger(capBps) || capBps < 0) throw new Error("slippage cap is negative");
@@ -150,7 +154,21 @@ export function actionHash(action: HyperliquidAction, vaultAddress: string | nul
   return keccak256(data);
 }
 
-export async function signL1Action(privateKey: Secret, action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<{ r: Hex; s: Hex; v: number }> {
+export type HyperliquidSignature = { r: Hex; s: Hex; v: number };
+
+function splitSignature(signature: Hex): HyperliquidSignature {
+  return {
+    r: `0x${signature.slice(2, 66)}` as Hex,
+    s: `0x${signature.slice(66, 130)}` as Hex,
+    v: Number.parseInt(signature.slice(130, 132), 16),
+  };
+}
+
+export function isHyperliquidMainnet(url: string): boolean {
+  return !url.includes("testnet");
+}
+
+export async function signL1Action(privateKey: Secret, action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<HyperliquidSignature> {
   assertTradableAction(action);
   const connectionId = actionHash(action, null, nonce, null);
   const account = privateKeyToAccount(privateKey.reveal() as `0x${string}`);
@@ -170,11 +188,63 @@ export async function signL1Action(privateKey: Secret, action: HyperliquidAction
     primaryType: "Agent",
     message: { source: isMainnet ? "a" : "b", connectionId },
   });
+  return splitSignature(signature);
+}
+
+export type WithdrawAction = {
+  type: "withdraw3";
+  hyperliquidChain: "Mainnet" | "Testnet";
+  signatureChainId: "0x66eee";
+  destination: string;
+  amount: string;
+  time: number;
+};
+
+export function buildWithdraw(input: { destination: string; amountUsd: number; time: number; isMainnet: boolean }): WithdrawAction {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(input.destination)) throw new Error("hypercore: withdraw destination is not an evm address");
+  let amount = "";
+  try {
+    if (input.amountUsd > 0) amount = floatToWire(input.amountUsd);
+  } catch {
+    amount = "";
+  }
+  if (!/^\d+(\.\d{1,6})?$/.test(amount)) throw new Error("hypercore: withdraw amount must be positive with at most 6 decimals");
+  if (!Number.isSafeInteger(input.time) || input.time <= 0) throw new Error("hypercore: withdraw time is not a millisecond timestamp");
   return {
-    r: `0x${signature.slice(2, 66)}` as Hex,
-    s: `0x${signature.slice(66, 130)}` as Hex,
-    v: Number.parseInt(signature.slice(130, 132), 16),
+    type: "withdraw3",
+    hyperliquidChain: input.isMainnet ? "Mainnet" : "Testnet",
+    signatureChainId: "0x66eee",
+    destination: input.destination.toLowerCase(),
+    amount,
+    time: input.time,
   };
+}
+
+export function withdrawTypedData(action: WithdrawAction) {
+  return {
+    domain: {
+      name: "HyperliquidSignTransaction",
+      version: "1",
+      chainId: Number.parseInt(action.signatureChainId, 16),
+      verifyingContract: "0x0000000000000000000000000000000000000000" as Hex,
+    },
+    types: {
+      "HyperliquidTransaction:Withdraw": [
+        { name: "hyperliquidChain", type: "string" },
+        { name: "destination", type: "string" },
+        { name: "amount", type: "string" },
+        { name: "time", type: "uint64" },
+      ],
+    },
+    primaryType: "HyperliquidTransaction:Withdraw" as const,
+    message: { hyperliquidChain: action.hyperliquidChain, destination: action.destination, amount: action.amount, time: BigInt(action.time) },
+  };
+}
+
+export async function signWithdraw(privateKey: Secret, action: WithdrawAction): Promise<HyperliquidSignature> {
+  const raw = privateKey.reveal();
+  const account = privateKeyToAccount((raw.startsWith("0x") ? raw : `0x${raw}`) as Hex);
+  return splitSignature(await account.signTypedData(withdrawTypedData(action)));
 }
 
 export function orderSize(notionalUsd: number, markPx: number, szDecimals: number): number {

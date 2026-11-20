@@ -1,5 +1,6 @@
 use crate::abi;
 use crate::evm::{self, Call};
+use crate::hypercore::{self, Action, Network, Tif};
 use crate::jupiter;
 use crate::solana::{self, Message};
 use serde_json::Value;
@@ -18,6 +19,7 @@ pub struct Policy {
     solana_destinations: HashSet<[u8; 32]>,
     token_account_destinations: HashSet<[u8; 32]>,
     max_priority_lamports: u128,
+    hypercore: Option<(Network, u64)>,
     pub daily_limits: BTreeMap<String, u128>,
 }
 
@@ -99,11 +101,12 @@ impl Policy {
         }
         let evm = file.get("evm").cloned().unwrap_or(Value::Null);
         let sol = file.get("solana").cloned().unwrap_or(Value::Null);
+        let hyper = file.get("hypercore").cloned().unwrap_or(Value::Null);
         let routers = addresses_by_chain(evm.get("routers"), "router")?;
         let settlers = addresses_by_chain(evm.get("settlers"), "settler")?;
         let kyber_executors = addresses_by_chain(evm.get("kyberExecutors"), "kyber executor")?;
         let mut daily_limits = BTreeMap::new();
-        for section in [&evm, &sol] {
+        for section in [&evm, &sol, &hyper] {
             if let Some(map) = section.get("dailyLimits").and_then(Value::as_object) {
                 for (key, limit) in map {
                     let normalized = if key.contains(":0x") {
@@ -164,6 +167,20 @@ impl Policy {
                 amount(sol.get("maxPriorityLamports"), "solana.maxPriorityLamports")?
             } else {
                 0
+            },
+            hypercore: if hyper.is_null() {
+                None
+            } else {
+                Some((
+                    Network::parse(hyper.get("network").and_then(Value::as_str))
+                        .map_err(|error| format!("hypercore.{error}"))?,
+                    hyper.get("maxLeverage").map_or(Ok(1), |value| {
+                        value
+                            .as_u64()
+                            .filter(|leverage| *leverage >= 1)
+                            .ok_or("hypercore.maxLeverage must be a whole number of at least 1")
+                    })?,
+                ))
             },
             daily_limits,
         })
@@ -543,4 +560,131 @@ impl Policy {
         );
         decision
     }
+
+    pub fn check_hypercore(&self, job: &hypercore::Job, own: [u8; 20]) -> Decision {
+        let mut decision = Decision {
+            reasons: vec![],
+            spend: vec![],
+        };
+        let Some((network, max_leverage)) = self.hypercore else {
+            decision
+                .reasons
+                .push("hypercore is not in the policy".into());
+            return decision;
+        };
+        if job.network != network {
+            decision.reasons.push(format!(
+                "the job is for {:?} but the policy signs only for {network:?}",
+                job.network
+            ));
+            return decision;
+        }
+        match &job.action {
+            Action::Order(orders) => {
+                for (position, order) in orders.iter().enumerate() {
+                    let refuse = |decision: &mut Decision, what: String| {
+                        decision.reasons.push(format!("order {position}: {what}"))
+                    };
+                    if order.tif != Tif::Ioc {
+                        refuse(
+                            &mut decision,
+                            "only immediate-or-cancel limit orders are signed".into(),
+                        );
+                    }
+                    let spot = match order.asset {
+                        0..PERP_ASSETS => false,
+                        PERP_ASSETS..BUILDER_ASSETS => true,
+                        _ => {
+                            refuse(
+                                &mut decision,
+                                format!(
+                                    "asset {} is a builder-deployed perp, which the signer cannot price",
+                                    order.asset
+                                ),
+                            );
+                            continue;
+                        }
+                    };
+                    let charge = match (order.buy, spot) {
+                        (true, false) => (
+                            "hypercore:usdc".to_string(),
+                            notional(&order.price, &order.size),
+                        ),
+                        (true, true) => (
+                            format!("hypercore:spot:{}", order.asset),
+                            notional(&order.price, &order.size),
+                        ),
+                        (false, true) => (
+                            format!("hypercore:spot:{}:sold", order.asset),
+                            scaled(&order.size, 8),
+                        ),
+                        (false, false) => (
+                            format!("hypercore:perp:{}:sold", order.asset),
+                            scaled(&order.size, 8),
+                        ),
+                    };
+                    match charge {
+                        (_, Some(0)) => refuse(&mut decision, "the order has no notional".into()),
+                        (key, Some(value)) => self.spend(&mut decision, key, value),
+                        (_, None) => {
+                            refuse(&mut decision, "the order notional does not fit".into())
+                        }
+                    }
+                }
+            }
+            Action::Cancel(_) => {}
+            Action::UpdateLeverage {
+                is_cross, leverage, ..
+            } => {
+                if *is_cross {
+                    decision
+                        .reasons
+                        .push("only isolated leverage is signed".into());
+                }
+                if *leverage < 1 || *leverage > max_leverage {
+                    decision.reasons.push(format!(
+                        "leverage {leverage} is outside 1 to {max_leverage}"
+                    ));
+                }
+            }
+            Action::Withdraw {
+                destination,
+                amount,
+                ..
+            } => {
+                if *destination != own && !self.evm_destinations.contains(destination) {
+                    decision.reasons.push(format!(
+                        "a withdrawal may only pay this wallet or a listed destination, not 0x{}",
+                        hex::encode(destination)
+                    ));
+                }
+                match scaled(amount, 6) {
+                    Some(0) => decision.reasons.push("the withdrawal has no amount".into()),
+                    Some(value) => self.spend(&mut decision, "hypercore:usdc".into(), value),
+                    None => decision
+                        .reasons
+                        .push("the withdrawal amount does not fit".into()),
+                }
+            }
+        }
+        decision
+    }
+}
+
+const PERP_ASSETS: u64 = 10_000;
+const BUILDER_ASSETS: u64 = 100_000;
+
+fn scaled(text: &str, places: usize) -> Option<u128> {
+    let (int, frac) = text.split_once('.').unwrap_or((text, ""));
+    if frac.len() > places {
+        return None;
+    }
+    let digits = format!("{int}{frac:0<places$}");
+    digits.parse().ok()
+}
+
+fn notional(price: &str, size: &str) -> Option<u128> {
+    scaled(price, 8)?
+        .checked_mul(scaled(size, 8)?)
+        .map(|value| value.div_ceil(10_000_000_000))
 }
