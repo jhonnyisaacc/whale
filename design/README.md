@@ -33,7 +33,7 @@ The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `expo
 
 ## Install
 
-One block that a user pastes into any agent host that can run shell commands. The agent clones and builds the repo, starts the executor, registers the MCP server and skills, and then calls `wallet_status`. The local MCP is dry-run only. The block is the `InstallBlock` component. The mobile instance overrides the text with narrower line breaks, so change both when the steps change.
+One block that a user pastes into any agent host that can run shell commands. The agent clones and builds the repo, starts the executor, registers the MCP server and skills, and then calls `wallet_status`. The local MCP is dry-run by default. The block is the `InstallBlock` component. The mobile instance overrides the text with narrower line breaks, so change both when the steps change.
 
 ## Comparison
 

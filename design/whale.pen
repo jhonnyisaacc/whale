@@ -389,7 +389,7 @@
                   "fill": "$ink",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Install the Whale wallet from https://github.com/jhonnyisaacc/whale\n\n1. Clone it and run: pnpm install --frozen-lockfile && pnpm run build\n2. Start the executor in the background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token> pnpm run start:executor\n3. Register its MCP server (stdio: node dist/src/mcp-server.js) with\n   EXECUTOR_URL=http://127.0.0.1:8788 and the same EXECUTOR_AUTH_TOKEN,\n   and the skills in skills/, with this host.\n\nThe local MCP is dry-run only: nothing signs or broadcasts.\nThen call wallet_status and show me the result.",
+                  "content": "Install the Whale wallet from https://github.com/jhonnyisaacc/whale\n\n1. Clone it and run: pnpm install --frozen-lockfile && pnpm run build\n2. Start the executor in the background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token> pnpm run start:executor\n3. Register its MCP server (stdio: node dist/src/mcp-server.js) with\n   EXECUTOR_URL=http://127.0.0.1:8788 and the same EXECUTOR_AUTH_TOKEN,\n   and the skills in skills/, with this host.\n\nThe local MCP is dry-run by default: nothing signs or broadcasts.\nThen call wallet_status and show me the result.",
                   "lineHeight": 1.75,
                   "fontFamily": "$font-mono",
                   "fontSize": 14,
@@ -886,7 +886,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": 560,
-                  "content": "Quote, swap and transfer (dry-run during beta), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
+                  "content": "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-display",
                   "fontSize": 20,
@@ -27904,7 +27904,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Bridge only ranks quotes you supply",
+                          "content": "Bridge is quotes only, no execute yet",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -27919,7 +27919,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:110",
+                          "content": "commands.ts:128",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -27941,7 +27941,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Swap and transfer are dry-run in MCP",
+                          "content": "Hosted MCP sends are dry-run",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -27956,7 +27956,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "mcp-server.ts",
+                          "content": "gateway/mcp-tools.ts:112",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -27978,7 +27978,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "No live send on Base, Optimism, Blast, Scroll or zkSync",
+                          "content": "Blast is quotes only; zkSync self-hosted",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -27993,7 +27993,7 @@
                             "testId": "issue-chains-ts-guard-ts"
                           },
                           "fill": "$violet",
-                          "content": "chains.ts:287 · guard.ts:94",
+                          "content": "chains.ts:307 · chains.ts:309",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -28676,7 +28676,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 520,
-              "content": "Same verbs everywhere: quote, swap and transfer (dry-run during beta), plus bridge-quote ranking. Tagged networks have limits today.",
+              "content": "Same verbs everywhere: quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking. Tagged networks have limits today.",
               "lineHeight": 1.5,
               "fontFamily": "$font-display",
               "fontSize": 17,
@@ -28779,17 +28779,6 @@
                       }
                     },
                     {
-                      "id": "yapCr",
-                      "type": "ref",
-                      "ref": "UM68F",
-                      "name": "Badge quotes only",
-                      "descendants": {
-                        "k7RLXp": {
-                          "content": "quotes only"
-                        }
-                      }
-                    },
-                    {
                       "id": "H2SZ4P",
                       "type": "ref",
                       "ref": "RoI5s",
@@ -28830,17 +28819,6 @@
                         },
                         "as2Tg": {
                           "content": "Optimism"
-                        }
-                      }
-                    },
-                    {
-                      "id": "q3xtg",
-                      "type": "ref",
-                      "ref": "UM68F",
-                      "name": "Badge quotes only",
-                      "descendants": {
-                        "k7RLXp": {
-                          "content": "quotes only"
                         }
                       }
                     },
@@ -28942,17 +28920,6 @@
                       }
                     },
                     {
-                      "id": "ZdPAn",
-                      "type": "ref",
-                      "ref": "UM68F",
-                      "name": "Badge quotes only",
-                      "descendants": {
-                        "k7RLXp": {
-                          "content": "quotes only"
-                        }
-                      }
-                    },
-                    {
                       "id": "JTaP9",
                       "type": "ref",
                       "ref": "RoI5s",
@@ -29021,10 +28988,10 @@
                           "id": "RQCOi",
                           "type": "ref",
                           "ref": "UM68F",
-                          "name": "Badge quotes only",
+                          "name": "Badge self-hosted live",
                           "descendants": {
                             "k7RLXp": {
-                              "content": "quotes only"
+                              "content": "self-hosted live"
                             }
                           }
                         }
@@ -29119,10 +29086,10 @@
                           "id": "kti8u",
                           "type": "ref",
                           "ref": "UM68F",
-                          "name": "Badge opt-in, no router yet",
+                          "name": "Badge opt-in",
                           "descendants": {
                             "k7RLXp": {
-                              "content": "opt-in, no router yet"
+                              "content": "opt-in"
                             }
                           }
                         }
@@ -30518,7 +30485,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Every swap and transfer is a dry-run during beta. Nothing signs live yet.",
+                  "content": "Every swap and transfer is a dry-run until you turn live sends on. Self-hosted live, hosted pending.",
                   "lineHeight": 1.55,
                   "fontFamily": "$font-display",
                   "fontSize": 15,
@@ -56776,7 +56743,7 @@
           "fill": "$muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Quote, swap and transfer (dry-run during beta), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
+          "content": "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
           "lineHeight": 1.5,
           "fontFamily": "$font-display",
           "fontSize": 17,
@@ -58468,7 +58435,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Bridge only ranks quotes you supply",
+                          "content": "Bridge is quotes only, no execute yet",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58482,7 +58449,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:110",
+                          "content": "commands.ts:128",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58504,7 +58471,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Swap and transfer are dry-run in MCP",
+                          "content": "Hosted MCP sends are dry-run",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58518,7 +58485,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "mcp-server.ts",
+                          "content": "gateway/mcp-tools.ts:112",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58540,7 +58507,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "No live send on Base, Optimism, Blast, Scroll or zkSync",
+                          "content": "Blast is quotes only; zkSync self-hosted",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58554,7 +58521,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "chains.ts:287 · guard.ts:94",
+                          "content": "chains.ts:307 · chains.ts:309",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -59355,18 +59322,6 @@
                   }
                 },
                 {
-                  "id": "sQwhG",
-                  "type": "ref",
-                  "ref": "UM68F",
-                  "name": "Badge quotes only",
-                  "descendants": {
-                    "k7RLXp": {
-                      "content": "quotes only",
-                      "fontSize": 11
-                    }
-                  }
-                },
-                {
                   "id": "oclyN",
                   "type": "ref",
                   "ref": "RoI5s",
@@ -59452,18 +59407,6 @@
                     "as2Tg": {
                       "content": "Optimism",
                       "fontSize": 15
-                    }
-                  }
-                },
-                {
-                  "id": "DQcEu",
-                  "type": "ref",
-                  "ref": "UM68F",
-                  "name": "Badge quotes only",
-                  "descendants": {
-                    "k7RLXp": {
-                      "content": "quotes only",
-                      "fontSize": 11
                     }
                   }
                 },
@@ -59705,18 +59648,6 @@
                       "fontSize": 15
                     }
                   }
-                },
-                {
-                  "id": "BNR91",
-                  "type": "ref",
-                  "ref": "UM68F",
-                  "name": "Badge quotes only",
-                  "descendants": {
-                    "k7RLXp": {
-                      "content": "quotes only",
-                      "fontSize": 11
-                    }
-                  }
                 }
               ]
             },
@@ -59774,10 +59705,10 @@
                   "id": "OS0C9",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge quotes only",
+                  "name": "Badge self-hosted live",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "quotes only",
+                      "content": "self-hosted live",
                       "fontSize": 11
                     }
                   }
@@ -59927,10 +59858,10 @@
                   "id": "TBzre",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge opt-in, no router yet",
+                  "name": "Badge opt-in",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "opt-in, no router yet",
+                      "content": "opt-in",
                       "fontSize": 11
                     }
                   }
@@ -60428,7 +60359,7 @@
             "N2AfU": {
               "fontSize": 12,
               "lineHeight": 1.65,
-              "content": "Install the Whale wallet from\nhttps://github.com/jhonnyisaacc/whale\n\n1. Clone it and run:\n   pnpm install --frozen-lockfile\n   && pnpm run build\n2. Start the executor in the\n   background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token>\n   pnpm run start:executor\n3. Register its MCP server\n   (stdio: node dist/src/mcp-server.js)\n   with EXECUTOR_URL=\n   http://127.0.0.1:8788 and the same\n   EXECUTOR_AUTH_TOKEN, and the skills\n   in skills/, with this host.\n\nThe local MCP is dry-run only:\nnothing signs or broadcasts.\nThen call wallet_status and show me\nthe result."
+              "content": "Install the Whale wallet from\nhttps://github.com/jhonnyisaacc/whale\n\n1. Clone it and run:\n   pnpm install --frozen-lockfile\n   && pnpm run build\n2. Start the executor in the\n   background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token>\n   pnpm run start:executor\n3. Register its MCP server\n   (stdio: node dist/src/mcp-server.js)\n   with EXECUTOR_URL=\n   http://127.0.0.1:8788 and the same\n   EXECUTOR_AUTH_TOKEN, and the skills\n   in skills/, with this host.\n\nThe local MCP is dry-run by default:\nnothing signs or broadcasts.\nThen call wallet_status and show me\nthe result."
             }
           }
         },
@@ -61110,7 +61041,7 @@
                       "fill": "$muted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Every swap and transfer is a dry-run during beta. Nothing signs live yet.",
+                      "content": "Every swap and transfer is a dry-run until you turn live sends on. Self-hosted live, hosted pending.",
                       "lineHeight": 1.5,
                       "fontFamily": "$font-display",
                       "fontSize": 14,
@@ -61789,7 +61720,7 @@
       "name": "Note Placeholders to fill",
       "width": 420,
       "height": 300,
-      "content": "Still to verify\n\n• Compare cells come from public docs as of Nov 18, 2026 (metamask.com/agent-wallet, docs.phantom.com, paybox.sh/llms.txt). Phantom docs were unreachable; Phantom cells rely on search summaries + npm readme mentions.\n• Hermes has no Whale manifest in the repo yet; marked 'planned'.\n• Logos: hosts from @lobehub/icons-static-svg 1.71.0, chains from DefiLlama icons + cryptocurrency-icons 0.18.1, saved in ./logos. Check each brand's usage guidelines before launch.\n• Contributor avatars are placeholder circles."
+      "content": "Still to verify\n\n• Compare cells come from public docs as of Nov 18, 2026 (metamask.com/agent-wallet, docs.phantom.com, paybox.sh/llms.txt). Phantom docs were unreachable; Phantom cells rely on search summaries + npm readme mentions.\n• Hermes has a manifest (plugin.json, mcp.json) since #108, but hermes plugins install blocks the package on its scan; still marked 'planned'.\n• Logos: hosts from @lobehub/icons-static-svg 1.71.0, chains from DefiLlama icons + cryptocurrency-icons 0.18.1, saved in ./logos. Check each brand's usage guidelines before launch.\n• Contributor avatars are placeholder circles."
     },
     {
       "type": "note",
@@ -62911,7 +62842,7 @@
                           "id": "I80gb",
                           "name": "Loads",
                           "fill": "$muted",
-                          "content": ".mcp.json + skills/ (no manifest yet)",
+                          "content": "plugin.json + mcp.json + skills/",
                           "fontFamily": "$font-mono",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -62991,7 +62922,7 @@
                   "fill": "$ink",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Defaults are safe. The local MCP is dry-run only. Spend caps live in the executor, and no step ever asks for a seed phrase.",
+                  "content": "Defaults are safe. The local MCP is dry-run by default. Spend caps live in the executor, and no step ever asks for a seed phrase.",
                   "lineHeight": 1.55,
                   "fontFamily": "$font-display",
                   "fontSize": 15,
@@ -64679,7 +64610,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Bridge only ranks quotes you supply",
+                              "content": "Bridge is quotes only, no execute yet",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64693,7 +64624,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "commands.ts:110",
+                              "content": "commands.ts:128",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -64715,7 +64646,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Swap and transfer are dry-run in MCP",
+                              "content": "Hosted MCP sends are dry-run",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64729,7 +64660,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "mcp-server.ts",
+                              "content": "gateway/mcp-tools.ts:112",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -64751,7 +64682,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "No live send on Base, Optimism, Blast, Scroll or zkSync",
+                              "content": "Blast is quotes only; zkSync self-hosted",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64765,7 +64696,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "chains.ts:287 · guard.ts:94",
+                              "content": "chains.ts:307 · chains.ts:309",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -93759,6 +93690,5 @@
       "type": "number",
       "value": 1200
     }
-  },
-  "fileToken": "fcc78ed4-fdee-478d-a03e-a6fff4fdea27"
+  }
 }
