@@ -485,6 +485,14 @@ impl Policy {
             ));
             return;
         };
+        if let Some(multiplier) = terms.output_multiplier
+            && bridge_tokens::within_par(sent, delivered, multiplier) != Some(true)
+        {
+            refuse(format!(
+                "the {provider} bridge output multiplier {multiplier} is above par for {}",
+                delivered.symbol
+            ));
+        }
         let bps = self.max_bridge_fee_bps;
         match bridge_tokens::meets_floor(sent, delivered, terms.charge.1, terms.min_output, bps) {
             Some(true) => {}

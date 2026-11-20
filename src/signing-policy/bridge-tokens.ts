@@ -42,3 +42,9 @@ export function meetsBridgeFloor(pair: BridgePair, charged: bigint, minOutput: b
   const floor = charged * 10n ** BigInt(common - pair.input.decimals) * BigInt(10_000 - maxFeeBps);
   return received >= floor;
 }
+
+const PAR = 10n ** 18n;
+
+export function withinPar(pair: BridgePair, multiplier: bigint): boolean {
+  return multiplier * 10n ** BigInt(pair.input.decimals) <= PAR * 10n ** BigInt(pair.output.decimals);
+}

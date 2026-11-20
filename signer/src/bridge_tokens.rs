@@ -76,3 +76,11 @@ pub fn meets_floor(
         .checked_mul(10_000u128.checked_sub(max_fee_bps)?)?;
     Some(received >= floor)
 }
+
+const PAR: u128 = 1_000_000_000_000_000_000;
+
+pub fn within_par(sent: &BridgeToken, delivered: &BridgeToken, multiplier: u128) -> Option<bool> {
+    let scaled = multiplier.checked_mul(10u128.checked_pow(sent.decimals)?)?;
+    let par = PAR.checked_mul(10u128.checked_pow(delivered.decimals)?)?;
+    Some(scaled <= par)
+}

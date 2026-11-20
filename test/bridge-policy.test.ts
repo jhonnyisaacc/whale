@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { decodeFunctionData, encodeFunctionData, erc20Abi, pad, type Hex } from "viem";
+import { decodeFunctionData, encodeFunctionData, erc20Abi, pad, parseAbi, type Hex } from "viem";
 import { assertEvmSigning } from "../src/signing-policy.js";
 import { ACROSS_SPOKE_POOL_ABI, BRIDGE_CONTRACTS, LIFI_ACROSS_ABI, bridgeTerms, openAcrossDeposit } from "../src/signing-policy/bridge-terms.js";
+import { BRIDGE_TOKENS } from "../src/signing-policy/bridge-tokens.js";
 
 type Fixture = { route: { fromChainId: number; toChainId: number; sell: string; amount: string; from: string; recipient: string }; tx: { to: Hex; data: Hex; value: string } };
 type RelayFixture = { steps: { id: string; txs: { to: Hex; data: Hex; value: string }[] }[] };
@@ -12,7 +13,8 @@ function fixture<T = Fixture>(name: string): T {
   return JSON.parse(readFileSync(new URL(`../../test/fixtures/bridge/${name}.json`, import.meta.url), "utf8")) as T;
 }
 
-const lifi = fixture("lifi-across-base-arbitrum");
+const lifi = fixture("lifi-start-base-arbitrum");
+const swapAndStart = fixture("lifi-swap-and-start-base-arbitrum");
 const across = fixture("across-base-arbitrum");
 const OWN = lifi.route.from;
 const ATTACKER = "0x00000000000000000000000000000000000bad00";
@@ -43,12 +45,11 @@ function sign(tx: { to: string; data: Hex; value?: bigint | string }, extra: Par
 
 function lifiWith(edit: (bridge: Record<string, unknown>, data: Record<string, unknown>) => void): Hex {
   const call = decodeFunctionData({ abi: LIFI_ACROSS_ABI, data: lifi.tx.data });
-  assert.equal(call.functionName, "swapAndStartBridgeTokensViaAcrossV4");
-  const [bridge, swaps, data] = call.args as unknown as [Record<string, unknown>, unknown, Record<string, unknown>];
+  const [bridge, data] = call.args as unknown as [Record<string, unknown>, Record<string, unknown>];
   const nextBridge = { ...bridge };
   const nextData = { ...data };
   edit(nextBridge, nextData);
-  return encodeFunctionData({ abi: LIFI_ACROSS_ABI, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [nextBridge, swaps, nextData] as never });
+  return encodeFunctionData({ abi: LIFI_ACROSS_ABI, functionName: "startBridgeTokensViaAcrossV4", args: [nextBridge, nextData] as never });
 }
 
 function acrossWith(edit: (args: unknown[]) => void): Hex {
@@ -90,7 +91,7 @@ test("the signing policy signs the real bridge calls that pay this wallet and ch
 });
 
 test("a bridge to an allowlisted destination signs only when that destination is allowlisted", () => {
-  const destination = fixture("lifi-across-base-arbitrum-destination");
+  const destination = fixture("lifi-start-base-arbitrum-destination");
   const allowlisted = fixture("across-base-arbitrum-destination");
   const openAllowlisted = { to: allowlisted.tx.to, data: decodeAndOpen(allowlisted.tx.data) };
   for (const tx of [destination.tx, openAllowlisted]) {
@@ -166,9 +167,10 @@ test("the signing policy refuses a bridge that lets the relayer keep the deposit
     ["Across attacker output token", { to: across.tx.to, data: acrossWith((args) => ((args[3] = word(ATTACKER)), (args[5] = 2_000_000n))) }, /delivers 0x00000000000000000000000000000000000bad00 on arbitrum \(chain id 42161\), a pair the bridge token table does not list/],
     ["Across Arbitrum WETH out for Base USDC", { to: across.tx.to, data: acrossWith((args) => (args[3] = word("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"))) }, /a pair the bridge token table does not list/],
     ["Across exclusivity without a relayer", { to: across.tx.to, data: acrossWith((args) => (args[10] = 3)) }, /bridge names an exclusive relayer/],
-    ["LI.FI multiplier 0 to an exclusive attacker relayer", { to: lifi.tx.to, data: lifiWith((_, data) => ((data.outputAmountMultiplier = 0n), (data.exclusiveRelayer = word(ATTACKER)), (data.exclusivityParameter = year))) }, /bridge names an exclusive relayer/],
-    ["LI.FI multiplier 0", { to: lifi.tx.to, data: lifiWith((_, data) => (data.outputAmountMultiplier = 0n)) }, /bridge delivers at least 0 USDC for 2000000/],
-    ["LI.FI multiplier 1% under the cap", { to: lifi.tx.to, data: lifiWith((_, data) => (data.outputAmountMultiplier = 980_000_000_000_000_000n)) }, /under the 100 bps bridge fee cap/],
+    ["LI.FI 1 wei out to an exclusive attacker relayer", { to: lifi.tx.to, data: lifiWith((_, data) => ((data.outputAmount = 1n), (data.exclusiveRelayer = word(ATTACKER)), (data.exclusivityParameter = year))) }, /bridge names an exclusive relayer/],
+    ["LI.FI 0 out", { to: lifi.tx.to, data: lifiWith((_, data) => (data.outputAmount = 0n)) }, /bridge delivers at least 0 USDC for 2000000/],
+    ["LI.FI 2% under par", { to: lifi.tx.to, data: lifiWith((_, data) => (data.outputAmount = 1_960_000n)) }, /under the 100 bps bridge fee cap/],
+    ["LI.FI charge under the reserved amount", { to: lifi.tx.to, data: lifiWith((bridge) => (bridge.minAmount = 1n)) }, /bridge charges 1 of 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913, not the 2000000 reserved/],
     ["LI.FI attacker receiving asset", { to: lifi.tx.to, data: lifiWith((_, data) => (data.receivingAssetId = word(ATTACKER))) }, /a pair the bridge token table does not list/],
     ["LI.FI exclusive relayer alone", { to: lifi.tx.to, data: lifiWith((_, data) => (data.exclusiveRelayer = word(ATTACKER))) }, /bridge names an exclusive relayer/],
   ];
@@ -176,8 +178,8 @@ test("the signing policy refuses a bridge that lets the relayer keep the deposit
 });
 
 test("the bridge fee cap is signer policy and bounds the real routes", () => {
-  assert.throws(sign(lifi.tx, { maxBridgeFeeBps: 50 }), /bridge delivers at least 1988188 USDC for 2000000, under the 50 bps bridge fee cap/);
-  sign(lifi.tx, { maxBridgeFeeBps: 60 })();
+  assert.throws(sign(lifi.tx, { maxBridgeFeeBps: 30 }), /bridge delivers at least 1993409 USDC for 2000000, under the 30 bps bridge fee cap/);
+  sign(lifi.tx, { maxBridgeFeeBps: 50 })();
   sign(openAcross, { maxBridgeFeeBps: 50 })();
   assert.throws(sign(openAcross, { maxBridgeFeeBps: 30 }), /under the 30 bps bridge fee cap/);
   assert.throws(sign(openAcross, { maxBridgeFeeBps: undefined }), /bridge has no fee cap in the signing policy/);
@@ -189,4 +191,40 @@ test("a bridge may land only on a chain the wallet enables", () => {
   sign(toEthereum, { bridgeChainIds: [1, 8453, 42161] })();
   assert.throws(sign(openAcross, { bridgeChainIds: [8453] }), /bridge destination chain 42161 is not in the signing policy/);
   assert.throws(sign(openAcross, { bridgeChainIds: undefined }), /bridge destination chain 42161 is not in the signing policy/);
+});
+
+const FEE_FORWARDER = "0xDe2b920506EE931a6A2ABDF566526220214FBbAE";
+const LIFI_SWAP_AND_START_ABI = parseAbi([
+  "function swapAndStartBridgeTokensViaAcrossV4((bytes32 transactionId, string bridge, string integrator, address referrer, address sendingAssetId, address receiver, uint256 minAmount, uint256 destinationChainId, bool hasSourceSwaps, bool hasDestinationCall) _bridgeData, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)[] _swapData, (bytes32 receiverAddress, bytes32 refundAddress, bytes32 sendingAssetId, bytes32 receivingAssetId, uint256 outputAmount, uint128 outputAmountMultiplier, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message) _acrossData) payable",
+  "function forwardERC20Fees(address token, (address recipient, uint256 amount)[] fees)",
+]);
+
+test("the signing policy refuses every LI.FI swap-then-bridge call, the real quote and the fee forwarder leak alike", () => {
+  const call = decodeFunctionData({ abi: LIFI_SWAP_AND_START_ABI, data: swapAndStart.tx.data });
+  assert.equal(call.functionName, "swapAndStartBridgeTokensViaAcrossV4");
+  const [bridge, swaps, data] = call.args as unknown as [Record<string, unknown>, Record<string, unknown>[], Record<string, unknown>];
+  const forward = encodeFunctionData({ abi: LIFI_SWAP_AND_START_ABI, functionName: "forwardERC20Fees", args: [USDC as Hex, [{ recipient: ATTACKER, amount: 1_999_999n }]] });
+  const leak = encodeFunctionData({
+    abi: LIFI_SWAP_AND_START_ABI,
+    functionName: "swapAndStartBridgeTokensViaAcrossV4",
+    args: [{ ...bridge, minAmount: 1n }, [{ ...swaps[0], callTo: FEE_FORWARDER, approveTo: FEE_FORWARDER, fromAmount: 2_000_000n, callData: forward }], { ...data, outputAmountMultiplier: 2_000_000n * 10n ** 18n }] as never,
+  });
+  for (const [name, tx] of [["real quote", swapAndStart.tx], ["fee forwarder leak", { to: swapAndStart.tx.to, data: leak }]] as const) {
+    assert.equal(bridgeTerms(tx.data), null, name);
+    assert.throws(sign(tx), /bridge calldata is not a call the signing policy decodes/, name);
+  }
+});
+
+test("a LI.FI start call may not set an output multiplier above par", () => {
+  sign({ to: lifi.tx.to, data: lifiWith((_, data) => (data.outputAmountMultiplier = 10n ** 18n)) })();
+  assert.throws(sign({ to: lifi.tx.to, data: lifiWith((_, data) => (data.outputAmountMultiplier = 10n ** 18n + 1n)) }), /bridge output multiplier 1000000000000000001 is above par for USDC/);
+  assert.throws(sign({ to: lifi.tx.to, data: lifiWith((_, data) => (data.outputAmountMultiplier = 2n * 10n ** 24n)) }), /bridge output multiplier 2000000000000000000000000 is above par for USDC/);
+});
+
+test("the TypeScript bridge token table and whale-signer's vector table are the same table", () => {
+  const vectors = JSON.parse(readFileSync(new URL("../../signer/vectors/bridge-tokens.json", import.meta.url), "utf8")) as { symbol: string; chainId: number; address: string; decimals: number }[];
+  const table: Record<string, Record<number, { address: string; decimals: number }>> = {};
+  for (const { symbol, chainId, address, decimals } of vectors) (table[symbol] ??= {})[chainId] = { address, decimals };
+  const typescript = Object.fromEntries(Object.entries(BRIDGE_TOKENS).map(([symbol, byChain]) => [symbol, Object.fromEntries(Object.entries(byChain).map(([chainId, token]) => [chainId, { address: token.address.toLowerCase(), decimals: token.decimals }]))]));
+  assert.deepEqual(typescript, table);
 });

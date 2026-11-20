@@ -17,7 +17,7 @@ const SETTLER_ABI = parseAbi([
 
 // LI.FI GenericSwapFacetV3, from lifinance/contracts src/Facets/GenericSwapFacetV3.sol and LibSwap.SwapData.
 const LIFI_HEAD = "bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut";
-export const LIFI_SWAP = "(address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
+const LIFI_SWAP = "(address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
 export const LIFI_ABI = parseAbi([
   `function swapTokensSingleV3ERC20ToERC20(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
   `function swapTokensSingleV3ERC20ToNative(${LIFI_HEAD}, ${LIFI_SWAP} _swapData)`,
@@ -47,15 +47,10 @@ function lifiTerms(data: Hex): SwapTerms | null {
   if (!last) return null;
   const buyToken = call.functionName.endsWith("ToNative") ? LIFI_NATIVE : last.receivingAssetId;
   if (call.functionName.includes("V3NativeTo")) return { provider: "lifi", recipient, buyToken, minOut, deposit: null };
-  const deposit = lifiDeposit(swaps, call.functionName.startsWith("swapTokensSingle"));
-  return deposit ? { provider: "lifi", recipient, buyToken, minOut, deposit } : null;
-}
-
-export function lifiDeposit(swaps: readonly LifiSwapData[], single: boolean): { token: string; amount: bigint } | null {
-  const pulled = single ? swaps : swaps.filter((swap) => swap.requiresDeposit);
+  const pulled = call.functionName.startsWith("swapTokensSingle") ? swaps : swaps.filter((swap) => swap.requiresDeposit);
   const token = pulled[0]?.sendingAssetId;
   if (!token || token === LIFI_NATIVE || pulled.some((swap) => swap.sendingAssetId.toLowerCase() !== token.toLowerCase())) return null;
-  return { token, amount: pulled.reduce((sum, swap) => sum + swap.fromAmount, 0n) };
+  return { provider: "lifi", recipient, buyToken, minOut, deposit: { token, amount: pulled.reduce((sum, swap) => sum + swap.fromAmount, 0n) } };
 }
 
 function decoded<T>(read: () => T): T | null {

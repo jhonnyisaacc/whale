@@ -26,7 +26,7 @@ for (const [id, { lifi, across }] of Object.entries(BRIDGE_CONTRACTS)) {
   const checks = {
     "chain id": (await client.getChainId()) === Number(id),
     "diamond has code": ((await client.getCode({ address: lifi })) ?? "0x").length > 2,
-    "both AcrossV4 entry points route to AcrossFacetV4": facets.every((facet) => same(facet, ACROSS_FACET_V4)),
+    "the AcrossV4 start entry point routes to AcrossFacetV4": facets.every((facet) => same(facet, ACROSS_FACET_V4)),
     "AcrossFacetV4 deposits into the listed SpokePool": same(await read(ACROSS_FACET_V4, "SPOKEPOOL"), across),
     "SpokePool has code": ((await client.getCode({ address: across })) ?? "0x").length > 2,
     "SpokePool reports this chain": (await read(across, "chainId")) === BigInt(id),

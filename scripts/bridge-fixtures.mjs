@@ -1,4 +1,5 @@
 import { writeFileSync } from "node:fs";
+import { lifiStartCall } from "./lifi-start.mjs";
 
 const OWN = "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A";
 const DESTINATION = "0x1111111111111111111111111111111111111111";
@@ -15,12 +16,23 @@ async function json(url, init) {
   return response.json();
 }
 
-async function lifi(name, toAddress) {
+async function lifiQuote(toAddress) {
   const query = { fromChain: "8453", toChain: "42161", fromToken: BASE_USDC, toToken: ARBITRUM_USDC, fromAmount: AMOUNT, fromAddress: OWN, toAddress, allowBridges: "across" };
-  const quote = await json(`https://li.quest/v1/quote?${new URLSearchParams(query)}`);
+  return json(`https://li.quest/v1/quote?${new URLSearchParams(query)}`);
+}
+
+async function lifi(name, toAddress) {
+  const quote = await lifiQuote(toAddress);
   const { to, data, value, gasLimit } = quote.transactionRequest;
   const { toAmount, toAmountMin, approvalAddress } = quote.estimate;
   const fixture = { captured, source: "https://li.quest/v1/quote?allowBridges=across", route: route(toAddress), tool: quote.tool, steps: quote.includedSteps.map((step) => step.type), estimate: { toAmount, toAmountMin, approvalAddress }, tx: { to, data, value, gasLimit } };
+  writeFileSync(`${out}${name}.json`, `${JSON.stringify(fixture, null, 2)}\n`);
+}
+
+async function lifiStart(name, toAddress) {
+  const { to, data } = (await lifiQuote(toAddress)).transactionRequest;
+  const derivedFrom = "the LI.FI swapAndStartBridgeTokensViaAcrossV4 quote with its fee-collection swap removed: minAmount is the whole charge and outputAmount is the charge times the quoted multiplier";
+  const fixture = { captured, source: "https://li.quest/v1/quote?allowBridges=across", derivedFrom, route: route(toAddress), tx: { to, data: lifiStartCall(data, BigInt(AMOUNT)), value: "0x0" } };
   writeFileSync(`${out}${name}.json`, `${JSON.stringify(fixture, null, 2)}\n`);
 }
 
@@ -40,8 +52,9 @@ async function relay(name) {
   writeFileSync(`${out}${name}.json`, `${JSON.stringify({ captured, source: "https://api.relay.link/quote/v2", route: route(OWN), steps }, null, 2)}\n`);
 }
 
-await lifi("lifi-across-base-arbitrum", OWN);
-await lifi("lifi-across-base-arbitrum-destination", DESTINATION);
+await lifi("lifi-swap-and-start-base-arbitrum", OWN);
+await lifiStart("lifi-start-base-arbitrum", OWN);
+await lifiStart("lifi-start-base-arbitrum-destination", DESTINATION);
 await across("across-base-arbitrum", OWN);
 await across("across-base-arbitrum-destination", DESTINATION);
 await relay("relay-base-arbitrum");

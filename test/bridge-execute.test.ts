@@ -15,7 +15,8 @@ import { ACROSS_SPOKE_POOL_ABI, LIFI_ACROSS_ABI, bridgeTerms } from "../src/sign
 
 type Fixture = { route: { amount: string; from: string; recipient: string; sell: string; buy: string }; tx: { to: Hex; data: Hex; value: string } };
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../test/fixtures/bridge/${name}.json`, import.meta.url), "utf8")) as Fixture;
-const lifi = fixture("lifi-across-base-arbitrum");
+const lifi = fixture("lifi-start-base-arbitrum");
+const swapAndStart = fixture("lifi-swap-and-start-base-arbitrum");
 const across = fixture("across-base-arbitrum");
 const account = privateKeyToAccount(`0x${"11".repeat(32)}`);
 const OWN = account.address;
@@ -152,10 +153,10 @@ test("an Across bridge whose allowance is already set signs only the deposit", a
 });
 
 test("a bridge whose route fee is above MAX_BRIDGE_FEE_BPS is skipped before it reserves or signs", async () => {
-  const run = harness({ config: loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum", ALLOW_HOT_APPROVAL: "true" }) });
+  const run = harness({ config: loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum", ALLOW_HOT_APPROVAL: "true", MAX_BRIDGE_FEE_BPS: "30" }) });
   const result = await executeBridge(run.deps, order());
   assert.equal(result.status, "skipped");
-  assert.match(result.status === "skipped" ? result.reason : "", /lifi minimum output is under the 50 bps bridge fee cap/);
+  assert.match(result.status === "skipped" ? result.reason : "", /lifi minimum output is under the 30 bps bridge fee cap/);
   assert.deepEqual(run.spend, []);
   assert.deepEqual(run.raw, []);
 });
@@ -171,11 +172,11 @@ test("Relay and deBridge stay quote-only and reserve nothing", async () => {
 });
 
 test("a bridge is refused before any reservation when screening denies a token or the calldata strays from the route", async () => {
-  const lifiArgs = decodeFunctionData({ abi: LIFI_ACROSS_ABI, data: lifi.tx.data }).args as unknown as [Record<string, unknown>, unknown, Record<string, unknown>];
+  const lifiArgs = decodeFunctionData({ abi: LIFI_ACROSS_ABI, data: lifi.tx.data }).args as unknown as [Record<string, unknown>, Record<string, unknown>];
   const paysAttacker = encodeFunctionData({
     abi: LIFI_ACROSS_ABI,
-    functionName: "swapAndStartBridgeTokensViaAcrossV4",
-    args: [{ ...lifiArgs[0], receiver: ATTACKER }, lifiArgs[1], { ...lifiArgs[2], receiverAddress: pad(ATTACKER, { size: 32 }) }] as never,
+    functionName: "startBridgeTokensViaAcrossV4",
+    args: [{ ...lifiArgs[0], receiver: ATTACKER }, { ...lifiArgs[1], receiverAddress: pad(ATTACKER, { size: 32 }) }] as never,
   });
   const acrossArgs = [...decodeFunctionData({ abi: ACROSS_SPOKE_POOL_ABI, data: across.tx.data }).args];
   acrossArgs[5] = 1_000_000n;
@@ -187,6 +188,7 @@ test("a bridge is refused before any reservation when screening denies a token o
     [{ call: { to: lifi.tx.to, data: paysAttacker, value: 0n, gas: null } }, "lifi", /pays 0x00000000000000000000000000000000000bad00, not the route's destination/],
     [{ call: { to: across.tx.to, data: lowOutput, value: 0n, gas: null } }, "across", /minimum output is under the 100 bps bridge fee cap/],
     [{ call: { to: lifi.tx.to, data: lifi.tx.data, value: 1n, gas: null } }, "lifi", /attached native value/],
+    [{ call: { to: swapAndStart.tx.to, data: swapAndStart.tx.data, value: 0n, gas: null } }, "lifi", /LI\.FI quoted swapAndStartBridgeTokensViaAcrossV4, which swaps before it bridges/],
   ];
   for (const [options, provider, reason] of cases) {
     const run = harness(options);

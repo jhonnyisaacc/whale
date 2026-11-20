@@ -60,19 +60,28 @@ const BASE = 8453;
 const ARBITRUM = 42161;
 const LISTED_BRIDGE_DESTINATION = "0x1111111111111111111111111111111111111111";
 const captured = (name) => JSON.parse(readFileSync(new URL(`../../test/fixtures/bridge/${name}.json`, import.meta.url), "utf8"));
-const lifiBridge = captured("lifi-across-base-arbitrum");
+const lifiBridge = captured("lifi-start-base-arbitrum");
+const lifiSwapAndStart = captured("lifi-swap-and-start-base-arbitrum");
 const acrossBridge = captured("across-base-arbitrum");
 const relayDeposit = captured("relay-base-arbitrum").steps.find((step) => step.id === "deposit").txs[0];
 const BRIDGE_DATA = "(bytes32 transactionId, string bridge, string integrator, address referrer, address sendingAssetId, address receiver, uint256 minAmount, uint256 destinationChainId, bool hasSourceSwaps, bool hasDestinationCall)";
 const ACROSS_V4_DATA = "(bytes32 receiverAddress, bytes32 refundAddress, bytes32 sendingAssetId, bytes32 receivingAssetId, uint256 outputAmount, uint128 outputAmountMultiplier, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message)";
-const lifiAcrossAbi = parseAbi([`function swapAndStartBridgeTokensViaAcrossV4(${BRIDGE_DATA} _bridgeData, ${lifiSwapData}[] _swapData, ${ACROSS_V4_DATA} _acrossData) payable`]);
+const lifiAcrossAbi = parseAbi([`function startBridgeTokensViaAcrossV4(${BRIDGE_DATA} _bridgeData, ${ACROSS_V4_DATA} _acrossData) payable`]);
+const lifiSwapAndStartAbi = parseAbi([`function swapAndStartBridgeTokensViaAcrossV4(${BRIDGE_DATA} _bridgeData, ${lifiSwapData}[] _swapData, ${ACROSS_V4_DATA} _acrossData) payable`, "function forwardERC20Fees(address token, (address recipient, uint256 amount)[] fees)"]);
+const FEE_FORWARDER = "0xDe2b920506EE931a6A2ABDF566526220214FBbAE";
+const feeForwarderLeak = (() => {
+  const [bridge, swaps, data] = decodeFunctionData({ abi: lifiSwapAndStartAbi, data: lifiSwapAndStart.tx.data }).args;
+  const forward = encodeFunctionData({ abi: lifiSwapAndStartAbi, functionName: "forwardERC20Fees", args: [USDC, [{ recipient: ATTACKER, amount: 1_999_999n }]] });
+  const step = { ...swaps[0], callTo: FEE_FORWARDER, approveTo: FEE_FORWARDER, fromAmount: 2_000_000n, callData: forward };
+  return encodeFunctionData({ abi: lifiSwapAndStartAbi, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [{ ...bridge, minAmount: 1n }, [step], { ...data, outputAmountMultiplier: 2_000_000n * 10n ** 18n }] });
+})();
 const spokePoolAbi = parseAbi(["function deposit(bytes32 depositor, bytes32 recipient, bytes32 inputToken, bytes32 outputToken, uint256 inputAmount, uint256 outputAmount, uint256 destinationChainId, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message) payable"]);
 const word = (address) => pad(address.toLowerCase(), { size: 32 });
 const lifiBridgeWith = (edit) => {
-  const [bridge, swaps, data] = decodeFunctionData({ abi: lifiAcrossAbi, data: lifiBridge.tx.data }).args;
+  const [bridge, data] = decodeFunctionData({ abi: lifiAcrossAbi, data: lifiBridge.tx.data }).args;
   const next = { bridge: { ...bridge }, data: { ...data } };
   edit(next.bridge, next.data);
-  return encodeFunctionData({ abi: lifiAcrossAbi, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [next.bridge, swaps, next.data] });
+  return encodeFunctionData({ abi: lifiAcrossAbi, functionName: "startBridgeTokensViaAcrossV4", args: [next.bridge, next.data] });
 };
 const NO_RELAYER = pad("0x", { size: 32 });
 const acrossDepositWith = (data, edit) => {
@@ -94,7 +103,7 @@ const realAcrossBridge = onBase(BASE_SPOKE_POOL, acrossBridgeWith(() => undefine
 const bridgeCases = [
   ["a real LI.FI AcrossV4 bridge from Base to this wallet on Arbitrum", realLifiBridge, "signed", null, null, bridgeSpent(realLifiBridge)],
   ["a real Across SpokePool deposit from Base to this wallet on Arbitrum", realAcrossBridge, "signed", null, null, bridgeSpent(realAcrossBridge)],
-  ["a real LI.FI bridge to a listed destination", onBase(LIFI_DIAMOND, captured("lifi-across-base-arbitrum-destination").tx.data), "signed"],
+  ["a real LI.FI bridge to a listed destination", onBase(LIFI_DIAMOND, captured("lifi-start-base-arbitrum-destination").tx.data), "signed"],
   ["a real Across deposit to a listed destination", onBase(BASE_SPOKE_POOL, acrossDepositWith(captured("across-base-arbitrum-destination").tx.data, () => undefined)), "signed"],
   ["a real Across quote that keeps its exclusive relayer", onBase(BASE_SPOKE_POOL, acrossBridge.tx.data), "refused", "names an exclusive relayer"],
   ["an Across deposit of 1 wei out to an exclusive attacker relayer", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => ((args[5] = 1n), (args[7] = word(ATTACKER)), (args[10] = YEAR)))), "refused", "names an exclusive relayer"],
@@ -103,9 +112,14 @@ const bridgeCases = [
   ["an Across deposit delivering an attacker token", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => ((args[3] = word(ATTACKER)), (args[5] = 2_000_000n)))), "refused", "a pair the bridge token table does not list"],
   ["an Across deposit delivering WETH for USDC", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[3] = word(ARBITRUM_WETH)))), "refused", "a pair the bridge token table does not list"],
   ["an Across deposit with exclusivity and no relayer", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[10] = 3))), "refused", "names an exclusive relayer"],
-  ["a LI.FI bridge with multiplier 0 to an exclusive attacker relayer", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => ((data.outputAmountMultiplier = 0n), (data.exclusiveRelayer = word(ATTACKER)), (data.exclusivityParameter = YEAR)))), "refused", "names an exclusive relayer"],
-  ["a LI.FI bridge with multiplier 0", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 0n))), "refused", "delivers at least 0 USDC for 2000000"],
-  ["a LI.FI bridge 2% under par", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 980_000_000_000_000_000n))), "refused", "under the 100 bps bridge fee cap"],
+  ["a LI.FI bridge of 1 wei out to an exclusive attacker relayer", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => ((data.outputAmount = 1n), (data.exclusiveRelayer = word(ATTACKER)), (data.exclusivityParameter = YEAR)))), "refused", "names an exclusive relayer"],
+  ["a LI.FI bridge of nothing out", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmount = 0n))), "refused", "delivers at least 0 USDC for 2000000"],
+  ["a LI.FI bridge 2% under par", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmount = 1_960_000n))), "refused", "under the 100 bps bridge fee cap"],
+  ["a LI.FI bridge with its output multiplier at par", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 10n ** 18n))), "signed"],
+  ["a LI.FI bridge with its output multiplier 1 above par", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 10n ** 18n + 1n))), "refused", "output multiplier 1000000000000000001 is above par for USDC"],
+  ["a LI.FI bridge with an inflated output multiplier", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 2_000_000n * 10n ** 18n))), "refused", "output multiplier 2000000000000000000000000 is above par for USDC"],
+  ["a real LI.FI swap then bridge quote", onBase(LIFI_DIAMOND, lifiSwapAndStart.tx.data), "refused", "not one the signer can read"],
+  ["a LI.FI swap then bridge that forwards the charge to an attacker", onBase(LIFI_DIAMOND, feeForwarderLeak), "refused", "not one the signer can read"],
   ["a LI.FI bridge delivering an attacker token", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.receivingAssetId = word(ATTACKER)))), "refused", "a pair the bridge token table does not list"],
   ["a LI.FI bridge naming an exclusive relayer", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.exclusiveRelayer = word(ATTACKER)))), "refused", "names an exclusive relayer"],
   ["a LI.FI bridge paying an attacker", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge, data) => ((bridge.receiver = ATTACKER), (data.receiverAddress = word(ATTACKER))))), "refused", "not this wallet or a listed destination"],

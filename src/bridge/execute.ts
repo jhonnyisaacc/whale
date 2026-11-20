@@ -9,7 +9,7 @@ import type { EvmSignInput } from "../managed-signer.js";
 import type { BridgeProvider, BridgeRoute } from "../rebalance.js";
 import { redactError } from "../redact.js";
 import { readTransport } from "../rpc.js";
-import { BRIDGE_CONTRACTS, bridgeTerms, openAcrossDeposit, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
+import { BRIDGE_CONTRACTS, LIFI_SWAP_AND_START_SELECTOR, bridgeTerms, openAcrossDeposit, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
 import { bridgePair, meetsBridgeFloor } from "../signing-policy/bridge-tokens.js";
 import { trackBridge, type BridgeLookup, type BridgeStatus } from "./status.js";
 
@@ -44,6 +44,9 @@ export type BridgeExecution =
   | { status: "signed"; provider: ExecutableBridge; reason: string; txs: SignedBridgeTx[] }
   | { status: "sent"; provider: ExecutableBridge; reason: string; txs: TxRecord[]; transfer: BridgeStatus | null };
 
+export const LIFI_SWAP_AND_START =
+  "LI.FI quoted swapAndStartBridgeTokensViaAcrossV4, which swaps before it bridges. Its swap step can pay any address, so the signing policy refuses it. Whale bridges a token only to the same token, through startBridgeTokensViaAcrossV4 or Across";
+
 export const RELAY_QUOTE_ONLY =
   "Relay is quote-only. Its deposit is depositErc20(depositor, token, amount, id), and the destination chain and recipient live off chain under a server-assigned id, so the signing policy cannot bind them";
 
@@ -77,6 +80,7 @@ async function plan(deps: BridgeDeps, order: BridgeOrder): Promise<Planned | str
   const contract = BRIDGE_CONTRACTS[source.chain.chainId]?.[provider];
   if (!contract || !same(call.to, contract)) return `${provider} sent the bridge to ${call.to}, not its verified contract on ${source.key}`;
   if (call.value !== 0n) return `${provider} attached native value to a token bridge`;
+  if (provider === "lifi" && call.data.slice(0, 10).toLowerCase() === LIFI_SWAP_AND_START_SELECTOR) return LIFI_SWAP_AND_START;
   const terms = bridgeTerms(call.data);
   if (!terms || terms.provider !== provider) return `${provider} calldata does not decode as a bridge the policy reads`;
   if (!same(terms.charge.token, route.sell.address) || terms.charge.amount !== BigInt(route.amount)) return `${provider} calldata pulls ${terms.charge.amount} of ${terms.charge.token}, not the route's amount`;
