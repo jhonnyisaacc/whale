@@ -169,10 +169,16 @@ export async function submitEvm(ctx: EvmCtx, tx: EvmTx, buyToken: string | null)
       throw new BroadcastError(redactError(error, ctx.secrets), false);
     }
     const record = evmRecord(ctx, signed, { ...tx, nonce });
+    if (ctx.hold) return { input, record: { ...record, outcome: "signed" as const } };
     await journal(ctx, record);
     await broadcastEvm(ctx, signed);
     return { input, record };
   });
+  if (ctx.hold) {
+    ctx.io.nonces.resync(ctx.chainId, ctx.owner);
+    await journal(ctx, sent.record);
+    return { record: sent.record, confirm: async () => ({ records: [sent.record], received: null }) };
+  }
   return { record: sent.record, confirm: () => confirmEvm(ctx, sent.input, sent.record, before, buyToken) };
 }
 

@@ -90,7 +90,7 @@ export async function broadcastRoute(
   hooks: SendHooks = {},
 ): Promise<SendResult> {
   if (!signer) throw new BroadcastError("signer is not loaded", false);
-  const ctx: Ctx = { config, signer, io: hooks.io ?? defaultIo(config), onTx: hooks.onTx ?? (async () => undefined), fetchImpl, secrets };
+  const ctx: Ctx = { config, signer, io: hooks.io ?? defaultIo(config), onTx: hooks.onTx ?? (async () => undefined), fetchImpl, secrets, hold: hooks.hold === true };
   if (request.kind === "hypercore") return sendHypercore(ctx, request);
   if (request.legs.length === 0) throw new BroadcastError("route has no signable leg", false);
   const capBps = Math.round(capPct * 100);

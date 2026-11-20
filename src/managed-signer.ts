@@ -24,11 +24,11 @@ export type EvmSignInput = {
 };
 
 export interface TransactionSigner {
-  readonly backend: "turnkey" | "keystore";
+  readonly backend: "turnkey" | "keystore" | "whale-signer";
   evmAddress(): string | null;
   solanaAddress(): string | null;
   signEvm(input: EvmSignInput): Promise<Hex>;
-  signSolana(serialized: Uint8Array): Promise<Uint8Array>;
+  signSolana(serialized: Uint8Array, context?: { buyMint: string | null }): Promise<Uint8Array>;
   signHyperliquid(action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<HyperliquidSignature>;
   signHyperliquidWithdraw?(action: WithdrawAction): Promise<HyperliquidSignature>;
 }
@@ -71,7 +71,7 @@ export function withPolicy(inner: TransactionSigner, config: AppConfig): Transac
       });
       return inner.signEvm(input);
     },
-    async signSolana(serialized) {
+    async signSolana(serialized, context) {
       const expected = inner.solanaAddress();
       if (!expected) throw new Error("solana signer is not loaded");
       assertSolanaSigning({
@@ -82,7 +82,7 @@ export function withPolicy(inner: TransactionSigner, config: AppConfig): Transac
         maxTipLamports: config.jitoTipLamports,
         maxPriorityLamports: config.solanaMaxPriorityLamports,
       });
-      return inner.signSolana(serialized);
+      return inner.signSolana(serialized, context);
     },
     async signHyperliquid(action, nonce, isMainnet) {
       assertHyperliquidSigning(action, policy);
