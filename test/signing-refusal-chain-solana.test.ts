@@ -65,7 +65,7 @@ const refusals: Refusal[] = [
   ["a priority fee above the cap", "solana", "solana priority fee exceeds the signing policy", () => sign([ix(COMPUTE, [], Buffer.concat([Buffer.from([3]), u64(10n ** 12n)]))])],
   ["a hyperliquid withdraw", "hypercore", "refusing hyperliquid action withdraw3", () => assertHyperliquidSigning({ type: "withdraw3" }, { maxLeverage: 5, maxOrderUsd: 100, sellLimits: {} })],
   ["an unknown hyperliquid action", "hypercore", "unsupported hyperliquid action noop", () => assertHyperliquidSigning({ type: "noop" }, { maxLeverage: 5, maxOrderUsd: 100, sellLimits: {} })],
-  ["leverage above the cap", "hypercore", "leverage exceeds the signing policy", () => assertHyperliquidSigning(leverage, { maxLeverage: 2, maxOrderUsd: 100, sellLimits: {} })],
+  ["leverage above the cap", "hypercore", "leverage 3 exceeds the 2x signing policy", () => assertHyperliquidSigning(leverage, { maxLeverage: 2, maxOrderUsd: 100, sellLimits: {} })],
 ];
 
 const accepted: [string, () => void][] = [

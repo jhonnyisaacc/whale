@@ -81,6 +81,7 @@ export const intentSchema = z.object({
   side: z.enum(["buy", "sell"]),
   notionalUsd: z.number().positive(),
   slippageBps: z.number().int().nonnegative(),
+  leverage: z.number().int().min(1).optional(),
   token: intentTokenSchema,
   holdings: z.array(holdingSchema).max(64),
   hyperliquid: hyperliquidSchema.nullable(),

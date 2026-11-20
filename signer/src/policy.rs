@@ -174,11 +174,11 @@ impl Policy {
                 Some((
                     Network::parse(hyper.get("network").and_then(Value::as_str))
                         .map_err(|error| format!("hypercore.{error}"))?,
-                    hyper.get("maxLeverage").map_or(Ok(1), |value| {
+                    hyper.get("maxLeverage").map_or(Ok(3), |value| {
                         value
                             .as_u64()
-                            .filter(|leverage| *leverage >= 1)
-                            .ok_or("hypercore.maxLeverage must be a whole number of at least 1")
+                            .filter(|leverage| (1..=50).contains(leverage))
+                            .ok_or("hypercore.maxLeverage must be a whole number from 1 to 50")
                     })?,
                 ))
             },

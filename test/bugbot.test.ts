@@ -717,7 +717,7 @@ test("a flagged alternate is never quoted or sent, and a disabled hypercore rout
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
     send: async () => {
       sends.push("hypercore");
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };

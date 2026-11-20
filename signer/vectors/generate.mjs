@@ -197,7 +197,7 @@ const policy = {
   },
   hypercore: {
     network: "testnet",
-    maxLeverage: 1,
+    maxLeverage: 3,
     dailyLimits: { "hypercore:usdc": "50000000", "hypercore:spot:10107": "20000000", "hypercore:perp:4:sold": "50000000000" },
   },
 };
@@ -223,6 +223,10 @@ const hlOrder = (a, p, sz, tif = "Ioc") => ({ type: "order", orders: [{ a, b: tr
 const hlWithdraw = (destination, amount) => ({ type: "withdraw3", hyperliquidChain: "Testnet", signatureChainId: "0x66eee", destination, amount, time: HL_NONCE });
 const hypercoreCases = [
   ["isolated leverage 1", { type: "updateLeverage", asset: 4, isCross: false, leverage: 1 }, "signed"],
+  ["isolated leverage 2", { type: "updateLeverage", asset: 4, isCross: false, leverage: 2 }, "signed"],
+  ["isolated leverage 4 above the ceiling", { type: "updateLeverage", asset: 4, isCross: false, leverage: 4 }, "refused", "leverage 4 is outside 1 to 3"],
+  ["captured mainnet block 1000000567 tx 0x97b19e21 isolated 2x on SOL", { type: "updateLeverage", asset: 5, isCross: false, leverage: 2 }, "signed"],
+  ["captured mainnet block 1000000286 tx 0x809a3421 BTC buy of 502 USD notional", { type: "order", orders: [{ a: 0, b: true, p: "78752", s: "0.00638", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "refused", "is above its whole 50000000 daily limit"],
   ["a perp ioc order", hlOrder(4, "1670.1", "0.0147"), "signed"],
   ["a spot ioc order", hlOrder(10107, "12.5", "1"), "signed"],
   ["a cancel with a large order id", { type: "cancel", cancels: [{ a: 4, o: 91_000_000_000 }, { a: 300, o: 70_000 }] }, "signed"],

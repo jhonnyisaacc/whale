@@ -46,6 +46,9 @@ export function checkLimits(config: LimitConfig, input: LimitInput): LimitDecisi
   if (input.slippageBps > config.slippageHardMaxBps) {
     return { ok: false, reason: `slippage exceeds hard max ${config.slippageHardMaxBps} bps` };
   }
+  if (input.leverage > 1 && !(input.chain.kind === "hypercore" && input.chain.market === "perp")) {
+    return { ok: false, reason: "leverage above 1 applies only to a HyperCore perp" };
+  }
   if (input.chain.kind === "hypercore" && input.leverage > config.maxLeverage) {
     return { ok: false, reason: `leverage exceeds ${config.maxLeverage}` };
   }

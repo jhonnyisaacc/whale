@@ -6,7 +6,7 @@ import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
 import { spendDay, type SpendScope } from "./spend.js";
 import { pickRoute } from "./routing.js";
-import { buildOrder, cappedLimitPx, orderSize, tradeActions, wirePrice, type HyperliquidAction } from "./hyperliquid.js";
+import { buildOrder, cappedLimitPx, orderSize, tradeActions, wirePrice, type AssetMeta, type HyperliquidAction } from "./hyperliquid.js";
 import { keepScreened, publicRoute, quotePlan, sizedLive } from "./executor/quotes.js";
 import { liquidityLookup, type LiquidityOf } from "./executor/liquidity.js";
 import { liveTierBlocked, sendBlock, type SupportTier } from "./support.js";
@@ -55,7 +55,7 @@ export type ExecutorDeps = {
   markPrice: (coin: string) => Promise<number | null>;
   send: (action: SendRequest, onTx: (tx: TxRecord) => Promise<void>) => Promise<SendResult>;
   recordTx?: (idempotencyKey: string | null, tx: TxRecord) => Promise<void>;
-  szDecimals?: (market: HyperliquidMarket) => Promise<number | null>;
+  assetMeta?: (market: HyperliquidMarket) => Promise<AssetMeta | null>;
   recordSpend?: (idempotencyKey: string, usd: number, scope?: SpendScope) => Promise<"inserted" | "exists" | "reserved" | "cap">;
   commitSpend?: (idempotencyKey: string) => Promise<void>;
   releaseSpend?: (idempotencyKey: string) => Promise<void>;
@@ -255,7 +255,7 @@ async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], de
   const allowed = checkLimits(deps.config, {
     notionalUsd: intent.notionalUsd,
     slippageBps: intent.slippageBps,
-    leverage: 1,
+    leverage: intent.leverage ?? 1,
     spentTodayUsd: deps.spentTodayUsd + spentToday(stateOf(deps), today(deps)),
     chain: token.chain,
     chainKey: token.chainKey,
@@ -319,7 +319,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   const limits = checkLimits(deps.config, {
     notionalUsd: intent.notionalUsd,
     slippageBps: intent.slippageBps,
-    leverage: 1,
+    leverage: intent.leverage ?? 1,
     spentTodayUsd: deps.spentTodayUsd + spentToday(stateOf(deps), today(deps)),
     chain: venueChain,
     chainKey: venueKey,
@@ -337,7 +337,8 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
 
   if (useHyper && intent.hyperliquid) {
     const market = intent.hyperliquid;
-    const [mark, szDecimals] = await Promise.all([deps.markPrice(market.coin), deps.szDecimals ? deps.szDecimals(market).catch(() => null) : Promise.resolve(null)]);
+    const leverage = intent.leverage;
+    const [mark, meta] = await Promise.all([deps.markPrice(market.coin), deps.assetMeta ? deps.assetMeta(market).catch(() => null) : Promise.resolve(null)]);
     latency = stamp(latency, "quotedMs", now());
     if (mark === null) {
       const report = skipped(intent, latency, "hyperliquid mark price unverifiable", "hypercore", deps.mode);
@@ -347,25 +348,27 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     const isBuy = intent.side === "buy";
     let order;
     try {
-      if (szDecimals === null) throw new Error("hyperliquid szDecimals unknown");
+      if (meta === null) throw new Error("hyperliquid asset meta unknown");
+      if (leverage !== undefined && !isBuy) throw new Error("leverage applies only to a HyperCore perp buy");
+      if (leverage !== undefined && leverage > meta.maxLeverage) throw new Error(`leverage ${leverage} exceeds the ${meta.maxLeverage}x maxLeverage of ${market.coin}`);
       order = buildOrder({
         asset: market.assetIndex,
         isBuy,
-        limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), szDecimals, market.market, isBuy),
-        size: orderSize(intent.notionalUsd, mark, szDecimals),
+        limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), meta.szDecimals, market.market, isBuy),
+        size: orderSize(intent.notionalUsd, mark, meta.szDecimals),
       });
     } catch (error) {
       const report = skipped(intent, latency, error instanceof Error ? error.message : "hyperliquid order sizing failed", "hypercore", deps.mode);
       reportsOf(deps).set(intent.idempotencyKey, report);
       return report;
     }
-    const actions = tradeActions(market, order);
+    const actions = tradeActions(market, order, leverage);
     if (deps.mode === "dry_run") {
       const report: ExecutionReport = {
         idempotencyKey: intent.idempotencyKey,
         mode: "dry_run",
         decision: "would_send",
-        reason: `hypercore ${intent.hyperliquid.coin} ${market.market === "spot" ? "spot" : "leverage 1 isolated"} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
+        reason: `hypercore ${intent.hyperliquid.coin} ${market.market === "spot" ? "spot" : leverage === undefined ? "account leverage" : `leverage ${leverage} isolated`} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
         venue: "hypercore",
         route: null,
         latency,

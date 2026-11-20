@@ -125,7 +125,7 @@ On HyperCore, the policy needs a `hypercore` section. The signer signs only for 
 | Action | Rule |
 | --- | --- |
 | `order` | Every order is an immediate-or-cancel limit order. A builder-deployed perp (asset 100000 and up) is refused. What is charged depends on the side, because a sell's limit price is only a floor and can sit far below where it fills. A perp buy (asset below 10000) charges price times size, rounded up to micro-USD, against `hypercore:usdc`. A spot buy (asset 10000 to 99999) charges the same product against `hypercore:spot:<asset>` in micro-units of its quote token, because the action does not prove that the quote is USDC. A spot sell charges its size, in 1e-8 units of the sold token, against `hypercore:spot:<asset>:sold`. A perp sell charges its size, in 1e-8 units of the asset, against `hypercore:perp:<asset>:sold`, whether it is reduce-only or opens a short. A sell is refused when the policy sets no limit for its key |
-| `updateLeverage` | Isolated only, from 1 to `hypercore.maxLeverage` (default 1) |
+| `updateLeverage` | Isolated only, from 1 to `hypercore.maxLeverage` (default 3, the same default as the app's `MAX_PERP_LEVERAGE`; a value above 50 is refused at load) |
 | `cancel` | Allowed, with no charge |
 | `withdraw3` | `destination` is this wallet's EVM address or in `evm.destinations`, written as lowercase hex. `hyperliquidChain` matches the network, `signatureChainId` is `0x66eee`, and `time` equals the job nonce. The amount, at most 6 decimals, counts against `hypercore:usdc` |
 

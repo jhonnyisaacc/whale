@@ -577,7 +577,7 @@ test("hyperliquid replies decide commit or release", async () => {
       config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
       markPrice: async () => 1,
       liquidityOf: async () => 100,
-      szDecimals: async () => 2,
+      assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
     };
     const report = await execute(hyperIntent(key), deps);
     return { report, spend: spend.get(key), seen };
@@ -593,7 +593,7 @@ test("hyperliquid replies decide commit or release", async () => {
   assert.equal(filled.report.decision, "sent");
   assert.equal(filled.spend, "committed");
   assert.deepEqual(filled.report.fill, { totalSz: "5", avgPx: "1.001" });
-  assert.equal((filled.seen[1] as { orders: Array<{ s: string; p: string }> }).orders[0]?.s, "5");
+  assert.equal((filled.seen[0] as { orders: Array<{ s: string; p: string }> }).orders[0]?.s, "5");
   assert.equal(readExchangeResponse({ status: "ok", response: { data: { statuses: [{ resting: { oid: 1 } }] } } }).status, "ok");
 });
 
@@ -607,7 +607,7 @@ test("a hyperliquid spot buy sends only the order, with no leverage action", asy
     config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
     markPrice: async () => 1,
     liquidityOf: async () => 100,
-    szDecimals: async () => 2,
+    assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
   };
   const spot = { ...hyperIntent("hl-spot"), hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot" as const, maxLeverage: 1 } };
   const report = await execute(spot, deps);
@@ -668,10 +668,10 @@ test("a hyperliquid sizing failure is skipped, not thrown", async () => {
     config: { ...evmConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
     markPrice: async () => 1,
     liquidityOf: async () => 100,
-    szDecimals: async () => null,
+    assetMeta: async () => null,
   });
   assert.equal(report.decision, "skipped");
-  assert.match(report.reason, /szDecimals/);
+  assert.match(report.reason, /asset meta unknown/);
 });
 
 test("live screening denies a token whose tax fields are missing", async () => {
