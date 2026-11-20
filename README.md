@@ -16,6 +16,7 @@ The public shape is `WalletCommand` in `src/commands.ts`. An `Asset` names a cha
 | `swap` | `would_swap` with the best signable route a dry run quotes, or `skipped` with the reason. Nothing is signed or broadcast. With whale-signer, `mode: "live"` and `notionalUsd` run the live path below. |
 | `bridge` | Routes fetched from LI.FI, Across, and Relay, ranked by fee, and a plan. `broadcast` stays false. |
 | `balance` | Holdings for one chain and address. |
+| `perp_positions` | The Hyperliquid perp account: margin, withdrawable, each position with entry, mark, liquidation price, PnL, leverage and funding, and the open orders. Each order is a limit or a trigger order (stop or take profit) with its trigger price and condition. A position take-profit or stop has size `entire position`. It reads `HYPERLIQUID_ACCOUNT_ADDRESS`, or whale-signer's EVM address, and moves no money. |
 | `transfer` | `would_send` in dry-run. With whale-signer, `mode: "live"` runs the live path below. Without it, live is `skipped`. |
 
 Under that boundary the existing engines stay. `src/aggregators/` races quotes. `src/routing.ts` plans hops. `src/executor.ts` is the swap state machine. `src/broadcast/` sends a signed transaction when a caller has already chosen live mode inside the engine. `src/signing-policy.ts` is the last check before a signature. `src/chains.ts` is the chain table.
@@ -26,9 +27,9 @@ The layout follows the Binah rules at <https://github.com/jhonnyisaacc/binah> (r
 
 ## How an agent calls Whale
 
-MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, `.muse-plugin`, and the root `plugin.json` for Hermes. Each starts `scripts/mcp-server.mjs`, which builds a fresh clone on its first start, so an install straight from GitHub lists the tools. The skill is `skills/whale-wallet/SKILL.md`.
+MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp_positions`, and `transfer`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, `.muse-plugin`, and the root `plugin.json` for Hermes. Each starts `scripts/mcp-server.mjs`, which builds a fresh clone on its first start, so an install straight from GitHub lists the tools. The skill is `skills/whale-wallet/SKILL.md`.
 
-CLI. After `pnpm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `bridge`, `balance`, and `transfer` are the other commands. `bridge` takes `--from-chain`, `--to-chain`, `--asset` (USDC or USDT), `--amount` in the smallest unit, and `--to`.
+CLI. After `pnpm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `bridge`, `balance`, `perp-positions`, and `transfer` are the other commands. `bridge` takes `--from-chain`, `--to-chain`, `--asset` (USDC or USDT), `--amount` in the smallest unit, and `--to`.
 
 HTTP. `pnpm run start:executor` serves `/health`, `/status`, `/execute`, `/rebalance`, and `/withdraw`. `/execute` with the executor token forces dry-run. A strategy bearer can ask the engine to run under that strategy's cap. This service does not accept listing alerts.
 
