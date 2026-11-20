@@ -162,7 +162,7 @@ export type Latency = {
   confirmedMs?: number;
 };
 
-export type TxOutcome = "pending" | "landed" | "reverted" | "expired";
+export type TxOutcome = "pending" | "landed" | "reverted" | "expired" | "signed";
 
 export type TxRecord = {
   chainKey: string;

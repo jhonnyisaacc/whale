@@ -67,5 +67,14 @@
     "dailyLimits": {
       "solana:native": "2000000000"
     }
+  },
+  "hypercore": {
+    "network": "testnet",
+    "maxLeverage": 1,
+    "dailyLimits": {
+      "hypercore:usdc": "50000000",
+      "hypercore:spot:10107": "20000000",
+      "hypercore:perp:4:sold": "50000000000"
+    }
   }
 }

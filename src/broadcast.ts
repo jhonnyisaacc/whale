@@ -6,7 +6,7 @@ import type { Fill, SendResult, TxOutcome, TxRecord } from "./domain.js";
 import { chainByEvmId, chainByKey, reorgDepth } from "./chains.js";
 import type { Hex } from "viem";
 import { landedStatus } from "./broadcast/solana.js";
-import { nextHyperliquidNonce, readExchangeResponse } from "./hyperliquid.js";
+import { isHyperliquidMainnet, nextHyperliquidNonce, readExchangeResponse } from "./hyperliquid.js";
 import { redactError } from "./redact.js";
 import type { AgedTx } from "./spend.js";
 import { defaultIo, evmContext, journal, onAnyRpc, rpcsFor, runLegs, solanaContext, type Ctx, type PreparedLeg, type SendHooks, type SendIo } from "./broadcast/shared.js";
@@ -17,6 +17,7 @@ export * from "./broadcast/shared.js";
 export * from "./broadcast/evm.js";
 export * from "./broadcast/solana.js";
 export * from "./broadcast/transfers.js";
+export * from "./broadcast/hypercore.js";
 
 async function sendHypercore(ctx: Ctx, request: SendRequest): Promise<SendResult> {
   const { config, signer, fetchImpl, secrets } = ctx;
@@ -29,7 +30,7 @@ async function sendHypercore(ctx: Ctx, request: SendRequest): Promise<SendResult
     const nonce = nextHyperliquidNonce();
     let signature;
     try {
-      signature = await signer.signHyperliquid(action, nonce, !config.hyperliquidUrl.includes("testnet"));
+      signature = await signer.signHyperliquid(action, nonce, isHyperliquidMainnet(config.hyperliquidUrl));
     } catch (error) {
       throw new BroadcastError(redactError(error, secrets), false);
     }
@@ -89,7 +90,7 @@ export async function broadcastRoute(
   hooks: SendHooks = {},
 ): Promise<SendResult> {
   if (!signer) throw new BroadcastError("signer is not loaded", false);
-  const ctx: Ctx = { config, signer, io: hooks.io ?? defaultIo(config), onTx: hooks.onTx ?? (async () => undefined), fetchImpl, secrets };
+  const ctx: Ctx = { config, signer, io: hooks.io ?? defaultIo(config), onTx: hooks.onTx ?? (async () => undefined), fetchImpl, secrets, hold: hooks.hold === true };
   if (request.kind === "hypercore") return sendHypercore(ctx, request);
   if (request.legs.length === 0) throw new BroadcastError("route has no signable leg", false);
   const capBps = Math.round(capPct * 100);

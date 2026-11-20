@@ -81,7 +81,7 @@ async function dryRunSwap(command: Extract<WalletCommand, { kind: "swap"; mode: 
   return { kind: "swap", status: "would_swap", quote: route, reason: DRY_RUN_SWAP_REASON };
 }
 
-function swapIntent(command: Extract<WalletCommand, { kind: "swap"; mode: "live" }>, now: number): SwapIntent {
+export function swapIntent(command: Extract<WalletCommand, { kind: "swap"; mode: "live" }>, now: number): SwapIntent {
   const sellAmount = Number(command.sellAmount);
   return intentSchema.parse({
     idempotencyKey: command.idempotencyKey,
@@ -150,9 +150,8 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
     const holdings = read.holdings.filter((row) => row.chainKey === command.chainKey && addressKey(command.chainKey, row.address) === address);
     return read.reason ? { kind: "balance", holdings, reason: read.reason } : { kind: "balance", holdings };
   }
-  // TODO: local keystore signing exists for dry-run. Live mode still refuses raw keys in loadManagedSigner, so a live transfer stays skipped.
   if (command.mode === "live") {
-    return { kind: "transfer", status: "skipped", reason: "live local signing is not wired" };
+    return { kind: "transfer", status: "skipped", reason: "a live transfer needs whale-signer. set WHALE_SIGNER_KEYSTORE and run whale-signer serve" };
   }
   return { kind: "transfer", status: "would_send", reason: `dry-run transfer of ${command.amount} to ${command.to}. nothing was broadcast` };
 }

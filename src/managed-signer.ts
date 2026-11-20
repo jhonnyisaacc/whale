@@ -3,9 +3,9 @@ import { VersionedTransaction } from "@solana/web3.js";
 import { recoverTypedDataAddress, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { AppConfig } from "./config.js";
-import { actionHash, signL1Action, type HyperliquidAction } from "./hyperliquid.js";
+import { actionHash, isHyperliquidMainnet, signL1Action, signWithdraw, type HyperliquidAction, type HyperliquidSignature, type WithdrawAction } from "./hyperliquid.js";
 import { loadSigner, signerSecrets, solanaSigner, type SignerMaterial } from "./signer.js";
-import { assertEvmFee, assertEvmSigning, assertHyperliquidSigning, assertSolanaSigning, routersForChain, type EvmApproval, type EvmPurpose, type SolanaMessage } from "./signing-policy.js";
+import { assertEvmFee, assertEvmSigning, assertHyperliquidSigning, assertHyperliquidWithdraw, assertSolanaSigning, routersForChain, type EvmApproval, type EvmPurpose, type SolanaMessage } from "./signing-policy.js";
 import { assertLiveEdges, drainTimeoutMs, serviceTokens } from "./config.js";
 import { serializeEvmRequest, verifiedEvmTransaction, verifiedSolanaTransaction, type EvmTxRequest } from "./signatures.js";
 
@@ -25,12 +25,13 @@ export type EvmSignInput = {
 };
 
 export interface TransactionSigner {
-  readonly backend: "turnkey" | "keystore";
+  readonly backend: "turnkey" | "keystore" | "whale-signer";
   evmAddress(): string | null;
   solanaAddress(): string | null;
   signEvm(input: EvmSignInput): Promise<Hex>;
-  signSolana(serialized: Uint8Array): Promise<Uint8Array>;
-  signHyperliquid(action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<{ r: Hex; s: Hex; v: number }>;
+  signSolana(serialized: Uint8Array, context?: { buyMint: string | null }): Promise<Uint8Array>;
+  signHyperliquid(action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<HyperliquidSignature>;
+  signHyperliquidWithdraw?(action: WithdrawAction): Promise<HyperliquidSignature>;
 }
 
 export type TurnkeyApi = {
@@ -46,6 +47,8 @@ function policyConfig(config: AppConfig) {
     allowHotApproval: config.allowHotApproval,
     solanaPrograms: config.solanaProgramAllowlist,
     maxLeverage: config.maxLeverage,
+    maxOrderUsd: config.maxUsdPerTrade * (1 + config.slippageHardMaxBps / 10_000),
+    sellLimits: config.hypercoreSellLimits,
     recoveryTokens: config.tokenRecoveryAllowlist,
     allowOpaqueSwap: config.lifiLive,
   };
@@ -69,7 +72,7 @@ export function withPolicy(inner: TransactionSigner, config: AppConfig): Transac
       });
       return inner.signEvm(input);
     },
-    async signSolana(serialized) {
+    async signSolana(serialized, context) {
       const expected = inner.solanaAddress();
       if (!expected) throw new Error("solana signer is not loaded");
       assertSolanaSigning({
@@ -80,11 +83,21 @@ export function withPolicy(inner: TransactionSigner, config: AppConfig): Transac
         maxTipLamports: config.jitoTipLamports,
         maxPriorityLamports: config.solanaMaxPriorityLamports,
       });
-      return inner.signSolana(serialized);
+      return inner.signSolana(serialized, context);
     },
     async signHyperliquid(action, nonce, isMainnet) {
-      assertHyperliquidSigning(action, policy.maxLeverage);
+      assertHyperliquidSigning(action, policy);
       return inner.signHyperliquid(action, nonce, isMainnet);
+    },
+    async signHyperliquidWithdraw(action) {
+      if (!inner.signHyperliquidWithdraw) throw new Error("hypercore: this signer cannot sign withdrawals");
+      assertHyperliquidWithdraw(action, {
+        owner: inner.evmAddress() ?? "",
+        withdrawAllowlist: policy.withdrawAllowlist,
+        maxWithdrawUsd: config.maxWithdrawAmount,
+        isMainnet: isHyperliquidMainnet(config.hyperliquidUrl),
+      });
+      return inner.signHyperliquidWithdraw(action);
     },
   };
 }
@@ -132,6 +145,10 @@ export function keystoreSigner(material: SignerMaterial): TransactionSigner {
     async signHyperliquid(action, nonce, isMainnet) {
       if (!material.hyperliquid) throw new Error("hyperliquid agent key is not loaded");
       return signL1Action(material.hyperliquid, action, nonce, isMainnet);
+    },
+    async signHyperliquidWithdraw(action) {
+      if (!material.evm) throw new Error("hypercore: a withdrawal needs the wallet's evm key");
+      return signWithdraw(material.evm, action);
     },
   };
 }

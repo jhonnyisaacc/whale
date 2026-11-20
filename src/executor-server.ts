@@ -14,7 +14,7 @@ import { bearerOf } from "./bearer.js";
 import { anyTokenMatches, buildApp, mutatingLimit, shutdown } from "./http.js";
 import { fetchHyperliquidMid, quoteHop } from "./clients.js";
 import { redactError, zeroLoadedSecrets } from "./redact.js";
-import { broadcastRoute, lookupAgedTx } from "./broadcast.js";
+import { broadcastRoute, lookupAgedTx, NATIVE_SELL } from "./broadcast.js";
 import { assertApprovedAgent, fetchSzDecimals } from "./hyperliquid.js";
 import { createLogger } from "./log.js";
 import { assertBoot, loadManagedSigner, type TransactionSigner } from "./managed-signer.js";
@@ -23,14 +23,13 @@ import {
   acquireExecutorLock,
   backfillStrategyIds,
   closeSpendPools,
-  commitSpend,
   readKillSwitch,
   reconcileReserved,
-  recordSpend,
   recordTx,
-  releaseSpend,
   spendDay,
+  spendJournal,
   spentOnDay,
+  type SpendJournal,
   type SpendScope,
 } from "./spend.js";
 import { chainAddresses, planRebalance } from "./rebalance.js";
@@ -66,6 +65,10 @@ export function txJournal(config: AppConfig, log: (entry: { idempotencyKey: stri
   };
 }
 
+function executorJournal(config: AppConfig, databaseUrl: string | null | undefined): SpendJournal {
+  return spendJournal(config.live && databaseUrl ? databaseUrl : null, config.dailyUsdCap, () => spendDay(new Date(), config.spendTimezone));
+}
+
 function deps(
   config: AppConfig,
   signer: TransactionSigner | null,
@@ -73,9 +76,10 @@ function deps(
   journal: ReturnType<typeof txJournal>,
   priceOf: PriceOf,
   balances: BalanceCache | null,
-  opts: { state?: ExecutorState; spendScope?: SpendScope; databaseUrl?: string | null } = {},
+  opts: { state?: ExecutorState; spendScope?: SpendScope; databaseUrl?: string | null; journal?: SpendJournal } = {},
 ): ExecutorDeps {
   const databaseUrl = opts.databaseUrl !== undefined ? opts.databaseUrl : config.databaseUrl;
+  const spend = opts.journal ?? executorJournal(config, databaseUrl);
   const spent = (tx: TxRecord) => balances?.invalidate(tx.chainKey);
   return {
     config,
@@ -99,20 +103,18 @@ function deps(
     szDecimals: (market) => fetchSzDecimals(config.hyperliquidUrl, market),
     state: opts.state ?? createExecutorState(),
     spendScope: opts.spendScope,
-    recordSpend:
-      config.live && databaseUrl
-        ? (key, usd, scope) => recordSpend(databaseUrl, key, usd, spendDay(new Date(), config.spendTimezone), config.dailyUsdCap, scope)
-        : undefined,
+    recordSpend: spend.reserve,
     killSwitchEnabled: async () => {
       if (config.killSwitch) return true;
       if (!databaseUrl) return false;
       return readKillSwitch(databaseUrl);
     },
-    commitSpend: config.live && databaseUrl ? (key) => commitSpend(databaseUrl, key) : undefined,
-    releaseSpend: config.live && databaseUrl ? (key) => releaseSpend(databaseUrl, key) : undefined,
+    commitSpend: spend.commit,
+    releaseSpend: spend.release,
     screenToken: config.screening ? (token) => screenToken(config, token) : undefined,
     supportTierFor: (chainKey) => supportTierFor(config.supportByChain, chainKey),
-    readTokenDecimals: (token) => resolveTokenDecimals(token.chainKey, token.address, token.chain, config.rpcByChainKey[token.chainKey]),
+    readTokenDecimals: async (token) =>
+      token.chain.kind === "evm" && NATIVE_SELL.has(token.address.toLowerCase()) ? 18 : resolveTokenDecimals(token.chainKey, token.address, token.chain, config.rpcByChainKey[token.chainKey]),
     readBalance: balances?.read ?? null,
     liquidityOf: dexscreenerLiquidity(config),
   };
@@ -122,6 +124,7 @@ export type ExecutorInstance = {
   config: AppConfig;
   state: ExecutorState;
   deps: ExecutorDeps;
+  spend: SpendJournal;
   execute: (intent: SwapIntent, overrides?: Partial<ExecutorDeps>) => Promise<ExecutionReport>;
 };
 
@@ -133,11 +136,13 @@ export function createExecutor(
 ): ExecutorInstance {
   const state = createExecutorState();
   const secrets = opts.secrets ?? configSecrets(config).filter((item) => item.length >= 8);
-  const runtime = deps(config, signer, secrets, txJournal({ ...config, databaseUrl: db }, () => undefined), opts.priceOf ?? (() => null), opts.balances ?? null, { state, databaseUrl: db });
+  const spend = executorJournal(config, db);
+  const runtime = deps(config, signer, secrets, txJournal({ ...config, databaseUrl: db }, () => undefined), opts.priceOf ?? (() => null), opts.balances ?? null, { state, databaseUrl: db, journal: spend });
   return {
     config,
     state,
     deps: runtime,
+    spend,
     execute: (intent, overrides = {}) => execute(intent, { ...runtime, ...overrides, state }),
   };
 }

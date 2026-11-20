@@ -11,6 +11,7 @@ export function withdrawJournalAction(outcome: TxOutcome): WithdrawJournalAction
       return "keep";
     case "reverted":
     case "expired":
+    case "signed":
       return "release";
     default: {
       const exhaustive: never = outcome;

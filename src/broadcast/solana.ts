@@ -62,13 +62,14 @@ export async function submitSolana(
   let signed: Uint8Array;
   let expiry: number;
   try {
-    signed = await ctx.signer.signSolana(tx.serialize());
+    signed = await ctx.signer.signSolana(tx.serialize(), { buyMint: shape.buyToken });
     expiry = lastValid ?? (await ctx.rpc.blockHeight()) + 150;
   } catch (error) {
     throw new BroadcastError(redactError(error, ctx.secrets), false);
   }
-  const record: TxRecord = { chainKey: "solana", txHash: solanaSignature(signed), from: ctx.owner, to: shape.to, value: shape.value, outcome: "pending" };
+  const record: TxRecord = { chainKey: "solana", txHash: solanaSignature(signed), from: ctx.owner, to: shape.to, value: shape.value, outcome: ctx.hold ? "signed" : "pending" };
   await journal(ctx, record);
+  if (ctx.hold) return { record, confirm: async () => ({ records: [record], received: null }) };
   try {
     if (shape.jitoUrl) await sendJito(ctx.fetchImpl, shape.jitoUrl, signed);
     else await ctx.rpc.sendRaw(signed);

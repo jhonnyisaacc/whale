@@ -1,4 +1,4 @@
-import { holdingsForTrade, type BalanceReader } from "./balances.js";
+import type { BalanceReader } from "./balances.js";
 import type { ChainRef, ExecutionReport, HyperliquidMarket, Latency, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
 import { addressKey } from "./chains.js";
 import { checkLimits, type LimitConfig, type Liquidity } from "./limits.js";
@@ -6,8 +6,8 @@ import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
 import { spendDay, type SpendScope } from "./spend.js";
 import { pickRoute } from "./routing.js";
-import { buildLeverage, buildOrder, cappedLimitPx, orderSize, wirePrice, type HyperliquidAction } from "./hyperliquid.js";
-import { keepScreened, publicRoute, quotePlan } from "./executor/quotes.js";
+import { buildOrder, cappedLimitPx, orderSize, tradeActions, wirePrice, type HyperliquidAction } from "./hyperliquid.js";
+import { keepScreened, publicRoute, quotePlan, sizedLive } from "./executor/quotes.js";
 import { liquidityLookup, type LiquidityOf } from "./executor/liquidity.js";
 import { liveTierBlocked, sendBlock, type SupportTier } from "./support.js";
 
@@ -265,13 +265,9 @@ async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], de
   if (flagged(deps, token.chainKey, token.address)) return none;
   if (liveTierBlocked(deps.mode, deps.supportTierFor, token.chainKey)) return none;
   try {
-    let quoted = intent;
-    if (deps.mode === "live") {
-      const sized = await holdingsForTrade(true, intent.holdings, deps.readBalance ?? null, token.chainKey, deps.priceOf ?? null);
-      if (!sized.ok) return { ...none, unread: sized.reason };
-      quoted = { ...intent, holdings: sized.holdings };
-    }
-    const planned = await quotePlan(quoted, token, deps);
+    const live = deps.mode === "live" ? await sizedLive(intent, token, deps) : { intent, token };
+    if (typeof live === "string") return { ...none, unread: live };
+    const planned = await quotePlan(live.intent, live.token, deps);
     return { quotes: planned.quotes, unsized: planned.unsized, unread: null, sized: deps.mode === "live" };
   } catch (error) {
     return { ...none, crashed: error };
@@ -363,7 +359,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
       reportsOf(deps).set(intent.idempotencyKey, report);
       return report;
     }
-    const actions: HyperliquidAction[] = market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, 1), order];
+    const actions = tradeActions(market, order);
     if (deps.mode === "dry_run") {
       const report: ExecutionReport = {
         idempotencyKey: intent.idempotencyKey,
