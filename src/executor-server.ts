@@ -15,7 +15,7 @@ import { anyTokenMatches, buildApp, mutatingLimit, shutdown } from "./http.js";
 import { fetchHyperliquidMid, quoteHop } from "./clients.js";
 import { redactError, zeroLoadedSecrets } from "./redact.js";
 import { broadcastRoute, lookupAgedTx, NATIVE_SELL } from "./broadcast.js";
-import { assertApprovedAgent, fetchSzDecimals } from "./hyperliquid.js";
+import { assertApprovedAgent, fetchAssetMeta } from "./hyperliquid.js";
 import { createLogger } from "./log.js";
 import { assertBoot, loadManagedSigner, type TransactionSigner } from "./managed-signer.js";
 import { seedApprovals } from "./approvals.js";
@@ -100,7 +100,7 @@ function deps(
       spent(tx);
       await journal(key, tx);
     },
-    szDecimals: (market) => fetchSzDecimals(config.hyperliquidUrl, market),
+    assetMeta: (market) => fetchAssetMeta(config.hyperliquidUrl, market),
     state: opts.state ?? createExecutorState(),
     spendScope: opts.spendScope,
     recordSpend: spend.reserve,

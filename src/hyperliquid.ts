@@ -90,8 +90,8 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
   return { type: "updateLeverage", asset, isCross: false, leverage };
 }
 
-export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction): HyperliquidAction[] {
-  return market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, 1), order];
+export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction, leverage: number): HyperliquidAction[] {
+  return market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, leverage), order];
 }
 
 export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): number {
@@ -276,18 +276,20 @@ export function nextHyperliquidNonce(now = Date.now()): number {
   return lastNonce;
 }
 
-const szCache = new Map<string, number>();
+export type AssetMeta = { szDecimals: number; maxLeverage: number };
 
-export function resetSzDecimals(): void {
-  szCache.clear();
+const metaCache = new Map<string, AssetMeta>();
+
+export function resetAssetMeta(): void {
+  metaCache.clear();
 }
 
-export async function fetchSzDecimals(url: string, market: { market: "perp" | "spot"; assetIndex: number }, fetchImpl: typeof fetch = fetch): Promise<number | null> {
+export async function fetchAssetMeta(url: string, market: { market: "perp" | "spot"; assetIndex: number }, fetchImpl: typeof fetch = fetch): Promise<AssetMeta | null> {
   const key = `${url}|${market.market}|${market.assetIndex}`;
-  const cached = szCache.get(key);
+  const cached = metaCache.get(key);
   if (cached !== undefined) return cached;
   type Meta = {
-    universe?: Array<{ szDecimals?: number; tokens?: number[]; index?: number }>;
+    universe?: Array<{ szDecimals?: number; maxLeverage?: number; tokens?: number[]; index?: number }>;
     tokens?: Array<{ szDecimals?: number; index?: number }>;
   };
   const body = await withTimeout(1500, async (signal) => {
@@ -300,18 +302,21 @@ export async function fetchSzDecimals(url: string, market: { market: "perp" | "s
     return response.ok ? (JSON.parse(await readVendorText(response)) as Meta) : null;
   });
   if (!body) return null;
-  let value: number | undefined;
+  let row: { szDecimals?: number; maxLeverage?: number } | undefined;
   if (market.market === "perp") {
-    value = body.universe?.[market.assetIndex]?.szDecimals;
+    row = body.universe?.[market.assetIndex];
   } else {
     const spotIndex = market.assetIndex >= 10_000 ? market.assetIndex - 10_000 : market.assetIndex;
-    const pair = body.universe?.find((row) => row.index === spotIndex);
+    const pair = body.universe?.find((item) => item.index === spotIndex);
     const base = pair?.tokens?.[0];
-    value = body.tokens?.find((token) => token.index === base)?.szDecimals;
+    row = { szDecimals: body.tokens?.find((token) => token.index === base)?.szDecimals, maxLeverage: 1 };
   }
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return null;
-  szCache.set(key, value);
-  return value;
+  const { szDecimals, maxLeverage } = row ?? {};
+  if (typeof szDecimals !== "number" || !Number.isInteger(szDecimals) || szDecimals < 0) return null;
+  if (typeof maxLeverage !== "number" || !Number.isInteger(maxLeverage) || maxLeverage < 1) return null;
+  const meta = { szDecimals, maxLeverage };
+  metaCache.set(key, meta);
+  return meta;
 }
 
 export type ExchangeOutcome =

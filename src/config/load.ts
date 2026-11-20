@@ -81,6 +81,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (env.STRATEGY_CAPS_JSON !== undefined) throw new Error("STRATEGY_CAPS_JSON is closed");
   if (env.WITHDRAW_ENABLED !== undefined) throw new Error("WITHDRAW_ENABLED is closed");
   if (env.LIFI_LIVE === "true") throw new Error("LIFI_LIVE is closed until facet calldata can be verified");
+  if (env.MAX_LEVERAGE !== undefined) throw new Error("MAX_LEVERAGE is renamed MAX_PERP_LEVERAGE");
+  const maxLeverage = intEnv(env, "MAX_PERP_LEVERAGE", 3);
+  if (!Number.isInteger(maxLeverage) || maxLeverage < 1) throw new Error("MAX_PERP_LEVERAGE must be a whole number of at least 1");
   const live = env.WHALE_BROADCAST === "true";
   const maxSlippageBps = intEnv(env, "MAX_SLIPPAGE_BPS", 100);
   const slippageHardMaxBps = intEnv(env, "SLIPPAGE_HARD_MAX_BPS", 300);
@@ -118,7 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dailyUsdCap: intEnv(env, "DAILY_USD_CAP", 25),
     maxSlippageBps,
     slippageHardMaxBps,
-    maxLeverage: intEnv(env, "MAX_LEVERAGE", 1),
+    maxLeverage,
     minLiquidityUsd: intEnv(env, "MIN_LIQUIDITY_USD", 75_000),
     enabledChainKeys: enabledKeys(env),
     databaseUrl: env.DATABASE_URL ?? null,

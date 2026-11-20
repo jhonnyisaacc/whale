@@ -56,7 +56,7 @@ test("the signing policy bounds every HyperCore action Whale builds and refuses 
     ["a perp short with no size limit", perpSell(5, "0.2", "250", false), "no limit is set for hypercore:perp:5:sold"],
     ["two perp sells past the size limit together", { type: "order", orders: [...perpSell(4, "0.2", "250", false).orders, ...perpSell(4, "0.2", "251", true).orders], grouping: "na" }, "50100000000 of hypercore:perp:4:sold is above its 50000000000 limit"],
     ["cross leverage", { type: "updateLeverage", asset: 4, isCross: true, leverage: 1 }, "only isolated leverage is signed"],
-    ["leverage above the cap", buildLeverage(4, 2), "leverage exceeds the signing policy"],
+    ["leverage above the cap", buildLeverage(4, 2), "leverage 2 exceeds the 1x signing policy"],
     ["a withdrawal through the agent path", { type: "withdraw3" }, "refusing hyperliquid action withdraw3"],
     ["an unknown action", { type: "noop" }, "unsupported hyperliquid action noop"],
   ];
@@ -151,7 +151,7 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
     send: async (request) => {
       sent.push(request);
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };

@@ -167,7 +167,7 @@ function hyperDeps(sends: string[], enabled: string[], liquidityOf: (token: { ch
   return Object.assign(base, {
     config: { ...base.config, enabledChainKeys: new Set(enabled) },
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
     liquidityOf,
   });
 }
