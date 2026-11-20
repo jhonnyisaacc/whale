@@ -39,18 +39,32 @@ export const clearinghouseStateSchema = z.object({
   time: count,
 });
 
-export const openOrdersSchema = z.array(
-  z.object({
-    coin: z.string().min(1),
-    side: z.enum(["A", "B"]),
-    limitPx: decimal,
-    sz: decimal,
-    oid: count,
-    timestamp: count,
-    origSz: decimal,
-    reduceOnly: z.boolean().optional(),
-  }),
-);
+const orderFields = {
+  coin: z.string().min(1),
+  side: z.enum(["A", "B"]),
+  limitPx: decimal,
+  sz: decimal,
+  oid: count,
+  timestamp: count,
+  origSz: decimal,
+  reduceOnly: z.boolean(),
+  tif: z.string().min(1).nullable(),
+  cloid: z.string().min(1).nullable(),
+  triggerPx: decimal,
+};
+
+const triggerOrderTypes = ["Stop Market", "Stop Limit", "Take Profit Market", "Take Profit Limit"] as const;
+
+const orderWithoutChildren = z.discriminatedUnion("isTrigger", [
+  z.object({ ...orderFields, isTrigger: z.literal(false), orderType: z.literal("Limit"), triggerCondition: z.literal("N/A"), isPositionTpsl: z.literal(false) }),
+  z.object({ ...orderFields, isTrigger: z.literal(true), orderType: z.enum(triggerOrderTypes), triggerCondition: z.string().min(1), isPositionTpsl: z.boolean() }),
+]);
+
+type FrontendOrder = z.infer<typeof orderWithoutChildren> & { children: FrontendOrder[] };
+
+const frontendOrderSchema: z.ZodType<FrontendOrder> = orderWithoutChildren.and(z.object({ children: z.array(z.lazy(() => frontendOrderSchema)) }));
+
+export const frontendOpenOrdersSchema = z.array(frontendOrderSchema);
 
 export const metaAndAssetCtxsSchema = z
   .tuple([
@@ -75,16 +89,48 @@ export type PerpPosition = {
   funding: { hourlyRate: string; paidSinceOpenUsd: string; paidSinceChangeUsd: string; paidAllTimeUsd: string };
 };
 
+type Sized = { size: string; originalSize: string };
+
 export type PerpOrder = {
   oid: number;
   coin: string;
   side: "buy" | "sell";
   limitPx: string;
-  size: string;
-  originalSize: string;
-  reduceOnly: boolean | null;
+  reduceOnly: boolean;
+  clientOrderId: string | null;
   placedAtMs: number;
-};
+  attached: PerpOrder[];
+} & (
+  | ({ kind: "limit"; timeInForce: string | null } & Sized)
+  | ({ kind: "trigger"; orderType: (typeof triggerOrderTypes)[number]; isMarket: boolean; triggerPx: string; triggerCondition: string } & (
+      | { isPositionTpsl: true; size: "entire position" }
+      | ({ isPositionTpsl: false } & Sized)
+    ))
+);
+
+function perpOrder(order: FrontendOrder): PerpOrder {
+  const common = {
+    oid: order.oid,
+    coin: order.coin,
+    side: order.side === "B" ? ("buy" as const) : ("sell" as const),
+    limitPx: order.limitPx,
+    reduceOnly: order.reduceOnly,
+    clientOrderId: order.cloid,
+    placedAtMs: order.timestamp,
+    attached: order.children.map(perpOrder),
+  };
+  const sized = { size: order.sz, originalSize: order.origSz };
+  if (!order.isTrigger) return { kind: "limit", ...common, timeInForce: order.tif, ...sized };
+  const trigger = {
+    kind: "trigger" as const,
+    ...common,
+    orderType: order.orderType,
+    isMarket: order.orderType.endsWith(" Market"),
+    triggerPx: order.triggerPx,
+    triggerCondition: order.triggerCondition,
+  };
+  return order.isPositionTpsl ? { ...trigger, isPositionTpsl: true, size: "entire position" } : { ...trigger, isPositionTpsl: false, ...sized };
+}
 
 export type PerpAccount = {
   account: string;
@@ -105,7 +151,7 @@ export type PerpAccount = {
 export function perpAccount(
   account: string,
   state: z.infer<typeof clearinghouseStateSchema>,
-  orders: z.infer<typeof openOrdersSchema>,
+  orders: z.infer<typeof frontendOpenOrdersSchema>,
   [meta, ctxs]: z.infer<typeof metaAndAssetCtxsSchema>,
 ): PerpAccount {
   const markets = new Map(meta.universe.map((asset, index) => [asset.name, ctxs[index]!]));
@@ -146,16 +192,7 @@ export function perpAccount(
         },
       };
     }),
-    openOrders: orders.filter((order) => markets.has(order.coin)).map((order) => ({
-      oid: order.oid,
-      coin: order.coin,
-      side: order.side === "B" ? "buy" : "sell",
-      limitPx: order.limitPx,
-      size: order.sz,
-      originalSize: order.origSz,
-      reduceOnly: order.reduceOnly ?? null,
-      placedAtMs: order.timestamp,
-    })),
+    openOrders: orders.filter((order) => markets.has(order.coin)).map(perpOrder),
   };
 }
 
@@ -183,7 +220,7 @@ export async function readPerpAccount(url: string, account: string, fetchImpl: t
   const user = account.toLowerCase();
   const [state, orders, markets] = await Promise.all([
     postInfo(url, { type: "clearinghouseState", user }, clearinghouseStateSchema, fetchImpl),
-    postInfo(url, { type: "openOrders", user }, openOrdersSchema, fetchImpl),
+    postInfo(url, { type: "frontendOpenOrders", user }, frontendOpenOrdersSchema, fetchImpl),
     postInfo(url, { type: "metaAndAssetCtxs" }, metaAndAssetCtxsSchema, fetchImpl),
   ]);
   return perpAccount(user, state, orders, markets);

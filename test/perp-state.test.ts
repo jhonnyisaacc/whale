@@ -19,7 +19,7 @@ function infoServer(overrides: Record<string, unknown> = {}) {
   const bodies: Record<string, unknown>[] = [];
   const responses: Record<string, unknown> = {
     clearinghouseState: fixture("clearinghouse-state"),
-    openOrders: fixture("open-orders"),
+    frontendOpenOrders: fixture("frontend-open-orders"),
     metaAndAssetCtxs: fixture("meta-and-asset-ctxs"),
     ...overrides,
   };
@@ -39,7 +39,7 @@ test("a captured mainnet account reads as positions, margin, and resting orders"
   const account = await read(fetchImpl);
   assert.deepEqual(
     bodies.map((body) => body.type).sort(),
-    ["clearinghouseState", "metaAndAssetCtxs", "openOrders"],
+    ["clearinghouseState", "frontendOpenOrders", "metaAndAssetCtxs"],
   );
   assert.ok(bodies.filter((body) => body.type !== "metaAndAssetCtxs").every((body) => body.user === ACCOUNT));
   assert.equal(account.account, ACCOUNT);
@@ -67,30 +67,75 @@ test("a captured mainnet account reads as positions, margin, and resting orders"
   assert.equal(account.positions[2]!.liquidationPx, null);
   assert.equal(account.openOrders.length, 34);
   assert.deepEqual(account.openOrders[0], {
+    kind: "limit",
     oid: 611279843652,
     coin: "ZEC",
     side: "buy",
     limitPx: "792.63",
     size: "162.56",
     originalSize: "162.56",
-    reduceOnly: null,
+    timeInForce: "Gtc",
+    reduceOnly: false,
+    clientOrderId: null,
     placedAtMs: 1795173781500,
+    attached: [],
   });
 });
 
-test("reduce-only resting orders keep their flag", async () => {
-  const { fetchImpl } = infoServer({ openOrders: fixture("open-orders-reduce-only") });
+test("a take-profit on the whole position reads as a trigger order covering the position, not a 0-size limit", async () => {
+  const { fetchImpl } = infoServer({ frontendOpenOrders: fixture("frontend-open-orders-position-tpsl") });
   const account = await read(fetchImpl);
-  assert.deepEqual(account.openOrders.map((order) => [order.coin, order.side, order.reduceOnly]), [
-    ["ZEC", "sell", true],
-    ["NEAR", "sell", true],
-  ]);
+  assert.deepEqual(account.openOrders.map((order) => order.coin), ["PAXG", "HYPE"]);
+  assert.deepEqual(account.openOrders[0], {
+    kind: "trigger",
+    oid: 611311305455,
+    coin: "PAXG",
+    side: "buy",
+    orderType: "Take Profit Market",
+    isMarket: true,
+    triggerPx: "3000.0",
+    triggerCondition: "Price below 3000",
+    limitPx: "3300.0",
+    isPositionTpsl: true,
+    size: "entire position",
+    reduceOnly: true,
+    clientOrderId: null,
+    placedAtMs: 1795176524675,
+    attached: [],
+  });
 });
 
-test("spot orders from the same openOrders call are left out of the perp orders", async () => {
-  const { fetchImpl } = infoServer({ openOrders: fixture("open-orders-with-spot") });
+test("a sized stop order keeps its size and where it fires", async () => {
+  const { fetchImpl } = infoServer({ frontendOpenOrders: fixture("frontend-open-orders-stop") });
   const account = await read(fetchImpl);
-  assert.deepEqual(account.openOrders.map((order) => order.coin), ["BTC", "ETH", "HYPE", "XRP", "SOL"]);
+  assert.deepEqual(
+    account.openOrders.map((order) =>
+      order.kind === "trigger" && !order.isPositionTpsl
+        ? [order.kind, order.orderType, order.triggerPx, order.triggerCondition, order.size, order.reduceOnly]
+        : [order.kind],
+    ),
+    [
+      ["trigger", "Stop Market", "0.0046", "Price above 0.0046", "200000.0", true],
+      ["trigger", "Stop Market", "0.004464", "Price above 0.004464", "125000.0", true],
+      ["limit"],
+    ],
+  );
+});
+
+test("a take-profit attached to a pending parent order is listed under that order", async () => {
+  const [takeProfit] = fixture("frontend-open-orders-position-tpsl") as Record<string, unknown>[];
+  const [parent] = fixture("frontend-open-orders") as Record<string, unknown>[];
+  const child = { ...takeProfit, coin: "ZEC", isPositionTpsl: false, sz: "162.56", origSz: "162.56" };
+  const { fetchImpl } = infoServer({ frontendOpenOrders: [{ ...parent, children: [child] }] });
+  const [order] = (await read(fetchImpl)).openOrders;
+  assert.equal(order?.kind, "limit");
+  assert.deepEqual(order?.attached.map((row) => [row.kind, row.coin, row.size]), [["trigger", "ZEC", "162.56"]]);
+});
+
+test("spot orders from the same frontendOpenOrders call are left out of the perp orders", async () => {
+  const { fetchImpl } = infoServer({ frontendOpenOrders: fixture("frontend-open-orders-with-spot") });
+  const account = await read(fetchImpl);
+  assert.deepEqual(account.openOrders.map((order) => order.coin), ["ETH", "XRP", "BTC", "HYPE", "SOL"]);
 });
 
 test("an unknown info shape is refused instead of read as empty", async () => {
@@ -99,7 +144,8 @@ test("an unknown info shape is refused instead of read as empty", async () => {
     ["hedge mode", { clearinghouseState: { ...state, assetPositions: [{ ...state.assetPositions[0], type: "twoWay" }] } }, /clearinghouseState has an unknown shape at assetPositions\.0\.type/],
     ["unknown margin mode", { clearinghouseState: { ...state, assetPositions: [{ ...state.assetPositions[0], position: { ...state.assetPositions[0]!.position, leverage: { type: "portfolio", value: 3 } } }] } }, /unknown shape at assetPositions\.0\.position\.leverage/],
     ["numeric price", { clearinghouseState: { ...state, assetPositions: [{ ...state.assetPositions[0], position: { ...state.assetPositions[0]!.position, liquidationPx: 81806.1 } }] } }, /unknown shape at assetPositions\.0\.position\.liquidationPx/],
-    ["error object", { openOrders: { error: "rate limited" } }, /openOrders has an unknown shape at the root/],
+    ["error object", { frontendOpenOrders: { error: "rate limited" } }, /frontendOpenOrders has an unknown shape at the root/],
+    ["unknown order type", { frontendOpenOrders: [{ ...(fixture("frontend-open-orders-stop") as object[])[0], orderType: "Twap" }] }, /frontendOpenOrders has an unknown shape at 0/],
     ["missing contexts", { metaAndAssetCtxs: [(fixture("meta-and-asset-ctxs") as unknown[])[0], []] }, /metaAndAssetCtxs has an unknown shape/],
   ];
   for (const [label, overrides, message] of variants) {
@@ -115,7 +161,7 @@ test("a position on a coin with no market context is refused", async () => {
 
 test("a failed info call names the request type", async () => {
   const fetchImpl: typeof fetch = async () => new Response("busy", { status: 429 });
-  await assert.rejects(read(fetchImpl), /hyperliquid info (clearinghouseState|openOrders|metaAndAssetCtxs) returned 429/);
+  await assert.rejects(read(fetchImpl), /hyperliquid info (clearinghouseState|frontendOpenOrders|metaAndAssetCtxs) returned 429/);
 });
 
 test("the account must be an EVM address", async () => {
