@@ -83,7 +83,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (env.LIFI_LIVE === "true") throw new Error("LIFI_LIVE is closed until facet calldata can be verified");
   if (env.MAX_LEVERAGE !== undefined) throw new Error("MAX_LEVERAGE is renamed MAX_PERP_LEVERAGE");
   const maxLeverage = intEnv(env, "MAX_PERP_LEVERAGE", 3);
-  if (!Number.isInteger(maxLeverage) || maxLeverage < 1) throw new Error("MAX_PERP_LEVERAGE must be a whole number of at least 1");
+  if (!Number.isInteger(maxLeverage) || maxLeverage < 1 || maxLeverage > 50) throw new Error("MAX_PERP_LEVERAGE must be a whole number from 1 to 50");
   const live = env.WHALE_BROADCAST === "true";
   const maxSlippageBps = intEnv(env, "MAX_SLIPPAGE_BPS", 100);
   const slippageHardMaxBps = intEnv(env, "SLIPPAGE_HARD_MAX_BPS", 300);

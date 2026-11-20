@@ -90,8 +90,10 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
   return { type: "updateLeverage", asset, isCross: false, leverage };
 }
 
-export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction, leverage: number): HyperliquidAction[] {
-  return market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, leverage), order];
+export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction, leverage: number | undefined): HyperliquidAction[] {
+  const row = order.orders[0];
+  const opens = market.market === "perp" && row !== undefined && row.b && !row.r;
+  return opens && leverage !== undefined ? [buildLeverage(market.assetIndex, leverage), order] : [order];
 }
 
 export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): number {

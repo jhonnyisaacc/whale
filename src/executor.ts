@@ -337,7 +337,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
 
   if (useHyper && intent.hyperliquid) {
     const market = intent.hyperliquid;
-    const leverage = intent.leverage ?? 1;
+    const leverage = intent.leverage;
     const [mark, meta] = await Promise.all([deps.markPrice(market.coin), deps.assetMeta ? deps.assetMeta(market).catch(() => null) : Promise.resolve(null)]);
     latency = stamp(latency, "quotedMs", now());
     if (mark === null) {
@@ -349,7 +349,8 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     let order;
     try {
       if (meta === null) throw new Error("hyperliquid asset meta unknown");
-      if (leverage > meta.maxLeverage) throw new Error(`leverage ${leverage} exceeds the ${meta.maxLeverage}x maxLeverage of ${market.coin}`);
+      if (leverage !== undefined && !isBuy) throw new Error("leverage applies only to a HyperCore perp buy");
+      if (leverage !== undefined && leverage > meta.maxLeverage) throw new Error(`leverage ${leverage} exceeds the ${meta.maxLeverage}x maxLeverage of ${market.coin}`);
       order = buildOrder({
         asset: market.assetIndex,
         isBuy,
@@ -367,7 +368,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
         idempotencyKey: intent.idempotencyKey,
         mode: "dry_run",
         decision: "would_send",
-        reason: `hypercore ${intent.hyperliquid.coin} ${market.market === "spot" ? "spot" : `leverage ${leverage} isolated`} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
+        reason: `hypercore ${intent.hyperliquid.coin} ${market.market === "spot" ? "spot" : leverage === undefined ? "account leverage" : `leverage ${leverage} isolated`} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
         venue: "hypercore",
         route: null,
         latency,

@@ -87,7 +87,7 @@ test("dry-run logs the buy and does not send or spend the daily cap", async () =
   assert.equal(again, report);
 });
 
-test("a thin spot pool falls back to a 1x hypercore plan without sending", async () => {
+test("a thin spot pool falls back to a hypercore plan at the account's leverage without sending", async () => {
   resetExecutorState();
   const thin = intent();
   thin.token.pairMap = buildPairMap([{ ...thin.token.pairMap.pools[0], liquidityUsd: 100 }]);
@@ -95,7 +95,7 @@ test("a thin spot pool falls back to a 1x hypercore plan without sending", async
   const report = await execute(thin, deps(sends));
   assert.equal(report.venue, "hypercore");
   assert.equal(report.decision, "would_send");
-  assert.match(report.reason, /leverage 1/);
+  assert.match(report.reason, /^hypercore MPLX account leverage limit [\d.]+ actions order$/);
   assert.equal(sends.length, 0);
 });
 
