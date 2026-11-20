@@ -396,7 +396,10 @@ fn leverage(asset: u64, leverage: u64) -> Value {
 #[test]
 fn the_default_policy_signs_isolated_2x_and_refuses_4x() {
     let mut file = load("policy.json");
-    file["hypercore"].as_object_mut().unwrap().remove("maxLeverage");
+    file["hypercore"]
+        .as_object_mut()
+        .unwrap()
+        .remove("maxLeverage");
     let signer = Signer::new("default leverage", file);
     signer.signed("2x", NONCE, leverage(4, 2));
     signer.signed("3x", NONCE + 1, leverage(4, 3));
