@@ -9,7 +9,8 @@ import type { EvmSignInput } from "../managed-signer.js";
 import type { BridgeProvider, BridgeRoute } from "../rebalance.js";
 import { redactError } from "../redact.js";
 import { readTransport } from "../rpc.js";
-import { BRIDGE_CONTRACTS, bridgeTerms, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
+import { BRIDGE_CONTRACTS, bridgeTerms, openAcrossDeposit, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
+import { bridgePair, meetsBridgeFloor } from "../signing-policy/bridge-tokens.js";
 import { trackBridge, type BridgeLookup, type BridgeStatus } from "./status.js";
 
 export type BridgeReads = {
@@ -31,7 +32,6 @@ export type BridgeDeps = {
   spend: BridgeSpend;
   status(lookup: BridgeLookup): Promise<BridgeStatus>;
   broadcast: boolean;
-  maxFeeBps: number;
   trackTimeoutMs: number;
 };
 
@@ -71,8 +71,9 @@ async function plan(deps: BridgeDeps, order: BridgeOrder): Promise<Planned | str
   for (const [chainKey, chain, contract] of [[source.key, source.chain, route.sell.address], [destination.key, destination.chain, route.buy.address]] as const) {
     if ((await deps.screen({ chainKey, chain, contract })) !== "allow") return `screening denied ${contract} on ${chainKey}`;
   }
-  const call = await deps.firm(provider, route);
-  if (!call) return `${provider} returned no bridge transaction`;
+  const quoted = await deps.firm(provider, route);
+  if (!quoted) return `${provider} returned no bridge transaction`;
+  const call = provider === "across" ? { ...quoted, data: openAcrossDeposit(quoted.data) ?? quoted.data } : quoted;
   const contract = BRIDGE_CONTRACTS[source.chain.chainId]?.[provider];
   if (!contract || !same(call.to, contract)) return `${provider} sent the bridge to ${call.to}, not its verified contract on ${source.key}`;
   if (call.value !== 0n) return `${provider} attached native value to a token bridge`;
@@ -82,8 +83,10 @@ async function plan(deps: BridgeDeps, order: BridgeOrder): Promise<Planned | str
   if (terms.destinationChainId !== BigInt(destination.chain.chainId)) return `${provider} calldata lands on chain ${terms.destinationChainId}, not ${destination.key}`;
   if (addressKey(destination.key, terms.recipient) !== addressKey(destination.key, route.destination.address)) return `${provider} calldata pays ${terms.recipient}, not the route's destination`;
   if (!same(terms.outputToken, route.buy.address)) return `${provider} calldata delivers ${terms.outputToken}, not ${route.buy.symbol}`;
-  const floorUsd = route.amountInUsd * (1 - deps.maxFeeBps / 10_000);
-  if (Number(terms.minOutput) / 10 ** route.buy.decimals < floorUsd) return `${provider} minimum output is under the ${deps.maxFeeBps} bps bridge fee cap`;
+  const pair = bridgePair(source.chain.chainId, terms.inputToken, destination.chain.chainId, terms.outputToken);
+  if (!pair) return `${provider} bridges ${route.sell.symbol} to ${route.buy.symbol}, a pair the bridge token table does not list`;
+  const { maxBridgeFeeBps } = deps.evm.config;
+  if (!meetsBridgeFloor(pair, terms.charge.amount, terms.minOutput, maxBridgeFeeBps)) return `${provider} minimum output is under the ${maxBridgeFeeBps} bps bridge fee cap`;
   const approve = (await deps.reads.allowance(route.sell.address as Hex, deps.evm.owner, call.to)) < terms.charge.amount;
   if (approve && !deps.evm.config.allowHotApproval) return `${call.to} has no ${route.sell.symbol} allowance and ALLOW_HOT_APPROVAL is off. Approve the exact amount in the root-quorum ceremony first`;
   return { provider, call, spender: call.to, sell: route.sell.address as Hex, charge: terms.charge, approve };

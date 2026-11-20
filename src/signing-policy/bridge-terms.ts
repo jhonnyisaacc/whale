@@ -1,5 +1,6 @@
-import { decodeFunctionData, parseAbi, type Hex } from "viem";
+import { decodeFunctionData, encodeFunctionData, pad, parseAbi, type Hex } from "viem";
 import { chainByEvmId } from "../chains.js";
+import { bridgePair, meetsBridgeFloor } from "./bridge-tokens.js";
 import { LIFI_SWAP, lifiDeposit } from "./swap-terms.js";
 
 export type ExecutableBridge = "lifi" | "across";
@@ -35,8 +36,11 @@ export type BridgeTerms = {
   recipient: string;
   refund: string;
   charge: { token: string; amount: bigint };
+  inputToken: string;
   outputToken: string;
   minOutput: bigint;
+  exclusiveRelayer: Hex;
+  exclusivity: number;
   destinationCall: boolean;
 };
 
@@ -67,19 +71,29 @@ function lifiTerms(data: Hex): BridgeTerms | null {
   if (!charge) return null;
   const minOutput = call.functionName === "startBridgeTokensViaAcrossV4" ? across.outputAmount : (bridge.minAmount * across.outputAmountMultiplier) / MULTIPLIER_BASE;
   const destinationCall = bridge.hasDestinationCall || across.message !== "0x";
-  return { provider: "lifi", destinationChainId: bridge.destinationChainId, recipient, refund, charge, outputToken, minOutput, destinationCall };
+  const exclusive = { exclusiveRelayer: across.exclusiveRelayer, exclusivity: across.exclusivityParameter };
+  return { provider: "lifi", destinationChainId: bridge.destinationChainId, recipient, refund, charge, inputToken: sending, outputToken, minOutput, ...exclusive, destinationCall };
 }
 
 function acrossTerms(data: Hex): BridgeTerms | null {
   const call = decoded(() => decodeFunctionData({ abi: ACROSS_SPOKE_POOL_ABI, data }));
   if (!call) return null;
-  const [depositor, recipientWord, inputToken, outputWord, inputAmount, outputAmount, destinationChainId, , , , , message] = call.args;
+  const [depositor, recipientWord, inputToken, outputWord, inputAmount, outputAmount, destinationChainId, exclusiveRelayer, , , exclusivity, message] = call.args;
   const recipient = evmAddress(recipientWord);
   const refund = evmAddress(depositor);
   const token = evmAddress(inputToken);
   const outputToken = evmAddress(outputWord);
   if (!recipient || !refund || !token || !outputToken) return null;
-  return { provider: "across", destinationChainId, recipient, refund, charge: { token, amount: inputAmount }, outputToken, minOutput: outputAmount, destinationCall: message !== "0x" };
+  const charge = { token, amount: inputAmount };
+  return { provider: "across", destinationChainId, recipient, refund, charge, inputToken: token, outputToken, minOutput: outputAmount, exclusiveRelayer, exclusivity, destinationCall: message !== "0x" };
+}
+
+export function openAcrossDeposit(data: Hex): Hex | null {
+  const call = decoded(() => decodeFunctionData({ abi: ACROSS_SPOKE_POOL_ABI, data }));
+  if (!call) return null;
+  const [depositor, recipient, inputToken, outputToken, inputAmount, outputAmount, destinationChainId, , quoteTimestamp, fillDeadline, , message] = call.args;
+  const args = [depositor, recipient, inputToken, outputToken, inputAmount, outputAmount, destinationChainId, pad("0x", { size: 32 }), quoteTimestamp, fillDeadline, 0, message] as const;
+  return encodeFunctionData({ abi: ACROSS_SPOKE_POOL_ABI, functionName: "deposit", args });
 }
 
 export function bridgeTerms(data: Hex): BridgeTerms | null {
@@ -95,6 +109,7 @@ export type BridgeCheck = {
   allowlist: readonly string[];
   charge?: { token: string; amount: bigint };
   chainIds: readonly number[];
+  maxFeeBps: number | undefined;
 };
 
 function chainLabel(chainId: bigint | number): string {
@@ -124,5 +139,13 @@ export function checkBridge(input: BridgeCheck): void {
   if (!input.charge) throw new Error("bridge has no reserved charge");
   if (!same(terms.charge.token, input.charge.token) || terms.charge.amount !== input.charge.amount) {
     throw new Error(`bridge charges ${terms.charge.amount} of ${terms.charge.token.toLowerCase()}, not the ${input.charge.amount} reserved`);
+  }
+  if (BigInt(terms.exclusiveRelayer) !== 0n || terms.exclusivity !== 0) throw new Error("bridge names an exclusive relayer");
+  const pair = same(terms.inputToken, terms.charge.token) ? bridgePair(input.chainId, terms.inputToken, Number(destination), terms.outputToken) : null;
+  if (!pair) throw new Error(`bridge sends ${terms.inputToken.toLowerCase()} and delivers ${terms.outputToken.toLowerCase()} on ${chainLabel(destination)}, a pair the bridge token table does not list`);
+  const { maxFeeBps } = input;
+  if (maxFeeBps === undefined || !Number.isInteger(maxFeeBps) || maxFeeBps < 0 || maxFeeBps > 10_000) throw new Error("bridge has no fee cap in the signing policy");
+  if (!meetsBridgeFloor(pair, terms.charge.amount, terms.minOutput, maxFeeBps)) {
+    throw new Error(`bridge delivers at least ${terms.minOutput} ${pair.symbol} for ${terms.charge.amount}, under the ${maxFeeBps} bps bridge fee cap`);
   }
 }

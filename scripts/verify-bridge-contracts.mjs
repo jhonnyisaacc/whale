@@ -1,5 +1,5 @@
 import { createPublicClient, http, parseAbi, toFunctionSelector } from "viem";
-import { BRIDGE_CONTRACTS, LIFI_ACROSS_ABI } from "../dist/src/signing-policy.js";
+import { BRIDGE_CONTRACTS, BRIDGE_TOKENS, LIFI_ACROSS_ABI } from "../dist/src/signing-policy.js";
 
 const ACROSS_FACET_V4 = "0xAd3f1634a917924cBb54A0F76e43ca035D2B6BCd";
 const PUBLIC_RPC = {
@@ -13,6 +13,8 @@ const abi = parseAbi([
   "function facetAddress(bytes4 selector) view returns (address)",
   "function SPOKEPOOL() view returns (address)",
   "function chainId() view returns (uint256)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
 ]);
 const same = (left, right) => left.toLowerCase() === right.toLowerCase();
 
@@ -32,6 +34,28 @@ for (const [id, { lifi, across }] of Object.entries(BRIDGE_CONTRACTS)) {
   for (const [name, ok] of Object.entries(checks)) {
     console.log(`${ok ? "ok  " : "FAIL"} ${id} ${name}`);
     failed ||= !ok;
+  }
+}
+const ON_CHAIN_SYMBOL = { USDC: ["USDC"], USDT: ["USDT", "USD₮0", "USDT0"], WETH: ["WETH"] };
+const routes = await (await fetch("https://app.across.to/api/available-routes")).json();
+const listed = (from, fromToken, to, toToken) => routes.some((route) => route.originChainId === from && route.destinationChainId === to && same(route.originToken, fromToken) && same(route.destinationToken, toToken));
+for (const [symbol, byChain] of Object.entries(BRIDGE_TOKENS)) {
+  for (const [id, token] of Object.entries(byChain)) {
+    const client = createPublicClient({ transport: http(process.env[`RPC_URL_${id}`] ?? PUBLIC_RPC[id]) });
+    const read = (functionName) => client.readContract({ address: token.address, abi, functionName });
+    const onChain = await read("symbol");
+    const checks = {
+      [`${symbol} ${token.address} has code`]: ((await client.getCode({ address: token.address })) ?? "0x").length > 2,
+      [`${symbol} ${token.address} reports symbol ${onChain}`]: ON_CHAIN_SYMBOL[symbol].includes(onChain),
+      [`${symbol} ${token.address} reports ${token.decimals} decimals`]: (await read("decimals")) === token.decimals,
+    };
+    for (const [other, peer] of Object.entries(byChain)) {
+      if (other !== id) checks[`Across lists ${symbol} ${id} to ${other}`] = listed(Number(id), token.address, Number(other), peer.address);
+    }
+    for (const [name, ok] of Object.entries(checks)) {
+      console.log(`${ok ? "ok  " : "FAIL"} ${id} ${name}`);
+      failed ||= !ok;
+    }
   }
 }
 if (failed) process.exit(1);

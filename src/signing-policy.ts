@@ -6,6 +6,7 @@ import { chainByEvmId, CHAINS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from ".
 
 export * from "./signing-policy/swap-terms.js";
 export * from "./signing-policy/bridge-terms.js";
+export * from "./signing-policy/bridge-tokens.js";
 export * from "./signing-policy/turnkey.js";
 export * from "./signing-policy/hypercore.js";
 
@@ -73,6 +74,8 @@ type EvmSigningInput = {
   recoveryTokens?: readonly string[];
   approval?: EvmApproval;
   charge?: EvmApproval;
+  bridgeChainIds?: readonly number[];
+  maxBridgeFeeBps?: number;
 };
 
 function evmChain(chainId: number): string {
@@ -138,7 +141,7 @@ function checkEvmSigning(input: EvmSigningInput): void {
     return;
   }
   if (input.purpose === "bridge") {
-    checkBridge({ ...input, allowlist: input.withdrawAllowlist, chainIds: evmChainIds() });
+    checkBridge({ ...input, allowlist: input.withdrawAllowlist, chainIds: input.bridgeChainIds ?? [], maxFeeBps: input.maxBridgeFeeBps });
     return;
   }
   if (input.nativeSell !== true && input.value !== 0n) throw new Error("token sell must not attach native value");

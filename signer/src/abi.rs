@@ -194,7 +194,24 @@ pub struct BridgeTerms {
     pub recipient: [u8; 20],
     pub refund: [u8; 20],
     pub charge: ([u8; 20], u128),
+    pub input_token: [u8; 20],
+    pub output_token: [u8; 20],
+    pub min_output: u128,
+    pub exclusive: bool,
     pub destination_call: bool,
+}
+
+const MULTIPLIER_BASE: u128 = 1_000_000_000_000_000_000;
+
+fn scaled(amount: u128, multiplier: u128) -> Option<u128> {
+    let whole = (amount / MULTIPLIER_BASE).checked_mul(multiplier)?;
+    let part = (amount % MULTIPLIER_BASE).checked_mul(multiplier)? / MULTIPLIER_BASE;
+    whole.checked_add(part)
+}
+
+fn exclusive(args: &[u8], relayer: usize, period: usize) -> Option<bool> {
+    let named = word(args, relayer)?.iter().any(|byte| *byte != 0);
+    Some(named || uint(args, period)? != 0)
 }
 
 const BRIDGE_DATA: &str =
@@ -232,12 +249,21 @@ fn lifi_bridge(head: &[u8], args: &[u8]) -> Option<BridgeTerms> {
     } else {
         (sending, min_amount)
     };
+    let min_output = if swapped {
+        scaled(min_amount, uint(args, across + 5 * 32)?)?
+    } else {
+        uint(args, across + 4 * 32)?
+    };
     Some(BridgeTerms {
         provider: "lifi",
         destination_chain: uint(args, bridge + 7 * 32)?,
         recipient,
         refund: address(args, across + 32)?,
         charge,
+        input_token: sending,
+        output_token: address(args, across + 3 * 32)?,
+        min_output,
+        exclusive: exclusive(args, across + 6 * 32, across + 9 * 32)?,
         destination_call: boolean(args, bridge + 9 * 32)?
             || has_bytes(args, across + 10 * 32, across)?,
     })
@@ -247,12 +273,17 @@ fn across_deposit(head: &[u8], args: &[u8]) -> Option<BridgeTerms> {
     if head != selector(SPOKE_POOL_DEPOSIT) {
         return None;
     }
+    let input_token = address(args, 2 * 32)?;
     Some(BridgeTerms {
         provider: "across",
         destination_chain: uint(args, 6 * 32)?,
         recipient: address(args, 32)?,
         refund: address(args, 0)?,
-        charge: (address(args, 2 * 32)?, uint(args, 4 * 32)?),
+        charge: (input_token, uint(args, 4 * 32)?),
+        input_token,
+        output_token: address(args, 3 * 32)?,
+        min_output: uint(args, 5 * 32)?,
+        exclusive: exclusive(args, 7 * 32, 10 * 32)?,
         destination_call: has_bytes(args, 11 * 32, 0)?,
     })
 }

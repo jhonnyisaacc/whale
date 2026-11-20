@@ -11,6 +11,7 @@ import { defaultIo, evmContext } from "../dist/src/broadcast/shared.js";
 import { loadConfig } from "../dist/src/config.js";
 import { withPolicy } from "../dist/src/managed-signer.js";
 import { screenToken } from "../dist/src/screening.js";
+import { spendDay, spendJournal } from "../dist/src/spend.js";
 import { BRIDGE_CONTRACTS, DEFAULT_MAX_VALUE_WEI, bridgeTerms } from "../dist/src/signing-policy.js";
 
 const RPC = process.env.RPC_URL_8453 ?? "https://mainnet.base.org";
@@ -48,7 +49,7 @@ function spokePoolDeposit(logs) {
     if (log.address.toLowerCase() !== BRIDGE_CONTRACTS[BASE].across.toLowerCase()) continue;
     try {
       const { args } = decodeEventLog({ abi: FUNDS_DEPOSITED, data: log.data, topics: log.topics });
-      return { destinationChainId: args.destinationChainId.toString(), depositor: `0x${args.depositor.slice(26)}`, recipient: `0x${args.recipient.slice(26)}`, inputAmount: args.inputAmount.toString(), outputAmount: args.outputAmount.toString() };
+      return { destinationChainId: args.destinationChainId.toString(), depositor: `0x${args.depositor.slice(26)}`, recipient: `0x${args.recipient.slice(26)}`, inputAmount: args.inputAmount.toString(), outputAmount: args.outputAmount.toString(), outputToken: `0x${args.outputToken.slice(26)}`, exclusiveRelayer: args.exclusiveRelayer, exclusivityDeadline: args.exclusivityDeadline };
     } catch {
       continue;
     }
@@ -71,6 +72,7 @@ try {
       evm: {
         chains: [BASE, ARBITRUM],
         bridges: { [BASE]: BRIDGE_CONTRACTS[BASE] },
+        maxBridgeFeeBps: config.maxBridgeFeeBps,
         maxValueWei: DEFAULT_MAX_VALUE_WEI.toString(),
         maxFeeWei: (limit.maxGas * limit.maxFeePerGas + limit.l1.maxFeeWei).toString(),
         dailyLimits: { [`${BASE}:native`]: "100000000000000000", [`${BASE}:${USDC}`]: "100000000" },
@@ -126,10 +128,9 @@ try {
     reads,
     firm: (provider, item) => firmBridgeCall(config, provider, item),
     screen: (token) => screenToken(config, token),
-    spend: bridgeSpend(config),
+    spend: bridgeSpend(spendJournal(null, config.dailyUsdCap, () => spendDay(new Date(), config.spendTimezone)), config.dailyBridgeUsdCap),
     status: (lookup) => bridgeStatus(config, lookup),
     broadcast: false,
-    maxFeeBps: config.maxBridgeFeeBps,
     trackTimeoutMs: 0,
   };
   console.log(`signer ${owner} on Base, WHALE_BROADCAST unset, broadcast false`);
@@ -166,6 +167,9 @@ try {
       terms?.recipient.toLowerCase() === owner.toLowerCase() &&
       terms?.destinationChainId === BigInt(ARBITRUM) &&
       terms?.charge.amount === AMOUNT &&
+      terms.outputToken.toLowerCase() === ARBITRUM_USDC.toLowerCase() &&
+      BigInt(terms.exclusiveRelayer) === 0n &&
+      terms.exclusivity === 0 &&
       block.calls.every((item) => item.status === "0x1") &&
       onChain === null;
     failed += ok ? 0 : 1;
@@ -179,7 +183,7 @@ try {
         selector: bridge.parsed.data.slice(0, 10),
         recoveredSigner: bridge.from,
         approval: approval && { spender: approval[0], amount: approval[1].toString() },
-        decoded: terms && { destinationChainId: terms.destinationChainId.toString(), recipient: terms.recipient, refund: terms.refund, charge: terms.charge.amount.toString(), minOutput: terms.minOutput.toString() },
+        decoded: terms && { destinationChainId: terms.destinationChainId.toString(), recipient: terms.recipient, refund: terms.refund, charge: terms.charge.amount.toString(), outputToken: terms.outputToken, minOutput: terms.minOutput.toString(), exclusiveRelayer: terms.exclusiveRelayer, exclusivity: terms.exclusivity },
         ethCall: ethCall.length > 66 ? `${ethCall.slice(0, 66)}...` : ethCall,
         spokePoolFundsDeposited: deposited,
         signedBundleSimulation: block.calls.map((item) => ({ status: item.status, gasUsed: BigInt(item.gasUsed).toString(), logs: item.logs.length })),

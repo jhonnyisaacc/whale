@@ -6,6 +6,7 @@ import { encode } from "@msgpack/msgpack";
 import { decodeFunctionData, encodeFunctionData, keccak256, maxUint256, pad, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DEFAULT_EVM_FEE_LIMITS, signerChainTable } from "../../src/chains.ts";
+import { BRIDGE_TOKENS } from "../../src/signing-policy/bridge-tokens.ts";
 
 const out = new URL(".", import.meta.url).pathname;
 const EVM_KEY = `0x${"11".repeat(32)}`;
@@ -73,22 +74,40 @@ const lifiBridgeWith = (edit) => {
   edit(next.bridge, next.data);
   return encodeFunctionData({ abi: lifiAcrossAbi, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [next.bridge, swaps, next.data] });
 };
-const acrossBridgeWith = (edit) => {
-  const args = [...decodeFunctionData({ abi: spokePoolAbi, data: acrossBridge.tx.data }).args];
+const NO_RELAYER = pad("0x", { size: 32 });
+const acrossDepositWith = (data, edit) => {
+  const args = [...decodeFunctionData({ abi: spokePoolAbi, data }).args];
+  args[7] = NO_RELAYER;
+  args[10] = 0;
   edit(args);
   return encodeFunctionData({ abi: spokePoolAbi, functionName: "deposit", args });
 };
+const acrossBridgeWith = (edit) => acrossDepositWith(acrossBridge.tx.data, edit);
+const YEAR = 4_000_000_000;
+const ARBITRUM_WETH = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1";
 const LIFI_DIAMOND = lifiBridge.tx.to;
 const BASE_SPOKE_POOL = acrossBridge.tx.to;
 const onBase = (to, data, value = 0n) => tx(to, data, value, BASE);
 const bridgeSpent = (transaction) => ({ [`${BASE}:native`]: String(transaction.gas * transaction.maxFeePerGas + DEFAULT_EVM_FEE_LIMITS[BASE].l1.maxFeeWei), [`${BASE}:${USDC.toLowerCase()}`]: "2000000" });
 const realLifiBridge = onBase(LIFI_DIAMOND, lifiBridge.tx.data);
-const realAcrossBridge = onBase(BASE_SPOKE_POOL, acrossBridge.tx.data);
+const realAcrossBridge = onBase(BASE_SPOKE_POOL, acrossBridgeWith(() => undefined));
 const bridgeCases = [
   ["a real LI.FI AcrossV4 bridge from Base to this wallet on Arbitrum", realLifiBridge, "signed", null, null, bridgeSpent(realLifiBridge)],
   ["a real Across SpokePool deposit from Base to this wallet on Arbitrum", realAcrossBridge, "signed", null, null, bridgeSpent(realAcrossBridge)],
   ["a real LI.FI bridge to a listed destination", onBase(LIFI_DIAMOND, captured("lifi-across-base-arbitrum-destination").tx.data), "signed"],
-  ["a real Across deposit to a listed destination", onBase(BASE_SPOKE_POOL, captured("across-base-arbitrum-destination").tx.data), "signed"],
+  ["a real Across deposit to a listed destination", onBase(BASE_SPOKE_POOL, acrossDepositWith(captured("across-base-arbitrum-destination").tx.data, () => undefined)), "signed"],
+  ["a real Across quote that keeps its exclusive relayer", onBase(BASE_SPOKE_POOL, acrossBridge.tx.data), "refused", "names an exclusive relayer"],
+  ["an Across deposit of 1 wei out to an exclusive attacker relayer", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => ((args[5] = 1n), (args[7] = word(ATTACKER)), (args[10] = YEAR)))), "refused", "names an exclusive relayer"],
+  ["an Across deposit of 1 wei out", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[5] = 1n))), "refused", "delivers at least 1 USDC for 2000000, under the 100 bps bridge fee cap"],
+  ["an Across deposit of nothing out", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[5] = 0n))), "refused", "under the 100 bps bridge fee cap"],
+  ["an Across deposit delivering an attacker token", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => ((args[3] = word(ATTACKER)), (args[5] = 2_000_000n)))), "refused", "a pair the bridge token table does not list"],
+  ["an Across deposit delivering WETH for USDC", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[3] = word(ARBITRUM_WETH)))), "refused", "a pair the bridge token table does not list"],
+  ["an Across deposit with exclusivity and no relayer", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => (args[10] = 3))), "refused", "names an exclusive relayer"],
+  ["a LI.FI bridge with multiplier 0 to an exclusive attacker relayer", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => ((data.outputAmountMultiplier = 0n), (data.exclusiveRelayer = word(ATTACKER)), (data.exclusivityParameter = YEAR)))), "refused", "names an exclusive relayer"],
+  ["a LI.FI bridge with multiplier 0", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 0n))), "refused", "delivers at least 0 USDC for 2000000"],
+  ["a LI.FI bridge 2% under par", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 980_000_000_000_000_000n))), "refused", "under the 100 bps bridge fee cap"],
+  ["a LI.FI bridge delivering an attacker token", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.receivingAssetId = word(ATTACKER)))), "refused", "a pair the bridge token table does not list"],
+  ["a LI.FI bridge naming an exclusive relayer", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.exclusiveRelayer = word(ATTACKER)))), "refused", "names an exclusive relayer"],
   ["a LI.FI bridge paying an attacker", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge, data) => ((bridge.receiver = ATTACKER), (data.receiverAddress = word(ATTACKER))))), "refused", "not this wallet or a listed destination"],
   ["a LI.FI bridge whose two receivers disagree", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.receiverAddress = word(ATTACKER)))), "refused", "not one the signer can read"],
   ["a LI.FI bridge refunding an attacker", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.refundAddress = word(ATTACKER)))), "refused", "refunds 0x00000000000000000000000000000000000bad00"],
@@ -237,6 +256,7 @@ const policy = {
     settlers: { [CHAIN_ID]: [SETTLER] },
     kyberExecutors: { [CHAIN_ID]: [EXECUTOR], [BASE]: [EXECUTOR] },
     bridges: { [BASE]: { lifi: LIFI_DIAMOND, across: BASE_SPOKE_POOL } },
+    maxBridgeFeeBps: 100,
     destinations: [DESTINATION, LISTED_BRIDGE_DESTINATION],
     maxValueWei: "2000000000000000",
     maxFeeWei: "1000000000000000",
@@ -294,6 +314,8 @@ for (const [name, action, expect, reason] of hypercoreCases) {
   hypercore.push({ name, job: { id: name, kind: "hypercore", network: "testnet", nonce: HL_NONCE, action }, expect, ...(reason ? { reason } : {}), ...(signature ? { signature } : {}) });
 }
 writeFileSync(`${out}chains.json`, `${JSON.stringify(signerChainTable(), null, 2)}\n`);
+const bridgeTokens = Object.entries(BRIDGE_TOKENS).flatMap(([symbol, byChain]) => Object.entries(byChain).map(([chainId, token]) => ({ symbol, chainId: Number(chainId), address: token.address.toLowerCase(), decimals: token.decimals })));
+writeFileSync(`${out}bridge-tokens.json`, `${JSON.stringify(bridgeTokens, null, 2)}\n`);
 writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);
 const registration = "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31\ncode:wreg_example";
 const personalSign = { message: registration, signature: await account.signMessage({ message: registration }) };

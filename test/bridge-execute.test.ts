@@ -20,7 +20,7 @@ const across = fixture("across-base-arbitrum");
 const account = privateKeyToAccount(`0x${"11".repeat(32)}`);
 const OWN = account.address;
 const ATTACKER = "0x00000000000000000000000000000000000bad00";
-const config = loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum", ALLOW_HOT_APPROVAL: "true" });
+const config = loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum", ALLOW_HOT_APPROVAL: "true", MAX_BRIDGE_FEE_BPS: "100" });
 
 const route: BridgeRoute = {
   source: { chainKey: "base", address: OWN },
@@ -115,7 +115,6 @@ function harness(options: { config?: typeof config; call?: BridgeCall | null; al
     spend: ledger,
     status: async (lookup) => ({ provider: lookup.provider, state: statuses.shift() ?? "landed", sourceTx: lookup.txHash, destinationTx: null, detail: "" }),
     broadcast: options.broadcast ?? false,
-    maxFeeBps: 100,
     trackTimeoutMs: 10_000,
   };
   return { deps, raw, sent, spend, simulated };
@@ -146,6 +145,19 @@ test("an Across bridge whose allowance is already set signs only the deposit", a
   assert.equal(result.status, "signed", JSON.stringify(result));
   assert.deepEqual(result.status === "signed" && result.txs.map((tx) => tx.purpose), ["bridge"]);
   assert.deepEqual(run.simulated, [1]);
+  const signed = bridgeTerms(parseTransaction(run.raw[0] ?? "0x").data ?? "0x");
+  assert.equal(signed?.exclusivity, 0);
+  assert.equal(BigInt(signed?.exclusiveRelayer ?? "0x1"), 0n);
+  assert.equal(bridgeTerms(across.tx.data)?.exclusivity, 3);
+});
+
+test("a bridge whose route fee is above MAX_BRIDGE_FEE_BPS is skipped before it reserves or signs", async () => {
+  const run = harness({ config: loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum", ALLOW_HOT_APPROVAL: "true" }) });
+  const result = await executeBridge(run.deps, order());
+  assert.equal(result.status, "skipped");
+  assert.match(result.status === "skipped" ? result.reason : "", /lifi minimum output is under the 50 bps bridge fee cap/);
+  assert.deepEqual(run.spend, []);
+  assert.deepEqual(run.raw, []);
 });
 
 test("Relay and deBridge stay quote-only and reserve nothing", async () => {
@@ -218,7 +230,7 @@ test("with broadcast on, the bridge sends, commits its spend, and tracks the tra
 });
 
 test("a bridge that needs an approval waits for the root-quorum approval while ALLOW_HOT_APPROVAL is off", async () => {
-  const run = harness({ config: loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum" }) });
+  const run = harness({ config: loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum", MAX_BRIDGE_FEE_BPS: "100" }) });
   const result = await executeBridge(run.deps, order());
   assert.equal(result.status, "skipped");
   assert.match(result.status === "skipped" ? result.reason : "", /has no USDC allowance and ALLOW_HOT_APPROVAL is off/);

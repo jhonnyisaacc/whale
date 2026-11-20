@@ -1,4 +1,5 @@
 use crate::abi;
+use crate::bridge_tokens;
 use crate::evm::{self, Call};
 use crate::hypercore::{self, Action, Network, Tif};
 use crate::jupiter;
@@ -12,6 +13,7 @@ pub struct Policy {
     settlers: BTreeMap<u64, HashSet<[u8; 20]>>,
     kyber_executors: BTreeMap<u64, HashSet<[u8; 20]>>,
     bridges: BTreeMap<u64, BTreeMap<String, [u8; 20]>>,
+    max_bridge_fee_bps: u128,
     evm_destinations: HashSet<[u8; 20]>,
     max_value_wei: u128,
     max_fee_wei: u128,
@@ -35,6 +37,7 @@ impl Decision {
     }
 }
 
+const DEFAULT_MAX_BRIDGE_FEE_BPS: u128 = 50;
 const LAMPORTS_PER_SIGNATURE: u128 = 5_000;
 const MAX_TOKEN_ACCOUNT_RENT_LAMPORTS: u128 = (128 + 512) * 6_960;
 const SYSTEM: &str = "11111111111111111111111111111111";
@@ -159,6 +162,14 @@ impl Policy {
             settlers,
             kyber_executors,
             bridges,
+            max_bridge_fee_bps: match evm.get("maxBridgeFeeBps") {
+                None => DEFAULT_MAX_BRIDGE_FEE_BPS,
+                Some(value) => value
+                    .as_u64()
+                    .filter(|bps| *bps <= 10_000)
+                    .map(u128::from)
+                    .ok_or("evm.maxBridgeFeeBps must be a whole number from 0 to 10000")?,
+            },
             evm_destinations: text_list(evm.get("destinations"))
                 .iter()
                 .map(|item| evm::parse_address(item))
@@ -455,6 +466,35 @@ impl Policy {
             refuse(format!(
                 "the {provider} bridge runs a destination call, which the signer cannot check"
             ));
+        }
+        if terms.exclusive {
+            refuse(format!("the {provider} bridge names an exclusive relayer"));
+        }
+        let pair = u64::try_from(destination).ok().and_then(|id| {
+            (terms.input_token == terms.charge.0)
+                .then(|| {
+                    bridge_tokens::pair(tx.chain_id, terms.input_token, id, terms.output_token)
+                })
+                .flatten()
+        });
+        let Some((sent, delivered)) = pair else {
+            refuse(format!(
+                "the {provider} bridge sends 0x{} and delivers 0x{} on chain {destination}, a pair the bridge token table does not list",
+                hex::encode(terms.input_token),
+                hex::encode(terms.output_token)
+            ));
+            return;
+        };
+        let bps = self.max_bridge_fee_bps;
+        match bridge_tokens::meets_floor(sent, delivered, terms.charge.1, terms.min_output, bps) {
+            Some(true) => {}
+            Some(false) => refuse(format!(
+                "the {provider} bridge delivers at least {} {} for {}, under the {bps} bps bridge fee cap",
+                terms.min_output, delivered.symbol, terms.charge.1
+            )),
+            None => refuse(format!(
+                "the {provider} bridge amounts overflow the bridge fee check"
+            )),
         }
     }
 
