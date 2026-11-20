@@ -146,7 +146,7 @@ export function perpAccount(
         },
       };
     }),
-    openOrders: orders.map((order) => ({
+    openOrders: orders.filter((order) => markets.has(order.coin)).map((order) => ({
       oid: order.oid,
       coin: order.coin,
       side: order.side === "B" ? "buy" : "sell",

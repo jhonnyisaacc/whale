@@ -87,6 +87,12 @@ test("reduce-only resting orders keep their flag", async () => {
   ]);
 });
 
+test("spot orders from the same openOrders call are left out of the perp orders", async () => {
+  const { fetchImpl } = infoServer({ openOrders: fixture("open-orders-with-spot") });
+  const account = await read(fetchImpl);
+  assert.deepEqual(account.openOrders.map((order) => order.coin), ["BTC", "ETH", "HYPE", "XRP", "SOL"]);
+});
+
 test("an unknown info shape is refused instead of read as empty", async () => {
   const state = fixture("clearinghouse-state") as { assetPositions: { type: string; position: { leverage: { type: string }; liquidationPx: unknown } }[] };
   const variants: [string, Record<string, unknown>, RegExp][] = [
@@ -125,14 +131,15 @@ test("perp_positions reads the configured account through the command path", asy
   assert.ok(bodies.some((body) => body.user === ACCOUNT));
 });
 
-test("with no account address set, perp_positions reads whale-signer's EVM address", async () => {
+test("with no account address set, perp_positions reads whale-signer's EVM address and needs no signer token", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "whale-perp-"));
   const keystore = path.join(dir, "keystore.json");
   writeFileSync(keystore, JSON.stringify({ evmAddress: ACCOUNT, solanaAddress: "11111111111111111111111111111111" }));
-  writeFileSync(path.join(dir, "keystore.token"), "t".repeat(32));
-  const { fetchImpl, bodies } = infoServer();
-  await run({ kind: "perp_positions" }, commandDeps({ WHALE_SIGNER_KEYSTORE: keystore }, { kind: "perp_positions" }, fetchImpl));
-  assert.ok(bodies.some((body) => body.user === ACCOUNT));
+  for (const env of [{ WHALE_SIGNER_KEYSTORE: keystore }, { WHALE_SIGNER_KEYSTORE: keystore, HYPERLIQUID_ACCOUNT_ADDRESS: " " }]) {
+    const { fetchImpl, bodies } = infoServer();
+    await run({ kind: "perp_positions" }, commandDeps(env, { kind: "perp_positions" }, fetchImpl));
+    assert.ok(bodies.some((body) => body.user === ACCOUNT));
+  }
 });
 
 test("perp_positions with no configured account fails with what to set", async () => {

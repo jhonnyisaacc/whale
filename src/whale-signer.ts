@@ -23,11 +23,21 @@ const keystoreAddresses = z.object({ evmAddress: z.string().regex(/^0x[0-9a-fA-F
 
 export type WhaleSignerSetup = { evmAddress: string; solanaAddress: string; token: string; port: number; answerTimeoutMs: number };
 
+function readKeystoreAddresses(keystore: string): z.infer<typeof keystoreAddresses> {
+  const addresses = keystoreAddresses.safeParse(JSON.parse(readFileSync(keystore, "utf8")));
+  if (!addresses.success) throw new Error("WHALE_SIGNER_KEYSTORE is not a whale-signer keystore");
+  return addresses.data;
+}
+
+export function whaleSignerEvmAddress(env: NodeJS.ProcessEnv): string | null {
+  const keystore = env.WHALE_SIGNER_KEYSTORE?.trim();
+  return keystore ? readKeystoreAddresses(keystore).evmAddress : null;
+}
+
 export function whaleSignerSetup(env: NodeJS.ProcessEnv): WhaleSignerSetup | null {
   const keystore = env.WHALE_SIGNER_KEYSTORE?.trim();
   if (!keystore) return null;
-  const addresses = keystoreAddresses.safeParse(JSON.parse(readFileSync(keystore, "utf8")));
-  if (!addresses.success) throw new Error("WHALE_SIGNER_KEYSTORE is not a whale-signer keystore");
+  const addresses = readKeystoreAddresses(keystore);
   const parsed = path.parse(keystore);
   const tokenFile = path.join(parsed.dir, `${parsed.name}.token`);
   const token = readFileSync(tokenFile, "utf8").trim();
@@ -36,7 +46,7 @@ export function whaleSignerSetup(env: NodeJS.ProcessEnv): WhaleSignerSetup | nul
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("WHALE_SIGNER_PORT must be a TCP port");
   const answerTimeoutMs = Number(env.WHALE_SIGNER_TIMEOUT_MS ?? "45000");
   if (!Number.isInteger(answerTimeoutMs) || answerTimeoutMs < 1_000) throw new Error("WHALE_SIGNER_TIMEOUT_MS must be at least 1000");
-  return { evmAddress: addresses.data.evmAddress, solanaAddress: addresses.data.solanaAddress, token, port, answerTimeoutMs };
+  return { evmAddress: addresses.evmAddress, solanaAddress: addresses.solanaAddress, token, port, answerTimeoutMs };
 }
 
 const evmResult = z.object({ signedTransaction: z.string() });
