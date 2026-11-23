@@ -72,7 +72,7 @@ async function runCli(command: WalletCommand): Promise<WalletResult> {
   return run(command, commandDeps(process.env, command));
 }
 
-type DryRunSwap = { kind: string; status?: string; reason?: string; quote?: { provider?: string; buyAmount: string; signable?: boolean } | null };
+type DryRunSwap = { kind: string; status?: string; reason?: string; quote?: { provider?: string; buyAmount: string; signable?: boolean; priceImpactPct?: number | null } | null };
 
 const BASE_ASSET = { chain: { kind: "evm", chainId: 8453 }, chainKey: "base", symbol: "?", decimals: null } as const;
 const MCP_SWAP = { idempotencyKey: "i107-mcp", sell: { ...BASE_ASSET, address: NATIVE }, buy: { ...BASE_ASSET, address: DOLLAR }, sellAmount: "1000000000000000000", slippageBps: 50 };
@@ -83,6 +83,7 @@ test("a CLI dry-run swap on Base returns would_swap with the largest signable ro
   assert.equal(result.quote?.provider, "kyberswap");
   assert.equal(result.quote?.buyAmount, "3050000000");
   assert.equal(result.quote?.signable, true);
+  assert.equal(result.quote?.priceImpactPct, null);
   assert.match(result.reason ?? "", /a live swap quotes again with a price check, so it can take another route or refuse\. nothing was signed/);
 });
 

@@ -1,6 +1,6 @@
 import { holdingFitsChain } from "./balances.js";
 import { addressKey, quoteAssetOf, type QuoteAsset, type QuoteAssets } from "./chains.js";
-import type { Holding, Hop, PairMap, Pool, RoutePlan, RouteQuote } from "./domain.js";
+import type { Holding, Hop, PairMap, Pool, PricedRoute, RoutePlan, RouteQuote } from "./domain.js";
 
 export function spendableAmount(holding: Holding, minNativeReserve: number): number {
   if (!holding.native) return holding.amount;
@@ -102,7 +102,11 @@ function compareBuy(left: string, right: string): number {
   return left.localeCompare(right);
 }
 
-export function pickRoute(quotes: readonly RouteQuote[], slippageCapBps: number, executionReserveBps = 0): RouteQuote | { kind: "none"; reason: string } {
+export function hasKnownImpact(quote: RouteQuote): quote is PricedRoute {
+  return quote.priceImpactPct !== null;
+}
+
+export function pickRoute(quotes: readonly PricedRoute[], slippageCapBps: number, executionReserveBps = 0): PricedRoute | { kind: "none"; reason: string } {
   const capPct = Math.max(0, slippageCapBps - executionReserveBps) / 100;
   const ok = quotes.filter((quote) => quote.priceImpactPct <= capPct && quote.feeUsd >= 0 && quote.signable !== false);
   if (ok.length === 0) return { kind: "none", reason: "no route inside the slippage cap" };

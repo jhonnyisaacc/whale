@@ -120,7 +120,7 @@ export type RouteQuote = {
   planId: string;
   kind: "aggregator" | "two_hop";
   hops: string[];
-  priceImpactPct: number;
+  priceImpactPct: number | null;
   feeUsd: number;
   buyAmount: string;
   legs?: RouteLeg[];
@@ -133,6 +133,8 @@ export type RouteQuote = {
   note?: string;
   chain?: ChainRef;
 };
+
+export type PricedRoute = RouteQuote & { priceImpactPct: number };
 
 export type SwapIntent = {
   idempotencyKey: string;
