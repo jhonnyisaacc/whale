@@ -1,5 +1,5 @@
 import { QUOTE_ASSETS, chainByKey, feeRankOf } from "../chains.js";
-import type { Holding, RaceQuote, RouteLeg, RoutePlan, RouteQuote, SwapIntent } from "../domain.js";
+import type { Holding, PricedRoute, RaceQuote, RouteLeg, RoutePlan, RouteQuote, SwapIntent } from "../domain.js";
 import { combineHopImpact, planRoutes } from "../routing.js";
 import { holdingFitsChain, holdingsForTrade } from "../balances.js";
 import { acceptDecimals, cachedTokenDecimals, checkedDecimals, matchedDecimals, rememberTokenDecimals, unreadDecimals } from "../token-decimals.js";
@@ -29,7 +29,7 @@ function legOf(
 }
 
 
-function decorate(quote: RouteQuote, token: SwapIntent["token"]): RouteQuote {
+function decorate(quote: PricedRoute, token: SwapIntent["token"]): PricedRoute {
   return { ...quote, chainKey: token.chainKey, feeRank: feeRankOf(token.chainKey), chain: token.chain };
 }
 
@@ -89,7 +89,7 @@ async function quoteOnePlan(
   plan: RoutePlan,
   context: { spentUsd: number; priceUsd: number | null; decimals: number | null },
   deps: ExecutorDeps,
-): Promise<RouteQuote | null> {
+): Promise<PricedRoute | null> {
   if (plan.kind === "aggregator") {
     const hop = await deps.quoteHop({ ...plan.hop, chain: token.chain }, context);
     if (hop.priceImpactPct === null) return null;
@@ -167,7 +167,7 @@ export async function keepScreened(intent: SwapIntent, deps: ExecutorDeps): Prom
   return { ok: true, alternates: keptAlternates, kept };
 }
 
-export async function quotePlan(intent: SwapIntent, token: SwapIntent["token"], deps: ExecutorDeps): Promise<{ quotes: RouteQuote[]; unsized: boolean }> {
+export async function quotePlan(intent: SwapIntent, token: SwapIntent["token"], deps: ExecutorDeps): Promise<{ quotes: PricedRoute[]; unsized: boolean }> {
   const spec = chainByKey(token.chainKey);
   const reserve = spec?.minNativeReserve ?? 0;
   const plans = planRoutes({
@@ -186,7 +186,7 @@ export async function quotePlan(intent: SwapIntent, token: SwapIntent["token"], 
     decimals: await buyDecimals(token, deps),
   };
   const quoted = await Promise.all(plans.map((plan) => quoteOnePlan(intent, token, plan, context, deps)));
-  const quotes = quoted.filter((quote): quote is RouteQuote => quote !== null);
+  const quotes = quoted.filter((quote): quote is PricedRoute => quote !== null);
   const unsized =
     plans.length > 0 &&
     plans.every((plan) => (plan.kind === "aggregator" ? plan.hop.sellAmount === "0" : plan.first.sellAmount === "0"));

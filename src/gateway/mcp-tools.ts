@@ -8,6 +8,7 @@ import { cancelRequest, openRequests } from "./approvals.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { dailyRefusal, perTxRefusal, planSend, thresholdReason, today } from "./mcp-sends.js";
 import { effectiveLimits, type WalletPolicy } from "./policy.js";
+import { remainingUsd } from "./send-ledger.js";
 import { x402Quote, type Fetch402, type X402Payment, type X402Verdict } from "./x402.js";
 import type { WalletView } from "./wallets.js";
 
@@ -17,7 +18,7 @@ const chain = { type: "string", description: "Chain key, for example base, arbit
 const key = { type: "string", description: "Your unique id for this operation, 8 to 128 characters. Reusing it never repeats an operation." };
 
 export const HOSTED_TOOLS = [
-  { name: "wallet_status", description: "Show this agent's wallet, its addresses, the limits that apply now, and whether sends are live. Moves no money.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "wallet_status", description: "Show this agent's wallet, its addresses, the limits that apply now, the USD left under the daily caps for the current UTC day, and whether sends are live. Moves no money.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "deposit_address", description: "Return the wallet address to fund on a chain. Moves no money.", inputSchema: { type: "object", properties: { chain }, required: ["chain"], additionalProperties: false } },
   { name: "balance", description: "Read the wallet's balance on a chain. On Solana this includes SPL tokens. Moves no money.", inputSchema: { type: "object", properties: { chain }, required: ["chain"], additionalProperties: false } },
   { name: "quote", description: "Quote a same-chain swap from the wallet. Moves no money.", inputSchema: { type: "object", properties: { chain, sellToken: token, buyToken: token, sellAmount: amount, slippageBps: { type: "integer", minimum: 1, maximum: 1000 } }, required: ["chain", "sellToken", "buyToken", "sellAmount"], additionalProperties: false } },
@@ -105,12 +106,13 @@ export function commandFor(name: string, args: unknown, wallet: WalletView, agen
   return { kind: "balance", chainKey: parsed.data.chain, address };
 }
 
-function walletStatus(env: ToolEnv): unknown {
+async function walletStatus(env: ToolEnv): Promise<unknown> {
   const { wallet, agent } = env;
   return {
     wallet: { id: wallet.id, label: wallet.label, level: wallet.level, status: wallet.status, addresses: wallet.addresses },
     mode: "dry_run",
     limits: effectiveLimits(agent.limits, agent.policy),
+    remainingTodayUsd: await remainingUsd(env.pool, agent, today()),
     approvalAboveUsd: agent.policy.approvalAboveUsd,
     maxSlippageBps: agent.policy.maxSlippageBps,
     destinations: agent.policy.destinations.map((entry) => ({ family: entry.family, address: entry.address, label: entry.label })),
@@ -119,7 +121,7 @@ function walletStatus(env: ToolEnv): unknown {
 
 export async function callHostedTool(env: ToolEnv, name: string, args: unknown): Promise<ToolOutcome> {
   const { agent } = env;
-  if (name === "wallet_status") return { ok: true, value: walletStatus(env) };
+  if (name === "wallet_status") return { ok: true, value: await walletStatus(env) };
   if (name === "deposit_address") {
     const parsed = chainArgs.safeParse(args);
     if (!parsed.success) return { ok: false, error: "arguments do not match the tool schema" };

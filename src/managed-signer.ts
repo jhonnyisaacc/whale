@@ -7,6 +7,7 @@ import { agentTypedData, isHyperliquidMainnet, signL1Action, signWithdraw, type 
 import { loadSigner, signerSecrets, solanaSigner, type SignerMaterial } from "./signer.js";
 import { assertEvmFee, assertEvmSigning, assertHyperliquidSigning, assertHyperliquidWithdraw, assertSolanaSigning, routersForChain, type EvmApproval, type EvmPurpose, type SolanaMessage } from "./signing-policy.js";
 import { assertLiveEdges, drainTimeoutMs, serviceTokens } from "./config.js";
+import { chainByKey } from "./chains.js";
 import { serializeEvmRequest, verifiedEvmTransaction, verifiedSolanaTransaction, type EvmTxRequest } from "./signatures.js";
 
 export type EvmSignInput = {
@@ -21,6 +22,7 @@ export type EvmSignInput = {
   purpose: EvmPurpose;
   nativeSell?: boolean;
   approval?: EvmApproval;
+  charge?: EvmApproval;
 };
 
 export interface TransactionSigner {
@@ -50,6 +52,11 @@ function policyConfig(config: AppConfig) {
     sellLimits: config.hypercoreSellLimits,
     recoveryTokens: config.tokenRecoveryAllowlist,
     allowOpaqueSwap: config.lifiLive,
+    bridgeChainIds: [...config.enabledChainKeys].flatMap((key) => {
+      const chain = chainByKey(key)?.chain;
+      return chain?.kind === "evm" ? [chain.chainId] : [];
+    }),
+    maxBridgeFeeBps: config.maxBridgeFeeBps,
   };
 }
 

@@ -1,5 +1,5 @@
 import type { BalanceReader } from "./balances.js";
-import type { ChainRef, ExecutionReport, HyperliquidMarket, Latency, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
+import type { ChainRef, ExecutionReport, HyperliquidMarket, Latency, PricedRoute, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
 import { addressKey } from "./chains.js";
 import { checkLimits, type LimitConfig, type Liquidity } from "./limits.js";
 import { stamp } from "./latency.js";
@@ -248,7 +248,7 @@ function blockReport(intent: SwapIntent, deps: ExecutorDeps, latency: Latency, v
   return report;
 }
 
-type CandidateQuotes = { quotes: RouteQuote[]; unsized: boolean; unread: string | null; sized: boolean; crashed?: unknown };
+type CandidateQuotes = { quotes: PricedRoute[]; unsized: boolean; unread: string | null; sized: boolean; crashed?: unknown };
 
 async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], deps: ExecutorDeps, liquidity: Liquidity): Promise<CandidateQuotes> {
   const none: CandidateQuotes = { quotes: [], unsized: false, unread: null, sized: false };
@@ -416,13 +416,12 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     reportsOf(deps).set(intent.idempotencyKey, report);
     return report;
   }
-  const picked = pickRoute(quotes, intent.slippageBps, deps.config.minExecutionSlippageBps ?? 0);
-  if ("kind" in picked && picked.kind === "none") {
-    const report = skipped(intent, latency, picked.reason, venueKey, deps.mode);
+  const route = pickRoute(quotes, intent.slippageBps, deps.config.minExecutionSlippageBps ?? 0);
+  if (route.kind === "none") {
+    const report = skipped(intent, latency, route.reason, venueKey, deps.mode);
     reportsOf(deps).set(intent.idempotencyKey, report);
     return report;
   }
-  const route = picked as RouteQuote;
   const routeChain = route.chain ?? intent.token.chain;
   const routeVenue = route.chainKey ?? venueKey;
   const note = route.note ? ` ${route.note}` : "";

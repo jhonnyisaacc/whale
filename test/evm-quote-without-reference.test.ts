@@ -58,8 +58,9 @@ const SIGNABLE_AND_LARGER_UNSIGNABLE: Answers = { zeroex: "3000000000", kyberswa
 test("an MCP quote on Base with no price reference returns the largest signable route, never a larger unsignable one", async () => {
   const result = await withStubs(SIGNABLE_AND_LARGER_UNSIGNABLE, () => callTool(MCP, "quote", QUOTE_ARGS));
   assert.equal((result as { status: string }).status, "quoted", JSON.stringify(result));
-  const { quote } = result as { quote: { provider: string; buyAmount: string; signable: boolean; note?: string } };
+  const { quote } = result as { quote: { provider: string; buyAmount: string; signable: boolean; priceImpactPct: number | null; note?: string } };
   assert.equal(quote.provider, "kyberswap");
+  assert.equal(quote.priceImpactPct, null);
   assert.match(quote.note ?? "", /price impact is unknown/);
   assert.equal(quote.buyAmount, "3050000000");
   assert.equal(quote.signable, true);
@@ -74,7 +75,7 @@ async function hosted(command: Record<string, unknown>, extra: Record<string, un
       app.inject({ method: "POST", url: "/hosted/commands", headers: { authorization: `Bearer ${HOSTED_TOKEN}` }, payload: { ...IDS, ...extra, command } }),
     );
     assert.equal(response.statusCode, 200, response.body);
-    return response.json() as { status: string; reason?: string; quote: { provider: string; buyAmount: string; signable: boolean } | null };
+    return response.json() as { status: string; reason?: string; quote: { provider: string; buyAmount: string; signable: boolean; priceImpactPct: number | null } | null };
   } finally {
     await app.close();
     if (databaseUrl) await closeSpendPools();
@@ -89,6 +90,7 @@ test("the hosted MCP quote on Base with no price reference returns the largest s
   assert.equal(body.quote?.provider, "kyberswap");
   assert.equal(body.quote?.buyAmount, "3050000000");
   assert.equal(body.quote?.signable, true);
+  assert.equal(body.quote?.priceImpactPct, null);
 });
 
 test("the hosted dry-run swap on Base reports the largest signable route as the one a live swap would take", { skip: !process.env.TEST_DATABASE_URL }, async () => {
