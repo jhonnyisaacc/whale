@@ -93,7 +93,7 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
 export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction, leverage: number | undefined): HyperliquidAction[] {
   const row = order.orders[0];
   const opens = market.market === "perp" && row !== undefined && row.b && !row.r;
-  return opens && leverage !== undefined ? [buildLeverage(market.assetIndex, leverage), order] : [order];
+  return opens ? [buildLeverage(market.assetIndex, leverage ?? 1), order] : [order];
 }
 
 export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): number {

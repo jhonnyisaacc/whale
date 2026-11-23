@@ -593,7 +593,7 @@ test("hyperliquid replies decide commit or release", async () => {
   assert.equal(filled.report.decision, "sent");
   assert.equal(filled.spend, "committed");
   assert.deepEqual(filled.report.fill, { totalSz: "5", avgPx: "1.001" });
-  assert.equal((filled.seen[0] as { orders: Array<{ s: string; p: string }> }).orders[0]?.s, "5");
+  assert.equal((filled.seen[1] as { orders: Array<{ s: string; p: string }> }).orders[0]?.s, "5");
   assert.equal(readExchangeResponse({ status: "ok", response: { data: { statuses: [{ resting: { oid: 1 } }] } } }).status, "ok");
 });
 

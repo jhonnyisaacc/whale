@@ -107,7 +107,7 @@ test("a dry run on captured mainnet meta plans updateLeverage at the asked lever
   assert.equal(report.decision, "would_send");
   assert.equal(report.reason, "hypercore ETH leverage 2 isolated limit 1758.8 actions updateLeverage,order");
   const fallback = await execute(perpIntent("ETH", undefined), perpDeps("dry_run", {}, []));
-  assert.equal(fallback.reason, "hypercore ETH account leverage limit 1758.8 actions order");
+  assert.equal(fallback.reason, "hypercore ETH leverage 1 isolated limit 1758.8 actions updateLeverage,order");
 });
 
 test("a 2x ETH buy sends isolated 2x and an order sized on its 5 USD notional, and both sign under the default policy", async () => {
@@ -163,13 +163,14 @@ test("closing a 3x long with a sell that leaves out leverage sends only the sell
   assert.deepEqual(sent.map((request) => request.hyperliquidActions.map(label)), [["updateLeverage 3", "order buy"], ["order sell"]]);
 });
 
-test("a buy that leaves out leverage runs at the account's setting, and leverage on a sell is refused", async () => {
+test("a buy that leaves out leverage opens at isolated 1x, and leverage on a sell is refused", async () => {
   resetExecutorState();
   resetAssetMeta();
   const sent: SendRequest[] = [];
   const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
   assert.equal((await execute(perpIntent("ETH", undefined), perpDeps("live", env, sent))).decision, "sent");
-  assert.deepEqual(sent[0]!.hyperliquidActions.map((action) => action.type), ["order"]);
+  assert.deepEqual(sent[0]!.hyperliquidActions.map((action) => action.type), ["updateLeverage", "order"]);
+  assert.deepEqual(sent[0]!.hyperliquidActions[0], buildLeverage(1, 1));
   const sell = await execute(perpIntent("ETH", 2, 100, "sell"), perpDeps("live", env, sent));
   assert.equal(sell.decision, "skipped");
   assert.equal(sell.reason, "leverage applies only to a HyperCore perp buy");

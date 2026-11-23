@@ -368,7 +368,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
         idempotencyKey: intent.idempotencyKey,
         mode: "dry_run",
         decision: "would_send",
-        reason: `hypercore ${intent.hyperliquid.coin} ${market.market === "spot" ? "spot" : leverage === undefined ? "account leverage" : `leverage ${leverage} isolated`} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
+        reason: `hypercore ${intent.hyperliquid.coin} ${market.market === "spot" ? "spot" : isBuy ? `leverage ${leverage ?? 1} isolated` : "account leverage"} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
         venue: "hypercore",
         route: null,
         latency,
