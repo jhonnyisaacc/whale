@@ -27930,7 +27930,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:128",
+                          "content": "commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -27967,7 +27967,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "gateway/mcp-tools.ts:112",
+                          "content": "gateway/mcp-tools.ts:113",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58531,7 +58531,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:128",
+                          "content": "commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58567,7 +58567,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "gateway/mcp-tools.ts:112",
+                          "content": "gateway/mcp-tools.ts:113",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -64768,7 +64768,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "commands.ts:128",
+                              "content": "commands.ts:131",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -64804,7 +64804,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "gateway/mcp-tools.ts:112",
+                              "content": "gateway/mcp-tools.ts:113",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
