@@ -247,6 +247,7 @@ function evmCtx(signer: ReturnType<typeof turnkeySigner>, journaled: TxRecord[],
     receipt: async () => null,
     seen: async () => false,
     balance: async () => 0n,
+    checkChain: async () => undefined,
   };
   return {
     config: loadConfig({}),
