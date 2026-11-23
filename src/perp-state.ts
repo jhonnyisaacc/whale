@@ -6,6 +6,7 @@ const decimal = z.string().regex(/^-?\d+(\.\d+)?$/);
 const isNonZero = (value: string) => /[1-9]/.test(value);
 const nonZero = decimal.refine(isNonZero, "position size is zero");
 const count = z.number().int().nonnegative();
+const perpCoin = z.string().regex(/^[A-Za-z0-9]{1,20}$/);
 
 const marginSummary = z.object({ accountValue: decimal, totalNtlPos: decimal, totalRawUsd: decimal, totalMarginUsed: decimal });
 
@@ -23,7 +24,7 @@ export const clearinghouseStateSchema = z.object({
     z.object({
       type: z.literal("oneWay"),
       position: z.object({
-        coin: z.string().min(1),
+        coin: perpCoin,
         szi: nonZero,
         leverage,
         entryPx: decimal,
@@ -40,8 +41,12 @@ export const clearinghouseStateSchema = z.object({
   time: count,
 });
 
+const timesInForce = ["Gtc", "Ioc", "Alo", "FrontendMarket", "LiquidationMarket"] as const;
+
+const triggerCondition = z.string().regex(/^Price (above|below) \d+(\.\d+)?$|^Activation (immediate|(above|below) \d+(\.\d+)?), retracement \d+(\.\d+)?%, best (\d+(\.\d+)?|waiting)$/);
+
 const orderFields = {
-  coin: z.string().min(1),
+  coin: perpCoin,
   side: z.enum(["A", "B"]),
   limitPx: decimal,
   sz: decimal,
@@ -49,8 +54,8 @@ const orderFields = {
   timestamp: count,
   origSz: decimal,
   reduceOnly: z.boolean(),
-  tif: z.string().min(1).nullable(),
-  cloid: z.string().min(1).nullable(),
+  tif: z.enum(timesInForce).nullable(),
+  cloid: z.string().regex(/^0x[0-9a-f]{32}$/).nullable(),
   triggerPx: decimal,
 };
 
@@ -63,7 +68,7 @@ const orderWithoutChildren = z.discriminatedUnion("isTrigger", [
     z.object({ ...restingLimit, orderType: z.literal("Limit"), triggerCondition: z.literal("N/A") }),
     z.object({ ...restingLimit, orderType: z.enum(triggerOrderTypes), triggerCondition: z.literal("Triggered") }),
   ]),
-  z.object({ ...orderFields, isTrigger: z.literal(true), orderType: z.enum(triggerOrderTypes), triggerCondition: z.string().min(1), isPositionTpsl: z.boolean() }),
+  z.object({ ...orderFields, isTrigger: z.literal(true), orderType: z.enum(triggerOrderTypes), triggerCondition, isPositionTpsl: z.boolean() }),
 ]);
 
 type FrontendOrder = z.infer<typeof orderWithoutChildren> & { children: FrontendOrder[] };
@@ -73,7 +78,7 @@ const frontendOrderSchema: z.ZodType<FrontendOrder> = orderWithoutChildren.and(z
 const frontendOpenOrdersSchema = z.array(z.unknown());
 
 const orderLabel = z
-  .object({ oid: count.nullable().catch(null), coin: z.string().min(1).nullable().catch(null), orderType: z.string().nullable().catch(null) })
+  .object({ oid: count.nullable().catch(null), coin: z.string().min(1).nullable().catch(null), orderType: z.enum(["Limit", ...triggerOrderTypes]).nullable().catch(null) })
   .catch({ oid: null, coin: null, orderType: null });
 
 function shapeIssue(error: z.ZodError): string {
@@ -83,7 +88,7 @@ function shapeIssue(error: z.ZodError): string {
 
 export const metaAndAssetCtxsSchema = z
   .tuple([
-    z.object({ universe: z.array(z.object({ name: z.string().min(1), szDecimals: count, maxLeverage: z.number().int().positive() })) }),
+    z.object({ universe: z.array(z.object({ name: perpCoin, szDecimals: count, maxLeverage: z.number().int().positive() })) }),
     z.array(z.object({ funding: decimal, markPx: decimal, oraclePx: decimal, openInterest: decimal })),
   ])
   .refine(([meta, ctxs]) => meta.universe.length === ctxs.length, "universe and asset contexts differ in length");
@@ -116,7 +121,7 @@ export type PerpOrder = {
   placedAtMs: number;
   attached: PerpOrder[];
 } & (
-  | ({ kind: "limit"; timeInForce: string | null } & Sized)
+  | ({ kind: "limit"; timeInForce: (typeof timesInForce)[number] | null } & Sized)
   | ({ kind: "trigger"; orderType: (typeof triggerOrderTypes)[number]; isMarket: boolean; triggerPx: string | null; triggerCondition: string } & (
       | { isPositionTpsl: true; size: "entire position" }
       | ({ isPositionTpsl: false } & Sized)
@@ -147,7 +152,7 @@ function perpOrder(order: FrontendOrder): PerpOrder {
   return order.isPositionTpsl ? { ...trigger, isPositionTpsl: true, size: "entire position" } : { ...trigger, isPositionTpsl: false, ...sized };
 }
 
-export type UnreadableOrder = { oid: number | null; coin: string | null; orderType: string | null; reason: string };
+export type UnreadableOrder = { oid: number | null; coin: string | null; orderType: z.infer<typeof orderLabel>["orderType"]; reason: string };
 
 export type PerpAccount = {
   account: string;
