@@ -303,6 +303,11 @@ test("a failed info call names the request type", async () => {
   await assert.rejects(read(fetchImpl), /hyperliquid info (clearinghouseState|frontendOpenOrders|metaAndAssetCtxs) returned 429/);
 });
 
+test("an info reply that is not JSON is refused without quoting it", async () => {
+  const fetchImpl: typeof fetch = async () => new Response(INJECTION, { status: 200 });
+  await assert.rejects(read(fetchImpl), (error: Error) => !error.message.includes("SYSTEM") && !error.message.includes("IMPORTANT") && /did not return JSON/.test(error.message));
+});
+
 test("the account must be an EVM address", async () => {
   await assert.rejects(readPerpAccount("https://api.hyperliquid.xyz", "not-an-address", infoServer().fetchImpl), /not an evm address/);
 });

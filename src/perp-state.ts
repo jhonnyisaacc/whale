@@ -241,7 +241,12 @@ async function postInfo<T>(url: string, body: Record<string, string>, schema: z.
       signal,
     });
     if (!response.ok) throw new Error(`hyperliquid info ${body.type} returned ${response.status}`);
-    return JSON.parse(await readVendorText(response)) as unknown;
+    const text = await readVendorText(response);
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error(`hyperliquid info ${body.type} did not return JSON`);
+    }
   });
   const parsed = schema.safeParse(raw);
   if (!parsed.success) throw new Error(`hyperliquid info ${body.type} has an unknown shape at ${shapeIssue(parsed.error)}`);
