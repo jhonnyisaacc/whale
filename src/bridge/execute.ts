@@ -1,6 +1,6 @@
 import { createPublicClient, encodeFunctionData, erc20Abi, keccak256, type Hex } from "viem";
 import { BRIDGE_ROUTE_REGISTRY, type BridgeCall } from "../aggregators/bridge.js";
-import { submitEvm } from "../broadcast/evm.js";
+import { sendersOnChain, submitEvm } from "../broadcast/evm.js";
 import { evmChain, type EvmCall, type EvmCtx } from "../broadcast/shared.js";
 import { addressKey, chainByKey } from "../chains.js";
 import type { ChainRef, TxRecord } from "../domain.js";
@@ -107,6 +107,7 @@ async function signHeld(deps: BridgeDeps, planned: Planned): Promise<SignedBridg
   const calls: (EvmCall & { purpose: "approve" | "bridge" })[] = planned.approve
     ? [{ from: owner, to: planned.sell, data: approveCall(planned), value: 0n, purpose: "approve" }, { from: owner, ...bridge, purpose: "bridge" }]
     : [{ from: owner, ...bridge, purpose: "bridge" }];
+  await sendersOnChain(evm);
   let used: bigint[];
   try {
     used = await deps.reads.simulate(owner, calls);
