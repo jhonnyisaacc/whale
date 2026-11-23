@@ -9,6 +9,7 @@ cargo build --release --locked
 export WHALE_SIGNER_PASSPHRASE='at least twelve characters'
 ./target/release/whale-signer init --keystore keystore.json
 ./target/release/whale-signer address --keystore keystore.json
+./target/release/whale-signer address --keystore keystore.json --network bitcoin
 ./target/release/whale-signer sign --keystore keystore.json --policy policy.json --ledger ledger.json < job.json
 ```
 
@@ -36,7 +37,17 @@ The MCP server reads only the public addresses from the keystore. It never holds
 
 ## Keystore
 
-An EVM key (secp256k1) and a Solana key (ed25519) are generated from the OS random source. On disk they sit under scrypt (N = 2^17, r = 8, p = 1) and ChaCha20-Poly1305. The file also carries the public addresses, so `address` needs no passphrase. Seed buffers are zeroized once the signing keys exist.
+An EVM key (secp256k1) and a Solana key (ed25519) are generated from the OS random source. On disk they sit under scrypt (N = 2^17, r = 8, p = 1) and ChaCha20-Poly1305. The file also carries the public addresses and `bitcoinPublicKey`, the 33-byte compressed public key of the EVM key in hex, so `address` needs no passphrase. Seed buffers are zeroized once the signing keys exist.
+
+Bitcoin uses the EVM key. The wallet's bitcoin address is the P2WPKH (BIP84 format) address of `bitcoinPublicKey`. The key is a raw key with no HD seed, so no `m/84'` path applies. `address --network bitcoin|testnet|signet|regtest` prints that address. Before it prints, it checks that `bitcoinPublicKey` derives the keystore's `evmAddress`, so an edited field cannot redirect deposits.
+
+A keystore made before bitcoin support has no `bitcoinPublicKey`. Run `upgrade` once to add it:
+
+```bash
+./target/release/whale-signer upgrade --keystore keystore.json
+```
+
+`upgrade` opens the keystore with `WHALE_SIGNER_PASSPHRASE` and derives the key from the sealed secret. It writes a temporary file with mode 0600, flushes it, and renames it over the keystore, so a crash leaves the old file or the new one. A second run changes nothing. If the file already has a `bitcoinPublicKey` that does not match the sealed key, `upgrade` refuses and leaves the file unchanged.
 
 ## Jobs
 
@@ -44,9 +55,14 @@ An EVM key (secp256k1) and a Solana key (ed25519) are generated from the OS rand
 { "id": "...", "kind": "evm", "chainId": 1, "tx": { "nonce": "7", "to": "0x...", "value": "0", "data": "0x...", "gas": "300000", "maxFeePerGas": "...", "maxPriorityFeePerGas": "..." } }
 { "id": "...", "kind": "solana", "message": "<base64 message bytes>" }
 { "id": "...", "kind": "hypercore", "network": "testnet", "nonce": 1793664000000, "action": { "type": "order", ... } }
+{ "id": "...", "kind": "bitcoin", "transaction": "<unsigned tx hex>", "previous": ["<full previous tx hex for input 0>", "..."] }
 ```
 
 An EVM job returns `signedTransaction`, an EIP-1559 transaction the signer encoded from the fields it checked. A Solana job returns the base58 `signature` over the exact message it parsed. The signer only signs as the sole signer and fee payer. A HyperCore job returns `signature` as `{ r, s, v }`, the form Hyperliquid's `/exchange` takes. The signer decodes `order`, `cancel`, `updateLeverage`, and `withdraw3`. It refuses every other action type and any field it does not decode, such as a client order id, a builder fee, or a vault. It re-encodes the decoded action as canonical msgpack and signs the L1 phantom agent, or for `withdraw3` the `HyperliquidTransaction:Withdraw` typed data. The HyperCore account is this wallet's EVM key, so it signs withdrawals as the account owner.
+
+A bitcoin job returns `signedTransaction`, the hex of the same transaction with a P2WPKH witness on every input. `transaction` is the unsigned transaction with empty scriptSigs and no witness. `previous` lists, in input order, the whole transaction each input spends. It may be in witness form, and it may repeat. The job states no amount, no script, no network, and no sighash type. The signer hashes each previous transaction, requires the hash to equal the input's outpoint txid, and reads the amount and script from that transaction. It signs every input with `SIGHASH_ALL` over the BIP143 digest, with RFC 6979 nonces and low S.
+
+The signer needs whole previous transactions because the BIP143 digest commits only to the amount of the input it signs. If the signer took amounts from the job, a compromised Whale could understate them, and the real fee would be far above the fee the signer checked. The 2020 segwit fee attack on hardware wallets worked this way. A previous transaction cannot lie about an amount, because then it no longer hashes to the txid the input names.
 
 ## Policy
 
@@ -138,6 +154,32 @@ The signer cannot see the account's current leverage or margin mode, so an order
 
 Hyperliquid pays every `withdraw3` on Arbitrum. Before you list an address in `evm.destinations`, check that you control that address on Arbitrum. A contract deployed only on another chain may have no owner there.
 
+On Bitcoin, the policy needs a `bitcoin` section:
+
+```json
+"bitcoin": { "network": "bitcoin", "destinations": ["bc1q..."], "maxFeeSats": "10000", "maxInputs": 20, "dailyLimits": { "bitcoin:native": "1000000" } }
+```
+
+`network` is `bitcoin`, `testnet`, `signet` or `regtest`. Each destination must be a P2PKH, P2SH, P2WPKH, P2WSH or P2TR address for that network, or the policy does not load. `maxFeeSats` is required. `maxInputs` defaults to 20. Without the section, every bitcoin job is refused. The signer checks the rules below in this order and refuses with the first one that fails. The app's `assertBitcoinSigning` checks the same rules in the same order with the same text, and `vectors/bitcoin.json` holds both to it.
+
+| Rule | Refusal |
+| --- | --- |
+| `previous` has one transaction per input | `previous must list one transaction per input` |
+| Each previous transaction hashes to the input's txid | `input <i>: the previous transaction does not hash to <txid>` |
+| The previous transaction has the output the input names | `input <i>: the previous transaction has no output <vout>` |
+| Version 2, lock time 0, sequence `0xfffffffd` on every input | `the transaction must be version 2, lock time 0, and sequence 0xfffffffd on every input` |
+| No input has a scriptSig or a witness | `input <i> carries a signature already` |
+| From 1 to `maxInputs` inputs | `the transaction has no inputs`, `<n> inputs is above the <max> input limit` |
+| No outpoint is spent twice | `input <i> spends the same coin as an earlier input` |
+| Every input spends this wallet's P2WPKH script | `input <i> does not spend this wallet's address` |
+| At least one output | `the transaction has no outputs` |
+| Each output pays this wallet's own script (change) or a listed destination, compared as script bytes | `output <j> is OP_RETURN`, `output <j> has an unknown script`, `output <j> pays <address>, which is not an allowed destination` |
+| Outputs do not exceed inputs | `outputs spend more than the inputs hold` |
+| The fee, inputs minus outputs, is at most `maxFeeSats` | `the fee <fee> sats is above the <max> sats cap` |
+| Inputs minus change fits the `bitcoin:native` daily limit, in sats | the daily limit reasons above |
+
+OP_RETURN and unknown scripts are refused even when no allowlist entry could match. Every BTC swap venue, such as THORChain, Maya or NEAR Intents, needs either an OP_RETURN memo or a deposit to a venue address, so this rule also keeps the signer out of swaps. A witness program of version 2 or above counts as unknown. The fee cap is absolute. The signer does not cap the fee rate, which is the app's choice.
+
 The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushed to disk and then replace the file atomically, and they move only after a signature exists. A job holds an exclusive lock on a `.lock` file beside the ledger from reading the totals to writing them, so concurrent jobs cannot both spend the same headroom. The ledger also records each charged job id with a digest of what it signed. A job the gateway hands out again after a lost answer is signed again without a second charge. The same id with different work is refused.
 
 ## Supply chain
@@ -147,7 +189,10 @@ The daily totals live in `--ledger`, keyed by UTC day. The new totals are flushe
 - The toolchain is pinned in `rust-toolchain.toml`.
 - CI runs `cargo fmt --check`, `cargo clippy --locked -- -D warnings`, and `cargo test --locked`.
 - There is no serde derive, so no proc-macro runs for this crate's own code.
+- Bitcoin parsing, txids, BIP143 digests, script classification and address decoding come from the `bitcoin` crate, with default features off. Its `secp256k1` dependency builds libsecp256k1 with `cc`, which is held at 1.10.0. Bitcoin signatures still come from the k256 key, the same code that signs EVM transactions.
 
 ## Tests
 
 `vectors/generate.mjs` builds the cases with viem, `@msgpack/msgpack`, and `node:crypto`. `tests/hypercore.rs` also checks the Hyperliquid Python SDK's published signing vectors. The Rust tests then require the same decision for every case, and byte-identical signed transactions and signatures where one is signed. `test/signer-vectors.test.ts` checks that the app's swap decoder reads the same recipients from the same calldata.
+
+`vectors/bitcoin.mjs` builds the bitcoin cases with `@scure/btc-signer` on regtest, spending coins from `vectors/bitcoin-funding.json`. Those funding transactions were sent by Bitcoin Core: `node vectors/bitcoin-capture.mjs <bitcoin-cli wrapper>` pays the vector key from a funded regtest wallet named `miner` and records the raw transactions, so the generator runs offline. `tests/bitcoin.rs` requires the same decision, the exact reason, and the same signed bytes as scure for every case. It also checks the ledger limit, an idempotent replay, and `upgrade`. `test/bitcoin-policy.test.ts` runs the same cases through the app's rule.
