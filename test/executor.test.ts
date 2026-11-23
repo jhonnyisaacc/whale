@@ -128,3 +128,18 @@ test("Solana recovery tokens keep Base58 case while EVM tokens remain case-insen
   const evm = decideWithdraw({ ...base, mint: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", recoveryAllowlist: ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"], chainKey: "ethereum" });
   assert.deepEqual(evm, { http: 200, decision: "would_send" });
 });
+
+test("a HyperCore token trades on HyperCore in live mode, unless screening dropped it for a kept alternate", async () => {
+  const hyper = { symbol: "MPLX", address: "MPLX", decimals: null, chain: { kind: "hypercore" as const, market: "perp" as const }, chainKey: "hypercore", pairMap: { pools: [], top: null } };
+  const run = async (alternates: SwapIntent["alternates"]) => {
+    resetExecutorState();
+    const sends: string[] = [];
+    await execute({ ...intent(), token: hyper, alternates }, { ...deps(sends), mode: "live", liquidityOf: async () => 2_000_000, screenToken: async (token) => (token.chainKey === "hypercore" ? "deny" : "allow") });
+    return sends;
+  };
+  assert.ok(!(await run([intent().token])).includes("hypercore"), "a HyperCore token that screening dropped is not sent as a perp");
+  resetExecutorState();
+  const sends: string[] = [];
+  await execute({ ...intent(), token: hyper }, { ...deps(sends), mode: "live", liquidityOf: async () => 2_000_000 });
+  assert.deepEqual(sends, ["hypercore"]);
+});
