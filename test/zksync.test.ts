@@ -57,29 +57,36 @@ test("hosted wallets and the Turnkey policy still leave zkSync out", () => {
   assert.doesNotMatch(policy, /eth\.tx\.chain_id == 324/);
 });
 
+const termsWithoutSteps = (data: Hex) => {
+  const terms = swapTerms(data);
+  if (terms?.provider !== "lifi") return terms;
+  const { steps: _steps, ...rest } = terms;
+  return rest;
+};
+
 test("swapTerms reads a LI.FI GenericSwapFacetV3 recipient, output, and what it pulls from the wallet", () => {
-  assert.deepEqual(swapTerms(lifiData("swapTokensMultipleV3NativeToERC20", OWNER, 7n, [feeStep(NATIVE, 100n), { sell: NATIVE, buy: USDC, amount: 99n }])), {
+  assert.deepEqual(termsWithoutSteps(lifiData("swapTokensMultipleV3NativeToERC20", OWNER, 7n, [feeStep(NATIVE, 100n), { sell: NATIVE, buy: USDC, amount: 99n }])), {
     provider: "lifi",
     recipient: OWNER,
     buyToken: USDC,
     minOut: 7n,
     deposit: null,
   });
-  assert.deepEqual(swapTerms(lifiData("swapTokensMultipleV3ERC20ToNative", OWNER, 7n, [feeStep(USDC, 5_000_000n, true), { sell: USDC, buy: NATIVE, amount: 4_990_000n }])), {
+  assert.deepEqual(termsWithoutSteps(lifiData("swapTokensMultipleV3ERC20ToNative", OWNER, 7n, [feeStep(USDC, 5_000_000n, true), { sell: USDC, buy: NATIVE, amount: 4_990_000n }])), {
     provider: "lifi",
     recipient: OWNER,
     buyToken: NATIVE,
     minOut: 7n,
     deposit: { token: USDC, amount: 5_000_000n },
   });
-  assert.deepEqual(swapTerms(lifiData("swapTokensSingleV3ERC20ToERC20", OWNER, 7n, [{ sell: USDC, buy: ZK, amount: 5n }])), {
+  assert.deepEqual(termsWithoutSteps(lifiData("swapTokensSingleV3ERC20ToERC20", OWNER, 7n, [{ sell: USDC, buy: ZK, amount: 5n }])), {
     provider: "lifi",
     recipient: OWNER,
     buyToken: ZK,
     minOut: 7n,
     deposit: { token: USDC, amount: 5n },
   });
-  assert.deepEqual(swapTerms(usdcToZk(5_000_000n, [feeStep(USDC, 2_000_000n, true)])), { provider: "lifi", recipient: OWNER, buyToken: USDC, minOut: 9_950_000n, deposit: { token: USDC, amount: 7_000_000n } });
+  assert.deepEqual(termsWithoutSteps(usdcToZk(5_000_000n, [feeStep(USDC, 2_000_000n, true)])), { provider: "lifi", recipient: OWNER, buyToken: USDC, minOut: 9_950_000n, deposit: { token: USDC, amount: 7_000_000n } });
   assert.equal(swapTerms(usdcToZk(5_000_000n, [feeStep(OTHER, 1n, true)])), null, "a swap that pulls a second token from the wallet is not decodable");
   assert.equal(swapTerms(lifiData("swapTokensMultipleV3ERC20ToERC20", OWNER, 7n, [feeStep(NATIVE, 1n, true)])), null, "an ERC20 entry point that deposits the native id is not decodable");
   assert.equal(swapTerms(lifiData("swapTokensMultipleV3ERC20ToERC20", OWNER, 7n, [])), null, "an empty route is not decodable");
@@ -106,6 +113,11 @@ test("the signing policy reads a zkSync LI.FI swap and refuses one that pays som
   assert.throws(() => assertEvmSigning({ ...policyInput, data: usdcToZk(5_000_000n, [feeStep(OTHER, 1n, true)]) }), /does not name a checkable recipient/);
 });
 
+test("the signing policy refuses a zkSync LI.FI swap whose step hands the sale to an unlisted contract", () => {
+  const drained = lifiData("swapTokensMultipleV3ERC20ToERC20", OWNER, 1n, [{ sell: USDC, buy: ZK, amount: 5_000_000n, deposit: true, target: ATTACKER }]);
+  assert.throws(() => assertEvmSigning({ ...policyInput, data: drained }), /zksync \(chain id 324\): the LI\.FI swap step calls 0x9{40}, which is not a listed LI\.FI step target/);
+});
+
 const reference = { spentUsd: 5, priceUsd: 0.5, decimals: 18 };
 const lifiBody = (data: Hex, to = DIAMOND, value = "0") => ({
   estimate: { toAmount: "10000000000000000000", toAmountMin: "1", approvalAddress: to, feeCosts: [], gasCosts: [] },
@@ -118,6 +130,7 @@ test("a LI.FI quote is signable only when it decodes and its diamond is in the c
   assert.equal(lifiQuote(listed, lifiBody("0x12345678"), reference, ZKSYNC).signable, false);
   assert.equal(lifiQuote(listed, lifiBody(usdcToZk(5_000_000n), OTHER), reference, ZKSYNC).signable, false);
   assert.equal(lifiQuote(loadConfig({}), lifiBody(usdcToZk(5_000_000n)), reference, ZKSYNC).signable, false);
+  assert.equal(lifiQuote(listed, lifiBody(usdcToZk(5_000_000n, [{ sell: USDC, buy: ZK, amount: 1n, target: ATTACKER }])), reference, ZKSYNC).signable, false, "a step to an unlisted contract");
 });
 
 function chainRpc(): { rpc: EvmRpc; sent: Hex[] } {

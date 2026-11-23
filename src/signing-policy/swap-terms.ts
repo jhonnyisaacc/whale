@@ -1,4 +1,5 @@
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
+import type { LifiStep } from "./lifi-steps.js";
 
 // KyberSwap MetaAggregationRouterV2, from the verified router ABI (0x6131B5fae19EA4f9D964eAc0408E4408b66337b5).
 const KYBER_ABI = parseAbi([
@@ -33,9 +34,9 @@ export type ZeroExExec = { operator: string; token: string; amount: bigint; targ
 export type SwapTerms =
   | { provider: "kyberswap"; recipient: string; buyToken: string; minOut: bigint; sellToken: string; sellAmount: bigint }
   | { provider: "zeroex"; recipient: string; buyToken: string; minOut: bigint; exec: ZeroExExec | null }
-  | { provider: "lifi"; recipient: string; buyToken: string; minOut: bigint; deposit: { token: string; amount: bigint } | null };
+  | { provider: "lifi"; recipient: string; buyToken: string; minOut: bigint; deposit: { token: string; amount: bigint } | null; steps: readonly LifiStep[] };
 
-type LifiSwapData = { sendingAssetId: string; receivingAssetId: string; fromAmount: bigint; requiresDeposit: boolean };
+type LifiSwapData = LifiStep & { receivingAssetId: string; requiresDeposit: boolean };
 
 // The ERC20 entry points pull every swap marked requiresDeposit from the caller, and the single ones pull their one swap.
 function lifiTerms(data: Hex): SwapTerms | null {
@@ -46,11 +47,12 @@ function lifiTerms(data: Hex): SwapTerms | null {
   const last = swaps[swaps.length - 1];
   if (!last) return null;
   const buyToken = call.functionName.endsWith("ToNative") ? LIFI_NATIVE : last.receivingAssetId;
-  if (call.functionName.includes("V3NativeTo")) return { provider: "lifi", recipient, buyToken, minOut, deposit: null };
+  const steps = swaps.map(({ callTo, approveTo, sendingAssetId, fromAmount, callData }) => ({ callTo, approveTo, sendingAssetId, fromAmount, callData }));
+  if (call.functionName.includes("V3NativeTo")) return { provider: "lifi", recipient, buyToken, minOut, deposit: null, steps };
   const pulled = call.functionName.startsWith("swapTokensSingle") ? swaps : swaps.filter((swap) => swap.requiresDeposit);
   const token = pulled[0]?.sendingAssetId;
   if (!token || token === LIFI_NATIVE || pulled.some((swap) => swap.sendingAssetId.toLowerCase() !== token.toLowerCase())) return null;
-  return { provider: "lifi", recipient, buyToken, minOut, deposit: { token, amount: pulled.reduce((sum, swap) => sum + swap.fromAmount, 0n) } };
+  return { provider: "lifi", recipient, buyToken, minOut, deposit: { token, amount: pulled.reduce((sum, swap) => sum + swap.fromAmount, 0n) }, steps };
 }
 
 function decoded<T>(read: () => T): T | null {
