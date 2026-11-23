@@ -122,6 +122,92 @@ test("a sized stop order keeps its size and where it fires", async () => {
   );
 });
 
+type HistoricalOrder = { status: string; order: Record<string, unknown> };
+
+function lifecycleRow(orderType: string, status: string): Record<string, unknown> {
+  const row = (fixture("historical-orders-trigger-lifecycle") as HistoricalOrder[]).find((entry) => entry.order.orderType === orderType && entry.status === status);
+  assert.ok(row, `${orderType} ${status} row is in the fixture`);
+  return row.order;
+}
+
+test("a resting trailing stop reads as a market trigger order with its current trigger price", async () => {
+  const { fetchImpl } = infoServer({ frontendOpenOrders: [lifecycleRow("Trailing Stop Market", "open")] });
+  const account = await read(fetchImpl);
+  assert.equal(account.positions.length, 4);
+  assert.deepEqual(account.unreadableOrders, []);
+  assert.deepEqual(account.openOrders, [
+    {
+      kind: "trigger",
+      oid: 552268017772,
+      coin: "XRP",
+      side: "sell",
+      orderType: "Trailing Stop Market",
+      isMarket: true,
+      triggerPx: "1.509417",
+      triggerCondition: "Activation immediate, retracement 3%, best 1.5561",
+      limitPx: "1.3585",
+      isPositionTpsl: false,
+      size: "100000.0",
+      originalSize: "100000.0",
+      reduceOnly: true,
+      clientOrderId: null,
+      placedAtMs: 1790029531327,
+      attached: [],
+    },
+  ]);
+});
+
+test("a stop that has fired and still rests reads as a limit order, without the zero trigger price", async () => {
+  const { fetchImpl } = infoServer({ frontendOpenOrders: [lifecycleRow("Stop Limit", "filled")] });
+  const account = await read(fetchImpl);
+  assert.deepEqual(account.unreadableOrders, []);
+  assert.deepEqual(account.openOrders, [
+    {
+      kind: "limit",
+      oid: 509246728596,
+      coin: "ETH",
+      side: "sell",
+      limitPx: "1857.8",
+      size: "0.0",
+      originalSize: "250.0",
+      timeInForce: "Gtc",
+      reduceOnly: true,
+      clientOrderId: null,
+      placedAtMs: 1785794598883,
+      attached: [],
+    },
+  ]);
+});
+
+test("every captured state of a trailing stop and a stop limit reads", async () => {
+  const rows = (fixture("historical-orders-trigger-lifecycle") as HistoricalOrder[]).map((entry) => entry.order);
+  const account = await read(infoServer({ frontendOpenOrders: rows }).fetchImpl);
+  assert.deepEqual(account.unreadableOrders, []);
+  assert.deepEqual(account.openOrders.map((order) => order.kind), ["limit", "trigger", "trigger", "limit", "trigger", "trigger"]);
+});
+
+test("an order of an unknown type is listed as unreadable and the positions, margin, and other orders still read", async () => {
+  const [stop, ...rest] = fixture("frontend-open-orders-stop") as Record<string, unknown>[];
+  const { fetchImpl } = infoServer({ frontendOpenOrders: [{ ...stop, orderType: "Twap" }, ...rest, "not an order"] });
+  const account = await read(fetchImpl);
+  assert.equal(account.positions.length, 4);
+  assert.equal(account.margin.accountValueUsd, "1616730.047611");
+  assert.equal(account.openOrders.length, rest.length);
+  assert.deepEqual(account.unreadableOrders.map(({ oid, coin, orderType }) => ({ oid, coin, orderType })), [
+    { oid: stop!.oid, coin: "kPEPE", orderType: "Twap" },
+    { oid: null, coin: null, orderType: null },
+  ]);
+  assert.match(account.unreadableOrders[0]!.reason, /orderType/);
+});
+
+test("a spot order of an unknown type is left out like any spot order", async () => {
+  const [spot] = (fixture("frontend-open-orders-with-spot") as Record<string, unknown>[]).filter((order) => String(order.coin).startsWith("@"));
+  assert.ok(spot);
+  const account = await read(infoServer({ frontendOpenOrders: [{ ...spot, orderType: "Twap" }] }).fetchImpl);
+  assert.deepEqual(account.unreadableOrders, []);
+  assert.deepEqual(account.openOrders, []);
+});
+
 test("a take-profit attached to a pending parent order is listed under that order", async () => {
   const [takeProfit] = fixture("frontend-open-orders-position-tpsl") as Record<string, unknown>[];
   const [parent] = fixture("frontend-open-orders") as Record<string, unknown>[];
@@ -145,7 +231,6 @@ test("an unknown info shape is refused instead of read as empty", async () => {
     ["unknown margin mode", { clearinghouseState: { ...state, assetPositions: [{ ...state.assetPositions[0], position: { ...state.assetPositions[0]!.position, leverage: { type: "portfolio", value: 3 } } }] } }, /unknown shape at assetPositions\.0\.position\.leverage/],
     ["numeric price", { clearinghouseState: { ...state, assetPositions: [{ ...state.assetPositions[0], position: { ...state.assetPositions[0]!.position, liquidationPx: 81806.1 } }] } }, /unknown shape at assetPositions\.0\.position\.liquidationPx/],
     ["error object", { frontendOpenOrders: { error: "rate limited" } }, /frontendOpenOrders has an unknown shape at the root/],
-    ["unknown order type", { frontendOpenOrders: [{ ...(fixture("frontend-open-orders-stop") as object[])[0], orderType: "Twap" }] }, /frontendOpenOrders has an unknown shape at 0/],
     ["missing contexts", { metaAndAssetCtxs: [(fixture("meta-and-asset-ctxs") as unknown[])[0], []] }, /metaAndAssetCtxs has an unknown shape/],
   ];
   for (const [label, overrides, message] of variants) {

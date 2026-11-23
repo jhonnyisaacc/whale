@@ -53,10 +53,15 @@ const orderFields = {
   triggerPx: decimal,
 };
 
-const triggerOrderTypes = ["Stop Market", "Stop Limit", "Take Profit Market", "Take Profit Limit"] as const;
+const triggerOrderTypes = ["Stop Market", "Stop Limit", "Take Profit Market", "Take Profit Limit", "Trailing Stop Market"] as const;
+
+const restingLimit = { ...orderFields, isTrigger: z.literal(false), isPositionTpsl: z.literal(false) };
 
 const orderWithoutChildren = z.discriminatedUnion("isTrigger", [
-  z.object({ ...orderFields, isTrigger: z.literal(false), orderType: z.literal("Limit"), triggerCondition: z.literal("N/A"), isPositionTpsl: z.literal(false) }),
+  z.discriminatedUnion("triggerCondition", [
+    z.object({ ...restingLimit, orderType: z.literal("Limit"), triggerCondition: z.literal("N/A") }),
+    z.object({ ...restingLimit, orderType: z.enum(triggerOrderTypes), triggerCondition: z.literal("Triggered") }),
+  ]),
   z.object({ ...orderFields, isTrigger: z.literal(true), orderType: z.enum(triggerOrderTypes), triggerCondition: z.string().min(1), isPositionTpsl: z.boolean() }),
 ]);
 
@@ -64,7 +69,16 @@ type FrontendOrder = z.infer<typeof orderWithoutChildren> & { children: Frontend
 
 const frontendOrderSchema: z.ZodType<FrontendOrder> = orderWithoutChildren.and(z.object({ children: z.array(z.lazy(() => frontendOrderSchema)) }));
 
-export const frontendOpenOrdersSchema = z.array(frontendOrderSchema);
+const frontendOpenOrdersSchema = z.array(z.unknown());
+
+const orderLabel = z
+  .object({ oid: count.nullable().catch(null), coin: z.string().min(1).nullable().catch(null), orderType: z.string().nullable().catch(null) })
+  .catch({ oid: null, coin: null, orderType: null });
+
+function shapeIssue(error: z.ZodError): string {
+  const issue = error.issues[0];
+  return `${issue?.path.join(".") || "the root"}: ${issue?.message ?? "invalid"}`;
+}
 
 export const metaAndAssetCtxsSchema = z
   .tuple([
@@ -132,6 +146,8 @@ function perpOrder(order: FrontendOrder): PerpOrder {
   return order.isPositionTpsl ? { ...trigger, isPositionTpsl: true, size: "entire position" } : { ...trigger, isPositionTpsl: false, ...sized };
 }
 
+export type UnreadableOrder = { oid: number | null; coin: string | null; orderType: string | null; reason: string };
+
 export type PerpAccount = {
   account: string;
   asOfMs: number;
@@ -146,6 +162,7 @@ export type PerpAccount = {
   };
   positions: PerpPosition[];
   openOrders: PerpOrder[];
+  unreadableOrders: UnreadableOrder[];
 };
 
 export function perpAccount(
@@ -192,8 +209,21 @@ export function perpAccount(
         },
       };
     }),
-    openOrders: orders.filter((order) => markets.has(order.coin)).map(perpOrder),
+    ...perpOrders(orders, (coin) => markets.has(coin)),
   };
+}
+
+function perpOrders(rows: unknown[], isPerp: (coin: string) => boolean): Pick<PerpAccount, "openOrders" | "unreadableOrders"> {
+  const openOrders: PerpOrder[] = [];
+  const unreadableOrders: UnreadableOrder[] = [];
+  for (const row of rows) {
+    const label = orderLabel.parse(row);
+    if (label.coin !== null && !isPerp(label.coin)) continue;
+    const parsed = frontendOrderSchema.safeParse(row);
+    if (parsed.success) openOrders.push(perpOrder(parsed.data));
+    else unreadableOrders.push({ ...label, reason: `unknown order shape at ${shapeIssue(parsed.error)}` });
+  }
+  return { openOrders, unreadableOrders };
 }
 
 async function postInfo<T>(url: string, body: Record<string, string>, schema: z.ZodType<T>, fetchImpl: typeof fetch): Promise<T> {
@@ -208,10 +238,7 @@ async function postInfo<T>(url: string, body: Record<string, string>, schema: z.
     return JSON.parse(await readVendorText(response)) as unknown;
   });
   const parsed = schema.safeParse(raw);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new Error(`hyperliquid info ${body.type} has an unknown shape at ${issue?.path.join(".") || "the root"}: ${issue?.message ?? "invalid"}`);
-  }
+  if (!parsed.success) throw new Error(`hyperliquid info ${body.type} has an unknown shape at ${shapeIssue(parsed.error)}`);
   return parsed.data;
 }
 
