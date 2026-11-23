@@ -25,6 +25,11 @@ function usd(value: number): string {
   return `${value.toFixed(2)} USD`;
 }
 
+function floorCents(value: number): number {
+  const microDollars = Math.round(value * 1_000_000);
+  return Math.floor(microDollars / 10_000) / 100;
+}
+
 export async function issuedNow(client: pg.Pool | pg.ClientBase): Promise<string> {
   return (await client.query<{ at: string }>(`SELECT ${instant("now()")} AS at`)).rows[0]?.at as string;
 }
@@ -41,7 +46,7 @@ async function spentOn(client: pg.Pool | pg.ClientBase, agent: AgentContext, day
 export async function remainingUsd(client: pg.Pool | pg.ClientBase, agent: AgentContext, day: string): Promise<number> {
   const spent = await spentOn(client, agent, day);
   const left = Math.min(effectiveLimits(agent.limits, agent.policy).dailyUsd - spent.agent, agent.policy.dailyUsd - spent.wallet);
-  return Math.max(0, Math.floor(left * 100 + 1e-6) / 100);
+  return Math.max(0, floorCents(left));
 }
 
 export async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, priced: Priced, what = "the swap"): Promise<string | null> {
