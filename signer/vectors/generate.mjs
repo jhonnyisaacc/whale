@@ -7,6 +7,7 @@ import { decodeFunctionData, encodeFunctionData, keccak256, maxUint256, pad, par
 import { privateKeyToAccount } from "viem/accounts";
 import { DEFAULT_EVM_FEE_LIMITS, signerChainTable } from "../../src/chains.ts";
 import { BRIDGE_TOKENS } from "../../src/signing-policy/bridge-tokens.ts";
+import { bitcoinVectors } from "./bitcoin.mjs";
 
 const out = new URL(".", import.meta.url).pathname;
 const EVM_KEY = `0x${"11".repeat(32)}`;
@@ -262,6 +263,7 @@ const solana = solanaCases.map(([name, bytes, expect, reason]) => ({
   ...(expect === "signed" ? { signature: bs58.encode(sign(null, bytes, solanaKey)) } : {}),
 }));
 
+const bitcoin = bitcoinVectors();
 const policy = {
   version: 1,
   evm: {
@@ -287,6 +289,7 @@ const policy = {
     maxLeverage: 1,
     dailyLimits: { "hypercore:usdc": "50000000", "hypercore:spot:10107": "20000000", "hypercore:perp:4:sold": "50000000000" },
   },
+  bitcoin: bitcoin.policy,
 };
 const HL_NONCE = 1_793_664_000_000;
 const zero = "0x0000000000000000000000000000000000000000";
@@ -336,4 +339,5 @@ const personalSign = { message: registration, signature: await account.signMessa
 writeFileSync(`${out}evm.json`, `${JSON.stringify({ evmKey: EVM_KEY, own, personalSign, cases: evm }, null, 2)}\n`);
 writeFileSync(`${out}solana.json`, `${JSON.stringify({ seed: SOLANA_SEED.toString("hex"), own: bs58.encode(solanaOwn), cases: solana }, null, 2)}\n`);
 writeFileSync(`${out}hypercore.json`, `${JSON.stringify({ cases: hypercore }, null, 2)}\n`);
-console.log(`wrote ${evm.length} evm, ${solana.length} solana and ${hypercore.length} hypercore vectors for ${own} and ${bs58.encode(solanaOwn)}`);
+writeFileSync(`${out}bitcoin.json`, `${JSON.stringify(bitcoin.file, null, 2)}\n`);
+console.log(`wrote ${evm.length} evm, ${solana.length} solana, ${hypercore.length} hypercore and ${bitcoin.file.cases.length} bitcoin vectors for ${own} and ${bs58.encode(solanaOwn)}`);
