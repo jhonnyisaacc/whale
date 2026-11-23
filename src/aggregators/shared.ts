@@ -10,6 +10,7 @@ import { ProviderGuard, classifyHttp, retryAfterAt } from "../provider-guard.js"
 import { impactPctFromUsd, readJupiter, readLifi, readZeroEx } from "../quotes.js";
 import { readVendorText, vendorResponse } from "../vendor-fetch.js";
 import { swapTerms } from "../signing-policy/swap-terms.js";
+import { lifiStepRefusal } from "../signing-policy/lifi-steps.js";
 
 const ZEROEX = new Set([1, 10, 56, 137, 143, 8453, 42161, 59144, 534352, 4663, 999]);
 const ONEINCH = new Set([1, 10, 56, 137, 324, 8453, 42161, 59144]);
@@ -251,7 +252,8 @@ function lifiSignable(config: AppConfig, body: unknown, chainId: number): boolea
   const data = request?.data;
   if (typeof to !== "string" || typeof data !== "string" || !/^0x[0-9a-fA-F]*$/.test(data)) return false;
   const listed = (config.routerAllowlist[chainId] ?? []).some((router) => router.toLowerCase() === to.toLowerCase());
-  return listed && swapTerms(data as `0x${string}`)?.provider === "lifi";
+  const terms = swapTerms(data as `0x${string}`);
+  return listed && terms?.provider === "lifi" && lifiStepRefusal(chainId, terms.steps) === null;
 }
 
 export function lifiQuote(config: AppConfig, body: unknown, reference: Reference | null, chainId: number): HopQuote {
