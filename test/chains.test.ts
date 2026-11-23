@@ -48,7 +48,7 @@ test("live mode is off unless the flag is the exact string true", () => {
   const dry = loadConfig({} as NodeJS.ProcessEnv);
   assert.equal(dry.live, false);
   assert.equal(dry.maxUsdPerTrade, 5);
-  assert.equal(dry.maxLeverage, 1);
+  assert.equal(dry.maxLeverage, 3);
   assert.equal(loadConfig({ WHALE_BROADCAST: "false" } as NodeJS.ProcessEnv).live, false);
   const live = loadConfig({ WHALE_BROADCAST: "true" } as NodeJS.ProcessEnv);
   assert.equal(live.live, true);

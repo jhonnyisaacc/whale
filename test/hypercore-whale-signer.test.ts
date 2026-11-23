@@ -96,19 +96,21 @@ test("an mcp perp order reaches the local sender, and without whale-signer it is
   await assert.rejects(callTool(deps, "perp", { ...args, vaultAddress: "0x1" }), /vaultAddress/);
 });
 
-async function hyperliquidInfo(): Promise<{ url: string; close: () => Promise<void> }> {
+async function hyperliquidInfo(): Promise<{ url: string; close: () => Promise<void>; positionReads: string[] }> {
+  const positionReads: string[] = [];
   const server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
-      const type = (JSON.parse(body) as { type: string }).type;
-      const reply = type === "meta" ? { universe: [{ name: "BTC", szDecimals: 5, maxLeverage: 40 }, { name: "ETH", szDecimals: 4, maxLeverage: 25 }] } : type === "allMids" ? { BTC: "91000", ETH: "1725.3" } : null;
+      const { type, user } = JSON.parse(body) as { type: string; user?: string };
+      if (type === "clearinghouseState") positionReads.push(user ?? "");
+      const reply = type === "meta" ? { universe: [{ name: "BTC", szDecimals: 5, maxLeverage: 40 }, { name: "ETH", szDecimals: 4, maxLeverage: 25 }] } : type === "allMids" ? { BTC: "91000", ETH: "1725.3" } : type === "clearinghouseState" ? { assetPositions: [] } : null;
       response.writeHead(reply ? 200 : 404, { "content-type": "application/json" });
       response.end(JSON.stringify(reply));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((resolve) => server.close(() => resolve())) };
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((resolve) => server.close(() => resolve())), positionReads };
 }
 
 test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the order through whale-signer and sends neither", async () => {
@@ -119,6 +121,7 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
       const dry = await send({ kind: "perp", idempotencyKey: "dry", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "dry_run" });
       assert.equal(dry.status, "would_send");
       assert.match(dry.reason, /hypercore ETH (asset 1 )?leverage 1 isolated limit .* actions updateLeverage,order/);
+      assert.deepEqual(info.positionReads, [evm.address]);
 
       const live = send({ kind: "perp", idempotencyKey: "live", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "live" });
       const leverage = await lease(queue);

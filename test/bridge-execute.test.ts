@@ -63,7 +63,7 @@ function chain(checkChain: EvmRpc["checkChain"] = async () => undefined) {
     simulate: async () => undefined,
     sendRaw: async (signed) => {
       sent.push(signed);
-      receipts.set(keccak256(signed), { status: "success", gasUsed: 200_000n, effectiveGasPrice: 1n });
+      receipts.set(keccak256(signed), { status: "success", gasUsed: 200_000n, effectiveGasPrice: 1n, l1Fee: 0n });
     },
     receipt: async (hash) => receipts.get(hash) ?? null,
     seen: async (hash) => receipts.has(hash),

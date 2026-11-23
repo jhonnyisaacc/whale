@@ -311,7 +311,7 @@ function fakeChain(failSend = false): Chain {
       sendRaw: async (signed) => {
         if (failSend) throw new Error("connection refused");
         chain.sent.push(signed);
-        receipts.set(keccak256(signed), { status: "success", gasUsed: 21_000n, effectiveGasPrice: 1n });
+        receipts.set(keccak256(signed), { status: "success", gasUsed: 21_000n, effectiveGasPrice: 1n, l1Fee: 0n });
       },
       receipt: async (hash) => receipts.get(hash) ?? null,
       seen: async (hash) => receipts.has(hash),

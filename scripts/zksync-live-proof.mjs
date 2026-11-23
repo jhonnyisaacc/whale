@@ -1,12 +1,12 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256, maxUint256, pad, parseTransaction, recoverTransactionAddress, toHex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256, maxUint256, pad, parseTransaction, recoverTransactionAddress, toHex } from "viem";
 import { lifiQuote, lifiUrl } from "../dist/src/aggregators.js";
 import { createViemRpc } from "../dist/src/broadcast/shared.js";
 import { loadConfig } from "../dist/src/config.js";
-import { assertEvmFee, assertEvmSigning, DEFAULT_MAX_VALUE_WEI, swapTerms } from "../dist/src/signing-policy.js";
+import { assertEvmFee, assertEvmSigning, DEFAULT_MAX_VALUE_WEI, LIFI_ABI, swapTerms } from "../dist/src/signing-policy.js";
 
 const RPC = process.env.RPC_URL_324 ?? "https://mainnet.era.zksync.io";
 const CHAIN_ID = 324;
@@ -14,6 +14,7 @@ const DIAMOND = "0x341e94069f53234fe6dabef707ad424830525715";
 const USDC = "0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4";
 const NATIVE = "0x0000000000000000000000000000000000000000";
 const DESTINATION = "0x2222222222222222222222222222222222222222";
+const ATTACKER = "0x00000000000000000000000000000000000bad00";
 const USDC_BALANCES_SLOT = 9n;
 const USDC_ALLOWANCES_SLOT = 10n;
 const root = new URL("..", import.meta.url).pathname;
@@ -86,7 +87,25 @@ try {
     { label: "native transfer", to: DESTINATION, data: "0x", value: 10n ** 14n, gas: transferGas, purpose: "withdraw", usdc: false },
     { label: "USDC transfer", to: USDC, data: usdcTransfer, value: 0n, gas: usdcGas, purpose: "withdraw", usdc: true },
   ];
+  const sold = cases[1];
+  const call = decodeFunctionData({ abi: LIFI_ABI, data: sold.data });
+  const steps = call.args[5].map((step, index) => (index === call.args[5].length - 1 ? { ...step, callTo: ATTACKER, approveTo: ATTACKER } : step));
+  const attack = { ...sold, label: "LI.FI USDC -> ETH whose swap step calls and approves an attacker with minAmountOut 1", data: encodeFunctionData({ abi: LIFI_ABI, functionName: call.functionName, args: [...call.args.slice(0, 4), 1n, steps] }) };
   let failed = 0;
+  const attackTx = { chainId: CHAIN_ID, to: attack.to, data: attack.data, value: attack.value, gas: attack.gas, nonce, ...fees };
+  const appRefusal = (() => {
+    try {
+      assertEvmSigning({ ...attackTx, purpose: "swap", routers: [DIAMOND], settlers: [], withdrawAllowlist: [], maxValueWei: DEFAULT_MAX_VALUE_WEI, allowHotApproval: false, owner, allowOpaqueSwap: false, nativeSell: false });
+      return null;
+    } catch (error) {
+      return error.message;
+    }
+  })();
+  const attackJob = { id: attack.label, kind: "evm", chainId: CHAIN_ID, tx: { nonce: String(attackTx.nonce), to: attackTx.to, value: String(attackTx.value), data: attackTx.data, gas: String(attackTx.gas), maxFeePerGas: String(attackTx.maxFeePerGas), maxPriorityFeePerGas: String(attackTx.maxPriorityFeePerGas) } };
+  const signerVerdict = JSON.parse(spawnSync(signerBin, ["sign", "--keystore", keystore, "--policy", policyFile, "--ledger", path.join(work, "attack-ledger.json")], { env: passphrase, input: JSON.stringify(attackJob) }).stdout.toString());
+  const refusedByBoth = appRefusal !== null && signerVerdict.decision === "refused";
+  if (!refusedByBoth) failed += 1;
+  console.log(JSON.stringify({ case: attack.label, appRefusal, signerDecision: signerVerdict.decision, signerReasons: signerVerdict.reasons, pass: refusedByBoth }));
   for (const item of cases) {
     const tx = { chainId: CHAIN_ID, to: item.to, data: item.data, value: item.value, gas: item.gas, nonce, ...fees };
     nonce += 1;

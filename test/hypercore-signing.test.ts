@@ -10,8 +10,8 @@ import { loadConfig } from "../src/config.js";
 import { Secret } from "../src/redact.js";
 import { createMemoryWithdrawJournal } from "../src/withdraw-journal.js";
 import { execute, resetExecutorState, type ExecutorDeps, type SendRequest } from "../src/executor.js";
-import { buildPairMap } from "../src/pairs.js";
 import type { SwapIntent } from "../src/domain.js";
+import { hyperMarketAt } from "./fixtures.js";
 
 const SDK_KEY = new Secret(`0x${"0123456789".repeat(6)}0123`);
 const WALLET_KEY = `0x${"11".repeat(32)}` as Hex;
@@ -56,7 +56,7 @@ test("the signing policy bounds every HyperCore action Whale builds and refuses 
     ["a perp short with no size limit", perpSell(5, "0.2", "250", false), "no limit is set for hypercore:perp:5:sold"],
     ["two perp sells past the size limit together", { type: "order", orders: [...perpSell(4, "0.2", "250", false).orders, ...perpSell(4, "0.2", "251", true).orders], grouping: "na" }, "50100000000 of hypercore:perp:4:sold is above its 50000000000 limit"],
     ["cross leverage", { type: "updateLeverage", asset: 4, isCross: true, leverage: 1 }, "only isolated leverage is signed"],
-    ["leverage above the cap", buildLeverage(4, 2), "leverage exceeds the signing policy"],
+    ["leverage above the cap", buildLeverage(4, 2), "leverage 2 exceeds the 1x signing policy"],
     ["a withdrawal through the agent path", { type: "withdraw3" }, "refusing hyperliquid action withdraw3"],
     ["an unknown action", { type: "noop" }, "unsupported hyperliquid action noop"],
   ];
@@ -132,14 +132,7 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
     side,
     notionalUsd: 5,
     slippageBps: 50,
-    token: {
-      symbol: "TKN",
-      address: "mint",
-      decimals: 6,
-      chain: { kind: "solana" },
-      chainKey: "solana",
-      pairMap: buildPairMap([{ poolAddress: "p", dex: "raydium", chainKey: "solana", baseSymbol: "TKN", baseAddress: "mint", quoteSymbol: "SOL", quoteAddress: "So11111111111111111111111111111111111111112", liquidityUsd: 100, priceUsd: 0.5, baseDecimals: 6 }]),
-    },
+    token: { symbol: "TKN", address: "TKN", decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } },
     holdings: [{ symbol: "USDC", address: "usdc", amount: 20, usd: 20, native: false, decimals: 6, chainKey: "solana" }],
     hyperliquid: { coin: "TKN", assetIndex: 4, market: "perp", maxLeverage: 5 },
     receivedAtMs: 0,
@@ -151,7 +144,8 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(4),
+    perpPosition: async () => ({ side: "flat" }),
     send: async (request) => {
       sent.push(request);
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };

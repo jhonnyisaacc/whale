@@ -15,7 +15,7 @@ function deps(): McpDeps {
 test("tools/list names the wallet commands", async () => {
   const handle = createHandler(deps());
   const reply = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: { name: string }[] } };
-  assert.deepEqual(reply.result.tools.map((tool) => tool.name), ["wallet_status", "quote", "swap", "bridge", "balance", "perp", "transfer"]);
+  assert.deepEqual(reply.result.tools.map((tool) => tool.name), ["wallet_status", "quote", "swap", "bridge", "balance", "perp", "perp_positions", "transfer"]);
 });
 
 test("initialize names the whale server", async () => {

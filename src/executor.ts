@@ -1,14 +1,15 @@
 import type { BalanceReader } from "./balances.js";
-import type { ChainRef, ExecutionReport, HyperliquidMarket, Latency, PricedRoute, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
+import type { ChainRef, ExecutionReport, Latency, PricedRoute, RouteLeg, RouteQuote, SendResult, SwapIntent, TxRecord } from "./domain.js";
 import { addressKey } from "./chains.js";
 import { checkLimits, type LimitConfig, type Liquidity } from "./limits.js";
 import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
 import { spendDay, type SpendScope } from "./spend.js";
 import { pickRoute } from "./routing.js";
-import { buildOrder, cappedLimitPx, orderSize, tradeActions, wirePrice, type HyperliquidAction } from "./hyperliquid.js";
+import { buildOrder, cappedLimitPx, orderSize, tradeActions, wirePrice, type HyperliquidAction, type PerpPosition } from "./hyperliquid.js";
 import { keepScreened, publicRoute, quotePlan, sizedLive } from "./executor/quotes.js";
 import { liquidityLookup, type LiquidityOf } from "./executor/liquidity.js";
+import { tokenHyperMarket, type HyperMarketOf } from "./executor/hypercore-market.js";
 import { liveTierBlocked, sendBlock, type SupportTier } from "./support.js";
 
 export type HopQuote = {
@@ -52,10 +53,11 @@ export type ExecutorDeps = {
     hop: { sellAddress: string; buyAddress: string; sellAmount: string; chain: ChainRef; sellDecimals?: number },
     context: { spentUsd: number; priceUsd: number | null; decimals: number | null },
   ) => Promise<HopQuote>;
-  markPrice: (coin: string) => Promise<number | null>;
+  markPrice: (midKey: string) => Promise<number | null>;
   send: (action: SendRequest, onTx: (tx: TxRecord) => Promise<void>) => Promise<SendResult>;
   recordTx?: (idempotencyKey: string | null, tx: TxRecord) => Promise<void>;
-  szDecimals?: (market: HyperliquidMarket) => Promise<number | null>;
+  hyperMarket?: HyperMarketOf;
+  perpPosition?: (coin: string) => Promise<PerpPosition>;
   recordSpend?: (idempotencyKey: string, usd: number, scope?: SpendScope) => Promise<"inserted" | "exists" | "reserved" | "cap">;
   commitSpend?: (idempotencyKey: string) => Promise<void>;
   releaseSpend?: (idempotencyKey: string) => Promise<void>;
@@ -255,7 +257,7 @@ async function quoteCandidate(intent: SwapIntent, token: SwapIntent["token"], de
   const allowed = checkLimits(deps.config, {
     notionalUsd: intent.notionalUsd,
     slippageBps: intent.slippageBps,
-    leverage: 1,
+    leverage: intent.leverage ?? 1,
     spentTodayUsd: deps.spentTodayUsd + spentToday(stateOf(deps), today(deps)),
     chain: token.chain,
     chainKey: token.chainKey,
@@ -322,7 +324,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   const limits = checkLimits(deps.config, {
     notionalUsd: intent.notionalUsd,
     slippageBps: intent.slippageBps,
-    leverage: 1,
+    leverage: intent.leverage ?? 1,
     spentTodayUsd: deps.spentTodayUsd + spentToday(stateOf(deps), today(deps)),
     chain: venueChain,
     chainKey: venueKey,
@@ -338,37 +340,34 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     primaryBlocked = reason;
   }
 
-  if (useHyper && intent.hyperliquid) {
-    const market = intent.hyperliquid;
-    const [mark, szDecimals] = await Promise.all([deps.markPrice(market.coin), deps.szDecimals ? deps.szDecimals(market).catch(() => null) : Promise.resolve(null)]);
+  if (useHyper) {
+    const market = await tokenHyperMarket(intent, deps.hyperMarket);
+    if (typeof market === "string") return blockReport(intent, deps, latency, "hypercore", market);
+    const leverage = intent.leverage;
+    const [mark, position] = await Promise.all([deps.markPrice(market.midKey), market.market === "perp" ? (deps.perpPosition?.(market.coin).catch(() => null) ?? null) : null]);
     latency = stamp(latency, "quotedMs", now());
-    if (mark === null) {
-      const report = skipped(intent, latency, "hyperliquid mark price unverifiable", "hypercore", deps.mode);
-      reportsOf(deps).set(intent.idempotencyKey, report);
-      return report;
-    }
+    if (mark === null) return blockReport(intent, deps, latency, "hypercore", "hyperliquid mark price unverifiable");
     const isBuy = intent.side === "buy";
-    let order;
+    let order, actions: HyperliquidAction[];
     try {
-      if (szDecimals === null) throw new Error("hyperliquid szDecimals unknown");
+      if (leverage !== undefined && !isBuy) throw new Error("leverage applies only to a HyperCore perp buy");
       order = buildOrder({
         asset: market.assetIndex,
         isBuy,
-        limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), szDecimals, market.market, isBuy),
-        size: orderSize(intent.notionalUsd, mark, szDecimals),
+        limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), market.szDecimals, market.market, isBuy),
+        size: orderSize(intent.notionalUsd, mark, market.szDecimals),
       });
+      actions = tradeActions(market, order, leverage, position);
     } catch (error) {
-      const report = skipped(intent, latency, error instanceof Error ? error.message : "hyperliquid order sizing failed", "hypercore", deps.mode);
-      reportsOf(deps).set(intent.idempotencyKey, report);
-      return report;
+      return blockReport(intent, deps, latency, "hypercore", error instanceof Error ? error.message : "hyperliquid order sizing failed");
     }
-    const actions = tradeActions(market, order);
+    const [step] = actions;
     if (deps.mode === "dry_run") {
       const report: ExecutionReport = {
         idempotencyKey: intent.idempotencyKey,
         mode: "dry_run",
         decision: "would_send",
-        reason: `hypercore ${intent.hyperliquid.coin} ${market.market === "spot" ? "spot" : "leverage 1 isolated"} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
+        reason: `hypercore ${market.coin} asset ${market.assetIndex} ${market.market === "spot" ? "spot" : step?.type === "updateLeverage" ? `leverage ${step.leverage} isolated` : "open position leverage"} limit ${order.orders[0].p} actions ${actions.map((item) => item.type).join(",")}`,
         venue: "hypercore",
         route: null,
         latency,
@@ -386,12 +385,12 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
       null,
       {
         kind: "hypercore",
-        description: intent.hyperliquid.coin,
+        description: market.coin,
         chain: venueChain,
         legs: [],
         hyperliquidActions: actions,
       },
-      `hypercore ${intent.hyperliquid.coin}`,
+      `hypercore ${market.coin}`,
       now,
     );
   }

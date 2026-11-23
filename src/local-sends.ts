@@ -8,6 +8,7 @@ import { createBalanceCache } from "./balances.js";
 import { chainReader } from "./executor-server/chain-reader.js";
 import { createExecutor } from "./executor-server.js";
 import { BroadcastError } from "./executor.js";
+import { fetchPerpPosition } from "./hyperliquid.js";
 import { withPolicy, type TransactionSigner } from "./managed-signer.js";
 import { coingeckoLoader, createPriceCache, pricedHoldings, type PriceOf } from "./prices.js";
 import { checkedDecimals } from "./token-decimals.js";
@@ -85,6 +86,7 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     secrets,
   });
   const hold = !config.live;
+  const perpAccount = config.hyperliquidAccount?.trim() || setup.evmAddress;
 
   async function swap(command: Extract<LocalSend, { kind: "swap" }>): Promise<LocalSendResult> {
     const priceOf = await usdPrices(config, [command.sell, command.buy]);
@@ -146,6 +148,7 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     const signer = signerFor(jobs);
     const report = await executor.execute(perpIntent(command, market, Date.now()), {
       mode: command.mode,
+      perpPosition: (coin) => fetchPerpPosition(config.hyperliquidUrl, perpAccount, coin),
       send: (request, onTx) => broadcastRoute(config, signer, request, config.maxSlippageBps / 100, fetch, secrets, { onTx, hold }),
     });
     if (command.mode === "dry_run") return { kind: "perp", status: report.decision === "would_send" ? "would_send" : "skipped", reason: report.reason, broadcast: false, jobs: [], txs: [] };
