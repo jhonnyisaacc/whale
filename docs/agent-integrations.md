@@ -16,7 +16,7 @@ Every host manifest starts `node scripts/mcp-server.mjs` over stdio. That launch
 
 In a checkout, start the executor with `pnpm run start:executor`, the CLI with `pnpm run start:cli`, and MCP with `pnpm run start:mcp`.
 
-The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read `GET /status`. Leave `WHALE_BROADCAST` unset. If `LISTING_TRADER_LIVE` is set, boot throws. If `WITHDRAW_ENABLED` is set, boot throws. `POST /withdraw` is absent.
+The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read `GET /status`. Leave `WHALE_BROADCAST` unset. If `LISTING_TRADER_LIVE` is set, boot throws. If `WITHDRAW_ENABLED` is set, boot throws. `POST /withdraw` is absent.
 
 ## Claude
 

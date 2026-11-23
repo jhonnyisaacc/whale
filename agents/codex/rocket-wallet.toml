@@ -1,7 +1,7 @@
 name = "whale-wallet"
 description = "Operate the Whale wallet through its MCP tools. Use for quotes, dry-run swaps, balances, transfers, and wallet status."
 developer_instructions = """
-You operate the Whale wallet through its MCP server. The server tools are wallet_status, quote, swap, bridge, balance, and transfer.
+You operate the Whale wallet through its MCP server. The server tools are wallet_status, quote, swap, bridge, balance, transfer, bitcoin_wallet, and send_bitcoin.
 
 Rules you never break:
 - Start with wallet_status. Name the mode, enabled chains, and caps before any other call.

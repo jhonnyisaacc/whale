@@ -26,7 +26,7 @@ The layout follows the Binah rules at <https://github.com/jhonnyisaacc/binah> (r
 
 ## How an agent calls Whale
 
-MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, `.muse-plugin`, and the root `plugin.json` for Hermes. Each starts `scripts/mcp-server.mjs`, which builds a fresh clone on its first start, so an install straight from GitHub lists the tools. The skill is `skills/whale-wallet/SKILL.md`.
+MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, `.muse-plugin`, and the root `plugin.json` for Hermes. Each starts `scripts/mcp-server.mjs`, which builds a fresh clone on its first start, so an install straight from GitHub lists the tools. The skill is `skills/whale-wallet/SKILL.md`.
 
 CLI. After `pnpm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `bridge`, `balance`, and `transfer` are the other commands. `bridge` takes `--from-chain`, `--to-chain`, `--asset` (USDC or USDT), `--amount` in the smallest unit, and `--to`.
 
@@ -60,3 +60,29 @@ Set `WHALE_SIGNER_KEYSTORE` to a whale-signer keystore and the stdio MCP server 
 4. With `WHALE_BROADCAST` unset, the result is `signed` with the job id and hash. The signed bytes are not returned and nothing is sent.
 
 The daily USD total for local sends lives in the MCP process and starts at zero when it restarts. whale-signer's own ledger is the limit that survives a restart.
+
+## Native Bitcoin
+
+Whale holds, receives, and sends native BTC from the whale-signer key. The address is P2WPKH (the BIP84 format) for the same secp256k1 key as the EVM address. BTC is not a swap, quote, or bridge asset.
+
+Set `BITCOIN_NETWORK` to `bitcoin`, `testnet`, `signet`, or `regtest` to turn it on. Unset leaves it off. The keystore must carry `bitcoinPublicKey`. Run `whale-signer upgrade` on a keystore made before Bitcoin support. Whale accepts the key only when it hashes to the keystore's `evmAddress`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BITCOIN_NETWORK` | unset | The one network Whale uses. Unset turns Bitcoin off |
+| `BITCOIN_ESPLORA_URL` | `https://mempool.space/api` on mainnet, `/testnet/api` and `/signet/api` beside it; required on regtest | The Esplora indexer. Live mainnet pins mempool.space |
+| `BITCOIN_WITHDRAW_ADDRESSES` | empty | Comma-separated destinations. Each must decode for `BITCOIN_NETWORK`, or the config fails to load |
+| `BITCOIN_MAX_FEE_SATS` | `10000` | The highest fee in sats one send may pay |
+| `BITCOIN_MAX_FEE_RATE` | `50` | A fee market above this rate in sat/vB refuses the send. Whale never lowers the rate to fit |
+| `BITCOIN_MAX_INPUTS` | `20` | The most coins one send may spend, at most 100 |
+
+`bitcoin_wallet` reads the address, the confirmed and pending sats, and the USD value. `balance` with `chainKey` `bitcoin` reads any address on the network. `send_bitcoin` takes `idempotencyKey`, `to`, `sats`, and `mode`:
+
+1. Whale refuses a destination outside `BITCOIN_WITHDRAW_ADDRESSES` and a fee rate above the cap.
+2. It spends confirmed coins only, largest first, one send at a time. Change below 294 sats goes to the fee.
+3. Its app policy checks the exact unsigned bytes and every previous transaction. It reads each amount from a previous transaction that hashes to its outpoint.
+4. It prices the spend (inputs minus change) in USD against `MAX_USD_PER_TRADE` and reserves it on the same daily cap as every other local send.
+5. whale-signer checks its own `bitcoin` policy section and signs. Whale verifies each signature against the BIP143 digest before it accepts the answer.
+6. With `WHALE_BROADCAST` unset, the result is `signed` with the txid and `signedTransaction`, and nothing is sent.
+
+Bitcoin has no pre-broadcast simulation. Esplora cannot run `testmempoolaccept`, and both policies read every byte of the transaction. `node scripts/bitcoin-regtest-proof.mjs` proves the held transaction passes `testmempoolaccept` on a regtest node and that whale-signer refuses a destination outside its policy. Set `BITCOIN_CLI` to a `bitcoin-cli` wrapper, or `BITCOIN_RPC_URL`, `BITCOIN_RPC_USER`, and `BITCOIN_RPC_PASSWORD`. `BITCOIN_RPC_WALLET` names the funded wallet (default `miner`). Build the signer first with `cargo build --release --locked` in `signer/`.
