@@ -1,4 +1,5 @@
 use crate::abi;
+use crate::bridge_tokens;
 use crate::evm::{self, Call};
 use crate::hypercore::{self, Action, Network, Tif};
 use crate::jupiter;
@@ -11,6 +12,8 @@ pub struct Policy {
     routers: BTreeMap<u64, HashSet<[u8; 20]>>,
     settlers: BTreeMap<u64, HashSet<[u8; 20]>>,
     kyber_executors: BTreeMap<u64, HashSet<[u8; 20]>>,
+    bridges: BTreeMap<u64, BTreeMap<String, [u8; 20]>>,
+    max_bridge_fee_bps: u128,
     evm_destinations: HashSet<[u8; 20]>,
     max_value_wei: u128,
     max_fee_wei: u128,
@@ -34,6 +37,7 @@ impl Decision {
     }
 }
 
+const DEFAULT_MAX_BRIDGE_FEE_BPS: u128 = 50;
 const LAMPORTS_PER_SIGNATURE: u128 = 5_000;
 const MAX_TOKEN_ACCOUNT_RENT_LAMPORTS: u128 = (128 + 512) * 6_960;
 const SYSTEM: &str = "11111111111111111111111111111111";
@@ -94,6 +98,31 @@ fn addresses_by_chain(
     Ok(out)
 }
 
+fn bridges_by_chain(
+    value: Option<&Value>,
+) -> Result<BTreeMap<u64, BTreeMap<String, [u8; 20]>>, String> {
+    let mut out = BTreeMap::new();
+    if let Some(map) = value.and_then(Value::as_object) {
+        for (chain, providers) in map {
+            let id: u64 = chain
+                .parse()
+                .map_err(|_| format!("bridge chain {chain} is not a number"))?;
+            let mut listed = BTreeMap::new();
+            for (provider, address) in providers
+                .as_object()
+                .ok_or("evm.bridges maps a chain to provider addresses")?
+            {
+                let text = address
+                    .as_str()
+                    .ok_or_else(|| format!("bridge {provider} on {chain} must be an address"))?;
+                listed.insert(provider.clone(), evm::parse_address(text)?);
+            }
+            out.insert(id, listed);
+        }
+    }
+    Ok(out)
+}
+
 impl Policy {
     pub fn parse(file: &Value) -> Result<Policy, String> {
         if file.get("version").and_then(Value::as_u64) != Some(1) {
@@ -105,6 +134,7 @@ impl Policy {
         let routers = addresses_by_chain(evm.get("routers"), "router")?;
         let settlers = addresses_by_chain(evm.get("settlers"), "settler")?;
         let kyber_executors = addresses_by_chain(evm.get("kyberExecutors"), "kyber executor")?;
+        let bridges = bridges_by_chain(evm.get("bridges"))?;
         let mut daily_limits = BTreeMap::new();
         for section in [&evm, &sol, &hyper] {
             if let Some(map) = section.get("dailyLimits").and_then(Value::as_object) {
@@ -131,6 +161,15 @@ impl Policy {
             routers,
             settlers,
             kyber_executors,
+            bridges,
+            max_bridge_fee_bps: match evm.get("maxBridgeFeeBps") {
+                None => DEFAULT_MAX_BRIDGE_FEE_BPS,
+                Some(value) => value
+                    .as_u64()
+                    .filter(|bps| *bps <= 10_000)
+                    .map(u128::from)
+                    .ok_or("evm.maxBridgeFeeBps must be a whole number from 0 to 10000")?,
+            },
             evm_destinations: text_list(evm.get("destinations"))
                 .iter()
                 .map(|item| evm::parse_address(item))
@@ -236,6 +275,7 @@ impl Policy {
             }
         };
         let routers = self.routers.get(&chain).cloned().unwrap_or_default();
+        let bridges = self.bridges.get(&chain).cloned().unwrap_or_default();
         let key = |token: [u8; 20]| format!("{chain}:0x{}", hex::encode(token));
         let native = format!("{chain}:native");
         if tx.max_priority_fee > tx.max_fee {
@@ -289,7 +329,10 @@ impl Policy {
                 spender,
                 amount,
             } => {
-                if tx.value != 0 || !routers.contains(&spender) {
+                if tx.value != 0
+                    || !(routers.contains(&spender)
+                        || bridges.values().any(|item| *item == spender))
+                {
                     decision
                         .reasons
                         .push("an approval may only name a listed router and send no value".into());
@@ -360,6 +403,10 @@ impl Policy {
                 }
                 self.spend(&mut decision, native, tx.value);
             }
+            Call::Bridge { contract, terms } => {
+                self.check_bridge(&mut decision, tx, own, contract, &terms, &bridges);
+                self.spend(&mut decision, key(terms.charge.0), terms.charge.1);
+            }
             Call::Unknown { to, selector } => {
                 if !(self.allow_undecoded_router_calls && routers.contains(&to)) {
                     decision.reasons.push(format!(
@@ -373,6 +420,90 @@ impl Policy {
             }
         }
         decision
+    }
+
+    fn check_bridge(
+        &self,
+        decision: &mut Decision,
+        tx: &evm::Tx,
+        own: [u8; 20],
+        contract: [u8; 20],
+        terms: &abi::BridgeTerms,
+        bridges: &BTreeMap<String, [u8; 20]>,
+    ) {
+        let provider = terms.provider;
+        let mut refuse = |reason: String| decision.reasons.push(reason);
+        if bridges.get(provider) != Some(&contract) {
+            refuse(format!(
+                "the {provider} bridge call goes to 0x{}, not the listed {provider} bridge contract for this chain",
+                hex::encode(contract)
+            ));
+        }
+        if tx.value != 0 {
+            refuse("a bridge call must send no native value".into());
+        }
+        let destination = terms.destination_chain;
+        let listed_chain = u64::try_from(destination)
+            .is_ok_and(|id| id != tx.chain_id && self.evm_chains.contains(&id));
+        if !listed_chain {
+            refuse(format!(
+                "the {provider} bridge lands on chain {destination}, which is not another chain in the policy"
+            ));
+        }
+        if terms.recipient != own && !self.evm_destinations.contains(&terms.recipient) {
+            refuse(format!(
+                "the {provider} bridge pays 0x{} on chain {destination}, not this wallet or a listed destination",
+                hex::encode(terms.recipient)
+            ));
+        }
+        if terms.refund != own {
+            refuse(format!(
+                "the {provider} bridge refunds 0x{}, not this wallet",
+                hex::encode(terms.refund)
+            ));
+        }
+        if terms.destination_call {
+            refuse(format!(
+                "the {provider} bridge runs a destination call, which the signer cannot check"
+            ));
+        }
+        if terms.exclusive {
+            refuse(format!("the {provider} bridge names an exclusive relayer"));
+        }
+        let pair = u64::try_from(destination).ok().and_then(|id| {
+            (terms.input_token == terms.charge.0)
+                .then(|| {
+                    bridge_tokens::pair(tx.chain_id, terms.input_token, id, terms.output_token)
+                })
+                .flatten()
+        });
+        let Some((sent, delivered)) = pair else {
+            refuse(format!(
+                "the {provider} bridge sends 0x{} and delivers 0x{} on chain {destination}, a pair the bridge token table does not list",
+                hex::encode(terms.input_token),
+                hex::encode(terms.output_token)
+            ));
+            return;
+        };
+        if let Some(multiplier) = terms.output_multiplier
+            && bridge_tokens::within_par(sent, delivered, multiplier) != Some(true)
+        {
+            refuse(format!(
+                "the {provider} bridge output multiplier {multiplier} is above par for {}",
+                delivered.symbol
+            ));
+        }
+        let bps = self.max_bridge_fee_bps;
+        match bridge_tokens::meets_floor(sent, delivered, terms.charge.1, terms.min_output, bps) {
+            Some(true) => {}
+            Some(false) => refuse(format!(
+                "the {provider} bridge delivers at least {} {} for {}, under the {bps} bps bridge fee cap",
+                terms.min_output, delivered.symbol, terms.charge.1
+            )),
+            None => refuse(format!(
+                "the {provider} bridge amounts overflow the bridge fee check"
+            )),
+        }
     }
 
     pub fn check_solana(
