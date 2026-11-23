@@ -347,14 +347,13 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     try {
       if (meta === null) throw new Error("hyperliquid asset meta unknown");
       if (leverage !== undefined && !isBuy) throw new Error("leverage applies only to a HyperCore perp buy");
-      if (leverage !== undefined && leverage > meta.maxLeverage) throw new Error(`leverage ${leverage} exceeds the ${meta.maxLeverage}x maxLeverage of ${market.coin}`);
       order = buildOrder({
         asset: market.assetIndex,
         isBuy,
         limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), meta.szDecimals, market.market, isBuy),
         size: orderSize(intent.notionalUsd, mark, meta.szDecimals),
       });
-      actions = tradeActions(market, order, leverage, position);
+      actions = tradeActions({ market: market.market, coin: market.coin, assetIndex: market.assetIndex, maxLeverage: meta.maxLeverage }, order, leverage, position);
     } catch (error) {
       return blockReport(intent, deps, latency, "hypercore", error instanceof Error ? error.message : "hyperliquid order sizing failed");
     }

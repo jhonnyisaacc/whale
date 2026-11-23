@@ -93,8 +93,9 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
 
 export type PerpPosition = { side: "flat" } | { side: "long" | "short"; margin: "isolated" | "cross"; leverage: number };
 
-export function tradeActions(market: { market: "perp" | "spot"; coin: string; assetIndex: number }, order: OrderAction, leverage: number | undefined, position: PerpPosition | null): HyperliquidAction[] {
+export function tradeActions(market: { market: "perp" | "spot"; coin: string; assetIndex: number; maxLeverage: number }, order: OrderAction, leverage: number | undefined, position: PerpPosition | null): HyperliquidAction[] {
   if (market.market === "spot") return [order];
+  if (leverage !== undefined && leverage > market.maxLeverage) throw new Error(`leverage ${leverage} exceeds the ${market.maxLeverage}x maxLeverage of ${market.coin}`);
   if (position === null) throw new Error("hyperliquid position unreadable");
   const isBuy = order.orders[0]?.b === true;
   if (position.side === "flat") return [buildLeverage(market.assetIndex, isBuy ? (leverage ?? 1) : 1), order];
