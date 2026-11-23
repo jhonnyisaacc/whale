@@ -118,7 +118,7 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
       const send = localSender({ HYPERLIQUID_API_URL: info.url }, queue, { evmAddress: evm.address, solanaAddress: solana, token: TOKEN, port: 0, answerTimeoutMs: 5_000 });
       const dry = await send({ kind: "perp", idempotencyKey: "dry", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "dry_run" });
       assert.equal(dry.status, "would_send");
-      assert.match(dry.reason, /hypercore ETH leverage 1 isolated limit .* actions updateLeverage,order/);
+      assert.match(dry.reason, /hypercore ETH (asset 1 )?leverage 1 isolated limit .* actions updateLeverage,order/);
 
       const live = send({ kind: "perp", idempotencyKey: "live", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "live" });
       const leverage = await lease(queue);
