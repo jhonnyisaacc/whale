@@ -143,3 +143,20 @@ test("a HyperCore token trades on HyperCore in live mode, unless screening dropp
   await execute({ ...intent(), token: hyper }, { ...deps(sends), mode: "live", liquidityOf: async () => 2_000_000 });
   assert.deepEqual(sends, ["hypercore"]);
 });
+
+test("a HyperCore token falls back to a liquid alternate when HyperCore cannot trade", async () => {
+  const hyper = { symbol: "MPLX", address: "MPLX", decimals: null, chain: { kind: "hypercore" as const, market: "perp" as const }, chainKey: "hypercore", pairMap: { pools: [], top: null } };
+  const liquidityOf = async (token: { chainKey: string }) => (token.chainKey === "solana" ? 2_000_000 : null);
+  const cases: { name: string; mode: "live" | "dry_run"; extra: Partial<ExecutorDeps> }[] = [
+    { name: "disabled, dry run", mode: "dry_run", extra: { config: { ...limits, enabledChainKeys: new Set(["solana"]) } } },
+    { name: "disabled, live", mode: "live", extra: { config: { ...limits, enabledChainKeys: new Set(["solana"]) } } },
+    { name: "dry-run tier, live", mode: "live", extra: { supportTierFor: (chainKey) => (chainKey === "hypercore" ? "dry_run" : "live") } },
+  ];
+  for (const { name, mode, extra } of cases) {
+    resetExecutorState();
+    const sends: string[] = [];
+    const report = await execute({ ...intent(), token: hyper, alternates: [intent().token] }, { ...deps(sends), mode, liquidityOf, quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10" }), readBalance: async (h) => h.amount, priceOf: (h) => h.usd / h.amount, ...extra });
+    assert.equal(report.venue, "solana", name);
+    assert.ok(!sends.includes("hypercore"), name);
+  }
+});
