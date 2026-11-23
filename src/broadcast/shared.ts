@@ -376,7 +376,7 @@ export async function runLegs(prepare: PrepareLeg, legs: readonly RouteLeg[], ca
 
 
 export type EvmCtx = Ctx & { chainId: number; chainKey: string; owner: Hex; read: EvmRpc; reads: EvmRpc[]; senders: EvmRpc[]; privateSend: boolean };
-export type EvmTx = { to: Hex; data: Hex; value: bigint; gas: bigint | null; purpose: EvmSignInput["purpose"]; nativeSell?: boolean };
+export type EvmTx = { to: Hex; data: Hex; value: bigint; gas: bigint | null; purpose: EvmSignInput["purpose"]; nativeSell?: boolean } & Pick<EvmSignInput, "approval" | "charge">;
 
 // A lookup that must prove absence asks every RPC: one lagging node must not hide a transaction another has.
 export async function onAnyRpc<R, T>(rpcs: readonly R[], read: (rpc: R) => Promise<T | null>): Promise<T | null> {

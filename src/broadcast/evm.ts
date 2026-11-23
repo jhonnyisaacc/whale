@@ -164,6 +164,8 @@ export async function submitEvm(ctx: EvmCtx, tx: EvmTx, buyToken: string | null)
       value: tx.value,
       purpose: tx.purpose,
       nativeSell: tx.nativeSell,
+      ...(tx.approval ? { approval: tx.approval } : {}),
+      ...(tx.charge ? { charge: tx.charge } : {}),
       gas,
       nonce,
       ...fees,

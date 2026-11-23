@@ -1,0 +1,10 @@
+{
+  "captured": "2026-11-19",
+  "source": "https://app.across.to/api/deposit/status?originChainId=8453&depositTxHash=0x0000000000000000000000000000000000000000000000000000000000000001",
+  "txHash": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "answer": {
+    "error": "DepositNotFoundException",
+    "message": "Deposit not found given the provided constraints",
+    "httpStatus": 404
+  }
+}
