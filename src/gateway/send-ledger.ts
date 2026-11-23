@@ -29,13 +29,23 @@ export async function issuedNow(client: pg.Pool | pg.ClientBase): Promise<string
   return (await client.query<{ at: string }>(`SELECT ${instant("now()")} AS at`)).rows[0]?.at as string;
 }
 
-export async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, priced: Priced, what = "the swap"): Promise<string | null> {
+async function spentOn(client: pg.Pool | pg.ClientBase, agent: AgentContext, day: string): Promise<{ agent: number; wallet: number }> {
   const totals = await client.query<{ agent: number; wallet: number }>(
     `SELECT COALESCE(SUM(usd) FILTER (WHERE agent_id = $2), 0)::float8 AS agent, COALESCE(SUM(usd), 0)::float8 AS wallet
      FROM agent_spends WHERE wallet_id = $1 AND day = $3::date AND state <> 'released'`,
-    [agent.walletId, agent.agentId, priced.day],
+    [agent.walletId, agent.agentId, day],
   );
-  const spent = totals.rows[0] ?? { agent: 0, wallet: 0 };
+  return totals.rows[0] ?? { agent: 0, wallet: 0 };
+}
+
+export async function remainingUsd(client: pg.Pool | pg.ClientBase, agent: AgentContext, day: string): Promise<number> {
+  const spent = await spentOn(client, agent, day);
+  const left = Math.min(effectiveLimits(agent.limits, agent.policy).dailyUsd - spent.agent, agent.policy.dailyUsd - spent.wallet);
+  return Math.max(0, Math.floor(left * 100 + 1e-6) / 100);
+}
+
+export async function dailyRefusal(client: pg.Pool | pg.ClientBase, agent: AgentContext, priced: Priced, what = "the swap"): Promise<string | null> {
+  const spent = await spentOn(client, agent, priced.day);
   const agentCap = effectiveLimits(agent.limits, agent.policy).dailyUsd;
   if (spent.agent + priced.usd > agentCap) return `${what} would take today's total to about ${usd(spent.agent + priced.usd)}, above this agent's ${usd(agentCap)} daily cap`;
   if (spent.wallet + priced.usd > agent.policy.dailyUsd) return `${what} would take today's total to about ${usd(spent.wallet + priced.usd)}, above the wallet's ${usd(agent.policy.dailyUsd)} daily cap`;

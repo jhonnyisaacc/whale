@@ -143,6 +143,37 @@ test("hosted tools stay inside the agent's limits and the wallet policy before r
   }
 });
 
+test("wallet_status reports the USD left today under the tighter of the agent's and the wallet's daily caps", { skip: !TEST_DATABASE_URL }, async () => {
+  const { pool, call, agentId, accountId, drop } = await harness();
+  try {
+    const remaining = async () => JSON.parse((await call("wallet_status", {})).content[0].text).remainingTodayUsd;
+    assert.equal(await remaining(), 40);
+
+    const walletId = (await pool.query("SELECT wallet_id FROM agents WHERE id = $1", [agentId])).rows[0].wallet_id;
+    const other = await createAgent(pool, { accountId, walletId, name: "other", limits: { chains: ["base"], actions: ["swap"], maxTxUsd: 50, dailyUsd: 100 } });
+    if ("refused" in other) throw new Error(other.refused);
+    const day = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    let key = 0;
+    const spend = (agent: string, usd: number, state: string, on = day) =>
+      pool.query("INSERT INTO agent_spends (agent_id, idempotency_key, binding, account_id, wallet_id, usd, day, state) VALUES ($1, $2, 'b', $3, $4, $5, $6::date, $7)", [agent, `spend-${(key += 1)}`, accountId, walletId, usd, on, state]);
+
+    await spend(agentId, 12.5, "reserved");
+    await spend(agentId, 10, "committed");
+    await spend(agentId, 15, "released");
+    await spend(agentId, 30, "committed", yesterday);
+    assert.equal(await remaining(), 17.5);
+
+    await spend(other.agentId, 70, "committed");
+    assert.equal(await remaining(), 7.5);
+
+    await spend(other.agentId, 20, "reserved");
+    assert.equal(await remaining(), 0);
+  } finally {
+    await drop();
+  }
+});
+
 test("/mcp throttles one IP that rotates random keys and one agent that rotates IPs", { skip: !TEST_DATABASE_URL }, async () => {
   const { app, rpc, drop } = await harness();
   try {
