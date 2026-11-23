@@ -1,5 +1,6 @@
 pub mod abi;
 pub mod bridge_tokens;
+pub mod btc;
 pub mod evm;
 pub mod hypercore;
 pub mod jupiter;
@@ -106,7 +107,27 @@ pub fn run_job(
             }
             Err(error) => return refused(vec![format!("hypercore: {error}")]),
         },
-        _ => return refused(vec!["kind must be evm, solana or hypercore".into()]),
+        Some("bitcoin") => match btc::parse(job) {
+            Ok(parsed) => {
+                let decision = policy.check_bitcoin(&parsed, &btc::own_script(&keys.evm));
+                let work = btc::work(&parsed);
+                (
+                    "bitcoin".into(),
+                    decision,
+                    work,
+                    Box::new(move || {
+                        btc::sign(&parsed, &keys.evm)
+                            .map(|raw| json!({ "signedTransaction": hex::encode(raw) }))
+                    }),
+                )
+            }
+            Err(error) => return refused(vec![format!("bitcoin: {error}")]),
+        },
+        _ => {
+            return refused(vec![
+                "kind must be evm, solana, hypercore or bitcoin".into(),
+            ]);
+        }
     };
     let refused = |reasons: Vec<String>| {
         refused(

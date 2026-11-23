@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { configuredBitcoinSender, HELD, type BitcoinOverrides, type BitcoinSendResult, type SendBitcoin } from "./bitcoin/send.js";
 import { addressKey, chainByKey, dexscreenerSlugMap } from "./chains.js";
 import { swapIntent, type Asset, type WalletCommand } from "./commands.js";
 import { configSecrets, loadConfig, type AppConfig } from "./config.js";
@@ -19,7 +20,7 @@ import type { SignerQueue } from "./signer-queue.js";
 import { SignerRefusal, whaleSigner, type SignerJobRecord, type WhaleSignerSetup } from "./whale-signer.js";
 import { perpIntent, perpMarket, type PerpOrder } from "./local-perps.js";
 
-export type LocalSend = Extract<WalletCommand, { kind: "swap"; mode: "live" } | { kind: "transfer" }> | PerpOrder;
+export type LocalSend = Extract<WalletCommand, { kind: "swap"; mode: "live" } | { kind: "transfer" } | { kind: "send_bitcoin" }> | PerpOrder;
 
 export type LocalSendResult = {
   kind: "swap" | "transfer" | "perp";
@@ -30,7 +31,7 @@ export type LocalSendResult = {
   txs: TxRecord[];
 };
 
-const HELD = "signed by whale-signer and not sent, because WHALE_BROADCAST is off";
+export type LocalSendOutcome<C extends LocalSend = LocalSend> = C extends SendBitcoin ? BitcoinSendResult : LocalSendResult;
 
 export function isNativeAsset(asset: Pick<Asset, "chainKey" | "address">): boolean {
   return chainByKey(asset.chainKey)?.chain.kind === "solana" ? asset.address === WSOL_MINT : NATIVE_SELL.has(asset.address.toLowerCase());
@@ -74,7 +75,7 @@ function settled(kind: LocalSendResult["kind"], jobs: SignerJobRecord[], txs: Tx
   return { kind, status: "skipped", reason: fallback, broadcast: false, jobs, txs };
 }
 
-export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: WhaleSignerSetup) {
+export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: WhaleSignerSetup, overrides: BitcoinOverrides = {}) {
   const config = loadConfig(env);
   const secrets = configSecrets(config).filter((item) => item.length >= 8);
   const addresses = { evm: setup.evmAddress, solana: setup.solanaAddress };
@@ -86,6 +87,7 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     secrets,
   });
   const hold = !config.live;
+  const sendBitcoin = configuredBitcoinSender(config, setup, queue, executor.spend, overrides);
   const perpAccount = config.hyperliquidAccount?.trim() || setup.evmAddress;
 
   async function swap(command: Extract<LocalSend, { kind: "swap" }>): Promise<LocalSendResult> {
@@ -155,14 +157,16 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     return settled("perp", jobs, report.txs ?? [], report.reason);
   }
 
-  const seen = new Map<string, { fingerprint: string; result: Promise<LocalSendResult> }>();
-  return (command: LocalSend): Promise<LocalSendResult> => {
-    const fingerprint = JSON.stringify(command);
-    const known = seen.get(command.idempotencyKey);
-    if (known) return known.fingerprint === fingerprint ? known.result : Promise.reject(new Error("this idempotencyKey was used for a different command"));
-    const result = command.kind === "swap" ? swap(command) : command.kind === "perp" ? perp(command) : transfer(command);
-    seen.set(command.idempotencyKey, { fingerprint, result });
-    result.catch(() => seen.delete(command.idempotencyKey));
-    return result;
+  const seen = new Map<string, { fingerprint: string; result: Promise<LocalSendOutcome> }>();
+  return <C extends LocalSend>(command: C): Promise<LocalSendOutcome<C>> => {
+    const plain: LocalSend = command;
+    if (plain.kind === "send_bitcoin" && plain.mode === "dry_run") return sendBitcoin(plain) as Promise<LocalSendOutcome<C>>;
+    const fingerprint = JSON.stringify(plain);
+    const known = seen.get(plain.idempotencyKey);
+    if (known) return (known.fingerprint === fingerprint ? known.result : Promise.reject(new Error("this idempotencyKey was used for a different command"))) as Promise<LocalSendOutcome<C>>;
+    const result: Promise<LocalSendOutcome> = plain.kind === "send_bitcoin" ? sendBitcoin(plain) : plain.kind === "swap" ? swap(plain) : plain.kind === "perp" ? perp(plain) : transfer(plain);
+    seen.set(plain.idempotencyKey, { fingerprint, result });
+    result.catch(() => seen.delete(plain.idempotencyKey));
+    return result as Promise<LocalSendOutcome<C>>;
   };
 }

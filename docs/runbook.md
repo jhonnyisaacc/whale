@@ -8,7 +8,7 @@ Leave `WHALE_BROADCAST` unset. The process does not broadcast.
 
 If `LISTING_TRADER_LIVE` is set to any value, boot throws `LISTING_TRADER_LIVE is closed`. If `WITHDRAW_ENABLED` is set to any value, boot throws `WITHDRAW_ENABLED is closed`. `POST /withdraw` is absent.
 
-The scripts are `start:executor`, `start:cli`, and `start:mcp`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`.
+The scripts are `start:executor`, `start:cli`, and `start:mcp`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
 
 ## Create a keystore
 
@@ -267,7 +267,7 @@ pnpm run start:cli bridge --from-chain base --to-chain arbitrum --asset USDC --a
 
 ## Start MCP
 
-`pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, and `transfer`.
+`pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
 
 `wallet_status` reads `GET /status` on `EXECUTOR_URL`. The default in `.mcp.json` is `http://127.0.0.1:8788`. Set `EXECUTOR_AUTH_TOKEN` to the executor token. `swap` and `transfer` stay dry-run in this server.
 

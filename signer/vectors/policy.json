@@ -86,5 +86,16 @@
       "hypercore:spot:10107": "20000000",
       "hypercore:perp:4:sold": "50000000000"
     }
+  },
+  "bitcoin": {
+    "network": "regtest",
+    "destinations": [
+      "bcrt1qzh0hgnjryspf8al735vwcm0gutt2hxpcylhr8a"
+    ],
+    "maxFeeSats": "10000",
+    "maxInputs": 3,
+    "dailyLimits": {
+      "bitcoin:native": "600000"
+    }
   }
 }

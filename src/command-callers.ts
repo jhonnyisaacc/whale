@@ -1,15 +1,18 @@
 import { formatUnits } from "viem";
+import { esploraIndexer } from "./bitcoin/esplora.js";
+import { bitcoinBalance, bitcoinWalletView } from "./bitcoin/read.js";
+import { BITCOIN_KEY, bitcoinWallet } from "./bitcoin/wallet.js";
 import { chainByKey } from "./chains.js";
 import { chooseLargestOutput, chooseSignableQuote, fetchBridgeQuotes } from "./aggregators.js";
 import { quoteHop } from "./clients.js";
-import type { CommandDeps, WalletCommand } from "./commands.js";
+import type { BitcoinWalletView, CommandDeps, WalletCommand } from "./commands.js";
 import { configSecrets, loadConfig, rpcLists, type AppConfig } from "./config.js";
 import type { ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
 import { readPerpAccount } from "./perp-state.js";
 import { chainAddresses, type BridgePolicy } from "./rebalance.js";
 import { redactError, urlSecretForms } from "./redact.js";
 import { evmReadClient, solanaConnection } from "./rpc.js";
-import { whaleSignerEvmAddress } from "./whale-signer.js";
+import { keystorePublic, whaleSignerEvmAddress } from "./whale-signer.js";
 
 const SPL_TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"] as const;
 export const QUOTE_KEY_NAMES = ["ZEROX_API_KEY", "JUPITER_API_KEY", "LIFI_API_KEY", "ONEINCH_API_KEY", "OKX_API_KEY"] as const;
@@ -60,6 +63,10 @@ export async function readAddressBalance(
   chainKey: string,
   address: string,
 ): Promise<{ holdings: Holding[]; reason?: string }> {
+  if (chainKey === BITCOIN_KEY) {
+    const bitcoin = loadConfig(env).bitcoin;
+    return bitcoin ? bitcoinBalance(esploraIndexer(bitcoin.esploraUrl), address, bitcoin.network) : { holdings: [], reason: "BITCOIN_NETWORK is unset, so Bitcoin is off" };
+  }
   const spec = chainByKey(chainKey);
   if (!spec) return { holdings: [], reason: `unknown chain ${chainKey}` };
   const url = env[spec.rpcEnv];
@@ -139,6 +146,17 @@ export async function readAddressBalance(
   return { holdings: [], reason: `${chainKey} has no address balance read` };
 }
 
+export async function readBitcoinWallet(env: NodeJS.ProcessEnv): Promise<BitcoinWalletView | { kind: "bitcoin_wallet"; status: "skipped"; reason: string }> {
+  const skip = (reason: string) => ({ kind: "bitcoin_wallet" as const, status: "skipped" as const, reason });
+  const config = loadConfig(env);
+  if (!config.bitcoin) return skip("BITCOIN_NETWORK is unset, so Bitcoin is off");
+  const keystore = env.WHALE_SIGNER_KEYSTORE?.trim();
+  if (!keystore) return skip("set WHALE_SIGNER_KEYSTORE to a whale-signer keystore with a bitcoinPublicKey");
+  const keys = keystorePublic(keystore);
+  if (!keys.bitcoinPublicKey) return skip("the whale-signer keystore has no bitcoinPublicKey");
+  return bitcoinWalletView(config, bitcoinWallet(keys.bitcoinPublicKey, keys.evmAddress, config.bitcoin.network), esploraIndexer(config.bitcoin.esploraUrl));
+}
+
 async function postIntent(env: NodeJS.ProcessEnv, intent: SwapIntent): Promise<ExecutionReport> {
   const base = (env.EXECUTOR_URL ?? "http://127.0.0.1:8788").replace(/\/$/, "");
   const headers: Record<string, string> = { "content-type": "application/json" };
@@ -167,6 +185,7 @@ export function commandDeps(env: NodeJS.ProcessEnv, command: WalletCommand, fetc
     return { bridge: { policy: bridgePolicy(env, config), quotes: (route) => fetchBridgeQuotes(config, route, fetchImpl) } };
   }
   if (command.kind === "quote" && quoteProviderConfigured(env)) return { quote: (item) => quoteWithHop(env, item) };
+  if (command.kind === "bitcoin_wallet") return { readBitcoinWallet: () => readBitcoinWallet(env) };
   if (command.kind === "balance") return { readBalance: (chainKey, address) => readAddressBalance(env, chainKey, address) };
   if (command.kind === "perp_positions") {
     const config = loadConfig(env);

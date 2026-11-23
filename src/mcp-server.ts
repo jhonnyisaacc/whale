@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import { run, type WalletCommand } from "./commands.js";
-import type { LocalSend, LocalSendResult } from "./local-sends.js";
+import type { LocalSend, LocalSendOutcome } from "./local-sends.js";
 import { perpOrderSchema } from "./local-perps.js";
 import { bridgeRequestSchema } from "./schemas.js";
 
@@ -10,7 +10,7 @@ export type McpDeps = {
   executorAuthToken: string | null;
   fetchImpl?: typeof fetch;
   runCommand?: typeof run;
-  localSend?: (command: LocalSend) => Promise<LocalSendResult>;
+  localSend?: (command: LocalSend) => Promise<LocalSendOutcome>;
 };
 
 const assetSchema = {
@@ -34,7 +34,11 @@ export const TOOLS = [
   { name: "perp", description: "Trade a Hyperliquid perp with an immediate-or-cancel limit order at 1x isolated. coin is the perp's name in Hyperliquid's meta, such as ETH. side buy opens or grows a long, side sell closes a long or opens a short. It needs whale-signer (WHALE_SIGNER_KEYSTORE) in both modes. The default dry_run plans the order from the mark price and signs nothing. In mode live Whale checks its caps and signing policy, and whale-signer's refusal is final. With WHALE_BROADCAST off the signed actions are reported and not sent.", inputSchema: z.toJSONSchema(perpOrderSchema, { io: "input" }) },
   { name: "perp_positions", description: "Read the Hyperliquid perp account from HYPERLIQUID_ACCOUNT_ADDRESS, or whale-signer's EVM address: account value, margin used, withdrawable, each position with side, size, entry, mark, liquidation price, unrealized PnL, leverage and funding, and the open orders. Each order has kind limit or trigger. A trigger order (stop, take profit, or trailing stop) carries orderType, triggerPx, triggerCondition and isMarket. triggerPx is null while a trailing stop waits for activation. A stop that has fired and still rests is a limit order. An order of unknown shape is listed in unreadableOrders with its oid, coin, orderType and the reason, so openOrders is complete only when unreadableOrders is empty. A trigger with isPositionTpsl true closes the whole position, so its size is \"entire position\". Take-profit and stop orders attached to a pending order are listed under that order in attached. Numbers are Hyperliquid's decimal strings in USD or coin units. Funding paid is positive. It moves no money.", inputSchema: { type: "object", properties: {} } },
   { name: "transfer", description: "Transfer to an owner address. amount is in the asset's smallest unit. The default dry_run sends nothing. mode live needs whale-signer: the destination must be in OWNER_WITHDRAW_ADDRESSES and inside Whale's USD caps, and whale-signer's refusal is final. With WHALE_BROADCAST off the signed job is reported and not sent.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, asset: assetSchema, to: { type: "string" }, amount: { type: "string" }, mode: { type: "string", enum: ["dry_run", "live"] } }, required: ["idempotencyKey", "asset", "to", "amount"] } },
+  { name: "bitcoin_wallet", description: "Read the native Bitcoin wallet: its P2WPKH address for BITCOIN_NETWORK, the confirmed and pending sats, and the USD value. Send BTC to this address to receive. It moves no money.", inputSchema: { type: "object", properties: {} } },
+  { name: "send_bitcoin", description: "Send native BTC to an address in BITCOIN_WITHDRAW_ADDRESSES. sats is an integer number of satoshis. The default dry_run plans the coins and fee and signs nothing. mode live needs whale-signer: Whale refuses a fee rate above BITCOIN_MAX_FEE_RATE, checks its USD caps, and asks whale-signer, whose refusal is final. With WHALE_BROADCAST on, the signed transaction must pass testmempoolaccept through the indexer before it is broadcast. With WHALE_BROADCAST off the signed transaction is returned and not sent.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, to: { type: "string" }, sats: { type: "string" }, mode: { type: "string", enum: ["dry_run", "live"] } }, required: ["idempotencyKey", "to", "sats"] } },
 ] as const;
+
+const sendBitcoinArgs = z.object({ idempotencyKey: z.string().min(1).max(200), to: z.string().min(1).max(100), sats: z.string().max(20), mode: z.enum(["dry_run", "live"]).optional() });
 
 async function callHttp(deps: McpDeps, route: string): Promise<unknown> {
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -57,6 +61,11 @@ function commandFrom(name: string, args: Record<string, unknown>, liveSigner: bo
   if (name === "swap") return { ...args, kind: "swap", mode: "dry_run" } as WalletCommand;
   if (name === "bridge") return { kind: "bridge", ...bridgeRequestSchema.parse(args) };
   if (name === "transfer") return { ...args, kind: name, mode: args.mode === "live" ? "live" : "dry_run" } as WalletCommand;
+  if (name === "send_bitcoin") {
+    const parsed = sendBitcoinArgs.parse(args);
+    return { kind: "send_bitcoin", idempotencyKey: parsed.idempotencyKey, to: parsed.to, sats: parsed.sats, mode: parsed.mode ?? "dry_run" };
+  }
+  if (name === "bitcoin_wallet") return { kind: "bitcoin_wallet" };
   if (name === "perp_positions") return { kind: "perp_positions" };
   if (name === "quote" || name === "balance") return { ...args, kind: name } as WalletCommand;
   throw new Error(`unknown tool ${name}`);
@@ -71,8 +80,9 @@ export async function callTool(deps: McpDeps, name: string, args: Record<string,
   }
   const execute = deps.runCommand ?? run;
   const command = commandFrom(name, args, Boolean(deps.localSend));
+  if (deps.localSend && command.kind === "send_bitcoin") return deps.localSend(command);
   if (deps.localSend && (command.kind === "transfer" || command.kind === "swap") && command.mode === "live") return deps.localSend(command);
-  if (command.kind === "transfer" || (command.kind === "swap" && command.mode !== "dry_run")) return execute(command);
+  if (command.kind === "transfer" || command.kind === "send_bitcoin" || (command.kind === "swap" && command.mode !== "dry_run")) return execute(command);
   const { commandDeps } = await import("./command-callers.js");
   return execute(command, commandDeps(process.env, command));
 }

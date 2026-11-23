@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { z } from "zod";
 import { tokenMatches } from "./managed-signer.js";
 
-export type SignerJob = { kind: "evm" | "solana" | "hypercore"; payload: Record<string, unknown> };
+export type SignerJob = { kind: "evm" | "solana" | "hypercore" | "bitcoin"; payload: Record<string, unknown> };
 export type SignerAnswer = { decision: "signed"; result: unknown } | { decision: "refused"; reasons: string[] };
 
 export type SignerQueue = {

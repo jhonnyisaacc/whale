@@ -6,6 +6,7 @@ import { isSolanaAddress } from "../signer.js";
 import { DEFAULT_KYBER_CLIENT_ID, type AppConfig, type ApprovalSeed } from "./types.js";
 import { manifestFeeLimits, manifestRouters, parseDeploymentManifest } from "../deployment-manifest.js";
 import { supportByChain } from "../support.js";
+import { bitcoinConfig } from "./bitcoin.js";
 export type { AppConfig, ApprovalSeed, StrategyCap } from "./types.js";
 
 function screeningEnabled(env: NodeJS.ProcessEnv, live: boolean): boolean {
@@ -148,6 +149,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean),
+    bitcoin: bitcoinConfig(env),
     dexscreenerSlugOverrides,
     rpcByChainKey,
     rpcUrlsByChainKey,

@@ -1,0 +1,254 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import test from "node:test";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { p2wpkh, RawTx, Transaction } from "@scure/btc-signer";
+import pg from "pg";
+import { privateKeyToAccount } from "viem/accounts";
+import { BroadcastRefused, RAW_TX_OPTIONS, transactionId, type BitcoinIndexer, type Utxo } from "../src/bitcoin/esplora.js";
+import type { BitcoinPolicy } from "../src/bitcoin/send.js";
+import { BTC_PARAMS, sameScript } from "../src/bitcoin/wallet.js";
+import { localSender } from "../src/local-sends.js";
+import { startSignerQueue, type SignerQueue } from "../src/signer-queue.js";
+
+const TOKEN = "t".repeat(40);
+const KEY = new Uint8Array(32).fill(0x11);
+const OWN = p2wpkh(secp256k1.getPublicKey(KEY, true), BTC_PARAMS.regtest);
+const OWNER = p2wpkh(secp256k1.getPublicKey(new Uint8Array(32).fill(0x22), true), BTC_PARAMS.regtest).address as string;
+const STRANGER = p2wpkh(secp256k1.getPublicKey(new Uint8Array(32).fill(0x33), true), BTC_PARAMS.regtest).address as string;
+const EVM = privateKeyToAccount(`0x${"11".repeat(32)}`).address;
+const EVM_DEST = "0x2222222222222222222222222222222222222222";
+const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
+const bytesOf = (text: string) => new Uint8Array(Buffer.from(text, "hex"));
+
+function funding(sats: bigint, seed: number): Uint8Array {
+  const input = { txid: new Uint8Array(32).fill(seed), index: 0, finalScriptSig: new Uint8Array([0x51]), sequence: 0xffffffff };
+  return RawTx.encode({ version: 2, segwitFlag: false, inputs: [input], outputs: [{ amount: sats, script: OWN.script }], witnesses: [], lockTime: 0 });
+}
+
+type World = { indexer: BitcoinIndexer; simulated: string[]; broadcasts: string[]; feeRate: number; simulateError: Error | null; broadcastError: Error | null };
+
+function world(coins: bigint[]): World {
+  const previous = new Map(coins.map((sats, index) => [transactionId(funding(sats, index + 1)), funding(sats, index + 1)]));
+  const state: World = {
+    feeRate: 2,
+    simulated: [],
+    broadcasts: [],
+    simulateError: null,
+    broadcastError: null,
+    indexer: {
+      utxos: async (address) => (address === OWN.address ? [...previous].map(([txid], index): Utxo => ({ txid, vout: 0, sats: coins[index] as bigint, confirmed: true })) : []),
+      transaction: async (txid) => previous.get(txid) as Uint8Array,
+      feeRate: async () => state.feeRate,
+      balance: async () => ({ confirmedSats: 0n, pendingSats: 0n }),
+      simulate: async (signed) => {
+        state.simulated.push(hex(signed));
+        if (state.simulateError) throw state.simulateError;
+      },
+      broadcast: async (signed) => {
+        if (state.broadcastError) throw state.broadcastError;
+        state.broadcasts.push(hex(signed));
+        return transactionId(signed);
+      },
+    },
+  };
+  return state;
+}
+
+type Call = { unsigned: string; previous: string[] };
+
+function fakePolicy(calls: Call[]): BitcoinPolicy {
+  return (unsigned, previous, rule) => {
+    calls.push({ unsigned: hex(unsigned), previous: previous.map(hex) });
+    const tx = Transaction.fromRaw(unsigned, RAW_TX_OPTIONS);
+    const prevouts = previous.map((raw, index) => Transaction.fromRaw(raw, RAW_TX_OPTIONS).getOutput(tx.getInput(index).index as number)).map((output) => ({ script: output.script as Uint8Array, sats: output.amount as bigint }));
+    const inputs = prevouts.reduce((sum, prevout) => sum + prevout.sats, 0n);
+    let outputs = 0n;
+    let changeSats = 0n;
+    for (let index = 0; index < tx.outputsLength; index += 1) {
+      const output = tx.getOutput(index);
+      outputs += output.amount as bigint;
+      if (sameScript(output.script as Uint8Array, rule.own)) changeSats += output.amount as bigint;
+    }
+    return { prevouts, feeSats: inputs - outputs, changeSats, spentSats: inputs - changeSats };
+  };
+}
+
+type Job = { id: string; kind: string; payload: { transaction: string; previous: string[] } };
+
+function signer(queue: SignerQueue, jobs: Job[], refuse: () => boolean): () => void {
+  let stopped = false;
+  void (async () => {
+    while (!stopped) {
+      const response = await fetch(`${queue.url}/signer/v1/jobs?wait=1`, { headers: { authorization: `Bearer ${TOKEN}` } }).catch(() => null);
+      if (!response || response.status !== 200) continue;
+      const job = (await response.json()) as Job;
+      jobs.push(job);
+      const tx = Transaction.fromRaw(bytesOf(job.payload.transaction), RAW_TX_OPTIONS);
+      job.payload.previous.forEach((raw, index) => {
+        const output = Transaction.fromRaw(bytesOf(raw), RAW_TX_OPTIONS).getOutput(tx.getInput(index).index as number);
+        tx.updateInput(index, { witnessUtxo: { script: output.script as Uint8Array, amount: output.amount as bigint } });
+      });
+      tx.sign(KEY);
+      tx.finalize();
+      const answer = refuse() ? { decision: "refused", reasons: ["bitcoin: output 0 pays someone, which is not an allowed destination"] } : { decision: "signed", result: { signedTransaction: hex(tx.extract()) } };
+      await fetch(`${queue.url}/signer/v1/jobs/${job.id}/result`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" }, body: JSON.stringify(answer) }).catch(() => null);
+    }
+  })();
+  return () => {
+    stopped = true;
+  };
+}
+
+type Harness = { send: ReturnType<typeof localSender>; world: World; jobs: Job[]; calls: Call[]; refuse: { next: boolean } };
+
+async function withBitcoin(env: Record<string, string>, coins: bigint[], run: (harness: Harness) => Promise<void>, realPolicy = false): Promise<void> {
+  const prices = createServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify(request.url?.includes("ids=bitcoin") ? { bitcoin: { usd: 100_000 } } : { ethereum: { usd: 3000 } }));
+  });
+  await new Promise<void>((resolve) => prices.listen(0, "127.0.0.1", resolve));
+  const priceUrl = `http://127.0.0.1:${(prices.address() as AddressInfo).port}`;
+  const queue = await startSignerQueue({ token: TOKEN, port: 0, answerTimeoutMs: 5_000 });
+  const jobs: Job[] = [];
+  const calls: Call[] = [];
+  const refuse = { next: false };
+  const stop = signer(queue, jobs, () => refuse.next);
+  try {
+    const state = world(coins);
+    const base = { BITCOIN_NETWORK: "regtest", BITCOIN_ESPLORA_URL: "http://127.0.0.1:1", BITCOIN_WITHDRAW_ADDRESSES: OWNER, OWNER_WITHDRAW_ADDRESSES: EVM_DEST, COINGECKO_API_BASE: priceUrl, DEXSCREENER_API_BASE: priceUrl, MAX_USD_PER_TRADE: "10", DAILY_USD_CAP: "10" };
+    const setup = { evmAddress: EVM, solanaAddress: "So11111111111111111111111111111111111111112", bitcoinPublicKey: hex(secp256k1.getPublicKey(KEY, true)), token: TOKEN, port: 0, answerTimeoutMs: 5_000 };
+    const send = localSender({ ...base, ...env }, queue, setup, realPolicy ? { bitcoinIndexer: state.indexer } : { bitcoinIndexer: state.indexer, bitcoinPolicy: fakePolicy(calls) });
+    await run({ send, world: state, jobs, calls, refuse });
+  } finally {
+    stop();
+    await queue.close();
+    prices.closeAllConnections();
+    await new Promise((resolve) => prices.close(resolve));
+  }
+}
+
+const btc = (key: string, sats: string, to = OWNER, mode: "dry_run" | "live" = "live") => ({ kind: "send_bitcoin" as const, idempotencyKey: key, to, sats, mode });
+const eth = (key: string) => ({ kind: "transfer" as const, idempotencyKey: key, mode: "live" as const, asset: { chain: { kind: "evm" as const, chainId: 8453 }, chainKey: "base", address: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", symbol: "ETH", decimals: 18 }, to: EVM_DEST, amount: "1500000000000000" });
+
+test("with WHALE_BROADCAST off a live send is signed by whale-signer, verified, and held with its txid", () =>
+  withBitcoin({}, [100_000n], async ({ send, world, jobs, calls }) => {
+    const result = await send(btc("hold", "6000"));
+    assert.equal(result.status, "signed", JSON.stringify(result));
+    assert.match(result.reason, /WHALE_BROADCAST is off/);
+    assert.deepEqual(world.broadcasts, []);
+    assert.deepEqual(world.simulated, [], "a held transaction is not handed to the indexer");
+    assert.equal(jobs.length, 1);
+    assert.equal(calls.length, 1, "the app policy runs exactly once");
+    assert.deepEqual(calls[0], { unsigned: jobs[0]?.payload.transaction, previous: jobs[0]?.payload.previous }, "the policy saw the exact bytes the signer got");
+    assert.equal(result.txid, transactionId(bytesOf(result.signedTransaction as string)));
+    assert.equal(result.plan?.spentSats, String(6000n + BigInt(result.plan?.feeSats ?? "0")));
+  }));
+
+test("a destination outside BITCOIN_WITHDRAW_ADDRESSES is refused before any signer job", () =>
+  withBitcoin({}, [100_000n], async ({ send, jobs, calls }) => {
+    const result = await send(btc("stranger", "6000", STRANGER));
+    assert.deepEqual([result.status, result.reason], ["skipped", "destination is not in BITCOIN_WITHDRAW_ADDRESSES"]);
+    assert.equal((await send(btc("mainnet", "6000", "bc1qjafqmk43zp2y0kg4jlr55u3dnqxxzrqlrx6k7q"))).reason, "bc1qjafqmk43zp2y0kg4jlr55u3dnqxxzrqlrx6k7q is not a regtest bitcoin address");
+    assert.deepEqual([jobs.length, calls.length], [0, 0]);
+  }));
+
+test("a fee rate above BITCOIN_MAX_FEE_RATE is refused, not clamped", () =>
+  withBitcoin({ BITCOIN_MAX_FEE_RATE: "50" }, [100_000n], async ({ send, world, jobs }) => {
+    world.feeRate = 51;
+    const result = await send(btc("spike", "6000"));
+    assert.deepEqual([result.status, result.reason], ["skipped", "the fee market is at 51 sat/vB, above BITCOIN_MAX_FEE_RATE 50"]);
+    assert.equal(jobs.length, 0);
+  }));
+
+test("a dry run plans the send and signs nothing, and its key stays free for the live send", () =>
+  withBitcoin({}, [100_000n], async ({ send, jobs }) => {
+    const planned = await send(btc("same", "6000", OWNER, "dry_run"));
+    assert.equal(planned.status, "planned");
+    assert.equal(jobs.length, 0);
+    assert.equal((await send(btc("same", "6000"))).status, "signed");
+  }));
+
+test("a send above MAX_USD_PER_TRADE is refused before signing", () =>
+  withBitcoin({}, [100_000n], async ({ send, jobs }) => {
+    const result = await send(btc("big", "20000"));
+    assert.deepEqual([result.status, result.reason], ["skipped", "notional exceeds 10 USD"]);
+    assert.equal(jobs.length, 0);
+  }));
+
+test("a held send keeps its USD reservation because its signed transaction can still be sent, and a refused one gives it back", () =>
+  withBitcoin({}, [100_000n], async ({ send, refuse }) => {
+    refuse.next = true;
+    await assert.rejects(send(btc("r1", "6000")), /whale-signer refused/);
+    refuse.next = false;
+    assert.equal((await send(btc("h1", "6000"))).status, "signed", "a refused send spent nothing");
+    assert.equal((await send(btc("h2", "6000"))).reason, "daily cap 10 USD", "a held send counts against the cap");
+  }).then(() =>
+    withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
+      const sent = await send(btc("b1", "6000"));
+      assert.equal(sent.status, "sent", JSON.stringify(sent));
+      assert.equal(world.broadcasts.length, 1);
+      assert.equal((await send(btc("b2", "6000"))).reason, "daily cap 10 USD");
+    }),
+  ));
+
+test("a broadcast the node refused releases the reservation, and one that may have gone out keeps it", () =>
+  withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
+    world.broadcastError = new BroadcastRefused("esplora refused the transaction: bad-txns");
+    await assert.rejects(send(btc("refused", "6000")), /bad-txns/);
+    world.broadcastError = new Error("esplora broadcast failed 502");
+    await assert.rejects(send(btc("lost", "6000")), /502/);
+    world.broadcastError = null;
+    assert.equal((await send(btc("after", "6000"))).reason, "daily cap 10 USD");
+  }));
+
+test("a live send is simulated before broadcast, and one the mempool would refuse is never sent and gives its reservation back", () =>
+  withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
+    world.simulateError = new Error("simulation rejected the transaction: min relay fee not met");
+    await assert.rejects(send(btc("unsimulated", "6000")), /min relay fee not met/);
+    assert.equal(world.simulated.length, 1);
+    assert.deepEqual(world.broadcasts, []);
+    world.simulateError = new Error("esplora could not simulate the transaction: txs/test answered 404");
+    await assert.rejects(send(btc("no-route", "6000")), /txs\/test answered 404/);
+    assert.deepEqual(world.broadcasts, []);
+    world.simulateError = null;
+    const sent = await send(btc("simulated", "6000"));
+    assert.equal(sent.status, "sent", JSON.stringify(sent));
+    assert.deepEqual(world.broadcasts, [world.simulated.at(-1)], "the broadcast bytes are the simulated bytes");
+  }));
+
+test("a broadcast that may have gone out is committed in Postgres, so reconciliation cannot release it", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await admin.connect();
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const databaseUrl = `${process.env.TEST_DATABASE_URL}?options=${encodeURIComponent(`-c search_path=${schema}`)}`;
+  try {
+    await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl }, [100_000n], async ({ send, world }) => {
+      world.broadcastError = new Error("esplora broadcast failed 502");
+      await assert.rejects(send(btc("lost", "6000")), /502/);
+      const row = await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["lost"]);
+      assert.equal(row.rows[0]?.status, "committed");
+    });
+  } finally {
+    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  }
+});
+
+test("BTC and other local sends share one daily USD cap", () =>
+  withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send }) => {
+    assert.equal((await send(btc("btc-first", "6000"))).status, "sent");
+    const transfer = await send(eth("eth-after"));
+    assert.deepEqual([transfer.status, transfer.reason], ["skipped", "daily cap 10 USD"]);
+  }));
+
+test("the real app policy accepts the plan the sender builds, across several inputs with change", () =>
+  withBitcoin({}, [4_000n, 3_000n, 2_500n], async ({ send, jobs }) => {
+    const result = await send(btc("real-policy", "8000"));
+    assert.equal(result.status, "signed", JSON.stringify(result));
+    assert.equal(result.plan?.inputs, 3);
+    assert.equal(jobs[0]?.payload.previous.length, 3);
+  }, true));
