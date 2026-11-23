@@ -27930,7 +27930,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "execute.ts:146 · commands.ts:131",
+                          "content": "execute.ts:147 · commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58531,7 +58531,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "execute.ts:146 · commands.ts:131",
+                          "content": "execute.ts:147 · commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -64768,7 +64768,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "execute.ts:146 · commands.ts:131",
+                              "content": "execute.ts:147 · commands.ts:131",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
