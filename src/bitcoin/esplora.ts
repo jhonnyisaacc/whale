@@ -11,6 +11,7 @@ export type BitcoinIndexer = {
   transaction(txid: string): Promise<Uint8Array>;
   feeRate(): Promise<number>;
   balance(address: string): Promise<AddressBalance>;
+  simulate(signed: Uint8Array): Promise<void>;
   broadcast(signed: Uint8Array): Promise<string>;
 };
 
@@ -29,6 +30,7 @@ const stats = z.object({ funded_txo_sum: sats, spent_txo_sum: sats }).loose();
 export const addressInfo = z.object({ chain_stats: stats, mempool_stats: stats }).loose();
 export const feeEstimates = z.record(z.string(), z.number().positive().finite());
 export const txHex = z.string().trim().regex(/^(?:[0-9a-f]{2})+$/).min(120).max(800_000);
+export const mempoolTest = z.tuple([z.object({ txid, allowed: z.boolean(), "reject-reason": z.string().nullish() }).loose()]);
 
 export function transactionId(raw: Uint8Array): string {
   return Transaction.fromRaw(raw, RAW_TX_OPTIONS).id;
@@ -49,6 +51,12 @@ export function parseFeeRate(body: unknown): number {
   const rate = feeEstimates.parse(body)["3"];
   if (rate === undefined) throw new Error("esplora has no 3-block fee estimate");
   return Math.max(1, Math.ceil(rate));
+}
+
+export function parseMempoolTest(body: unknown, expected: string): void {
+  const [result] = mempoolTest.parse(body);
+  if (result.txid !== expected) throw new Error(`esplora tested txid ${result.txid} for transaction ${expected}`);
+  if (!result.allowed) throw new Error(`simulation rejected the transaction: ${(result["reject-reason"] ?? "no reason given").slice(0, 200)}`);
 }
 
 export function parseTransaction(body: string, expected: string): Uint8Array {
@@ -75,6 +83,11 @@ export function esploraIndexer(baseUrl: string, fetchImpl: typeof fetch = fetch)
     transaction: async (id) => parseTransaction(await read(`/tx/${txid.parse(id)}/hex`), id),
     feeRate: async () => parseFeeRate(await json("/fee-estimates")),
     balance: async (address) => parseBalance(await json(`/address/${encodeURIComponent(address)}`)),
+    async simulate(signed) {
+      const response = await request("/txs/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify([Buffer.from(signed).toString("hex")]) });
+      if (!response.ok) throw new Error(`esplora could not simulate the transaction: txs/test answered ${response.status}`);
+      parseMempoolTest(JSON.parse(response.text), transactionId(signed));
+    },
     async broadcast(signed) {
       const expected = transactionId(signed);
       const response = await request("/tx", { method: "POST", headers: { "content-type": "text/plain" }, body: Buffer.from(signed).toString("hex") });

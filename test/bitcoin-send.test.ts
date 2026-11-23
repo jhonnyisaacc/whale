@@ -28,19 +28,25 @@ function funding(sats: bigint, seed: number): Uint8Array {
   return RawTx.encode({ version: 2, segwitFlag: false, inputs: [input], outputs: [{ amount: sats, script: OWN.script }], witnesses: [], lockTime: 0 });
 }
 
-type World = { indexer: BitcoinIndexer; broadcasts: string[]; feeRate: number; broadcastError: Error | null };
+type World = { indexer: BitcoinIndexer; simulated: string[]; broadcasts: string[]; feeRate: number; simulateError: Error | null; broadcastError: Error | null };
 
 function world(coins: bigint[]): World {
   const previous = new Map(coins.map((sats, index) => [transactionId(funding(sats, index + 1)), funding(sats, index + 1)]));
   const state: World = {
     feeRate: 2,
+    simulated: [],
     broadcasts: [],
+    simulateError: null,
     broadcastError: null,
     indexer: {
       utxos: async (address) => (address === OWN.address ? [...previous].map(([txid], index): Utxo => ({ txid, vout: 0, sats: coins[index] as bigint, confirmed: true })) : []),
       transaction: async (txid) => previous.get(txid) as Uint8Array,
       feeRate: async () => state.feeRate,
       balance: async () => ({ confirmedSats: 0n, pendingSats: 0n }),
+      simulate: async (signed) => {
+        state.simulated.push(hex(signed));
+        if (state.simulateError) throw state.simulateError;
+      },
       broadcast: async (signed) => {
         if (state.broadcastError) throw state.broadcastError;
         state.broadcasts.push(hex(signed));
@@ -133,6 +139,7 @@ test("with WHALE_BROADCAST off a live send is signed by whale-signer, verified, 
     assert.equal(result.status, "signed", JSON.stringify(result));
     assert.match(result.reason, /WHALE_BROADCAST is off/);
     assert.deepEqual(world.broadcasts, []);
+    assert.deepEqual(world.simulated, [], "a held transaction is not handed to the indexer");
     assert.equal(jobs.length, 1);
     assert.equal(calls.length, 1, "the app policy runs exactly once");
     assert.deepEqual(calls[0], { unsigned: jobs[0]?.payload.transaction, previous: jobs[0]?.payload.previous }, "the policy saw the exact bytes the signer got");
@@ -195,6 +202,21 @@ test("a broadcast the node refused releases the reservation, and one that may ha
     await assert.rejects(send(btc("lost", "6000")), /502/);
     world.broadcastError = null;
     assert.equal((await send(btc("after", "6000"))).reason, "daily cap 10 USD");
+  }));
+
+test("a live send is simulated before broadcast, and one the mempool would refuse is never sent and gives its reservation back", () =>
+  withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
+    world.simulateError = new Error("simulation rejected the transaction: min relay fee not met");
+    await assert.rejects(send(btc("unsimulated", "6000")), /min relay fee not met/);
+    assert.equal(world.simulated.length, 1);
+    assert.deepEqual(world.broadcasts, []);
+    world.simulateError = new Error("esplora could not simulate the transaction: txs/test answered 404");
+    await assert.rejects(send(btc("no-route", "6000")), /txs\/test answered 404/);
+    assert.deepEqual(world.broadcasts, []);
+    world.simulateError = null;
+    const sent = await send(btc("simulated", "6000"));
+    assert.equal(sent.status, "sent", JSON.stringify(sent));
+    assert.deepEqual(world.broadcasts, [world.simulated.at(-1)], "the broadcast bytes are the simulated bytes");
   }));
 
 test("a broadcast that may have gone out is committed in Postgres, so reconciliation cannot release it", { skip: !process.env.TEST_DATABASE_URL }, async () => {

@@ -58,6 +58,10 @@ function bitcoindIndexer() {
       return typeof estimate.feerate === "number" ? Math.max(1, Math.ceil(estimate.feerate * 1e5)) : 2;
     },
     balance: async (address) => ({ confirmedSats: satsOf((await scan(address)).total_amount), pendingSats: 0n }),
+    async simulate(signed) {
+      const [accepted] = await rpc("testmempoolaccept", [[Buffer.from(signed).toString("hex")]]);
+      if (accepted?.allowed !== true) throw new Error(`simulation rejected the transaction: ${accepted?.["reject-reason"] ?? "no answer"}`);
+    },
     broadcast: async (signed) => rpc("sendrawtransaction", [Buffer.from(signed).toString("hex")]),
   };
 }

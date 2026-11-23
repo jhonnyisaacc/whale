@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { bitcoinBalance } from "../src/bitcoin/read.js";
-import { BroadcastRefused, esploraIndexer, parseBalance, parseFeeRate, parseUtxos, transactionId } from "../src/bitcoin/esplora.js";
+import { BroadcastRefused, esploraIndexer, parseBalance, parseFeeRate, parseMempoolTest, parseUtxos, transactionId } from "../src/bitcoin/esplora.js";
 
 const fixture = (name: string) => readFileSync(new URL(`../../test/fixtures/bitcoin/${name}`, import.meta.url), "utf8");
 const TX_ID = "65c907744b0852012403a4096688d2d2ac7c063d4dca8d8e3ece4b8e8a9c8539";
@@ -69,6 +69,20 @@ test("broadcast posts the hex and accepts only the transaction's own txid back",
   await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { body: PREV_ID } })).broadcast(signed), /answered txid 711b/);
   await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 400, body: "bad-txns-inputs-missingorspent" } })).broadcast(signed), (error: unknown) => error instanceof BroadcastRefused && /missingorspent/.test(error.message));
   await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 502, body: "" } })).broadcast(signed), (error: unknown) => !(error instanceof BroadcastRefused));
+});
+
+test("simulate posts the hex to txs/test and passes only an allowed answer for the same txid", async () => {
+  const signed = new Uint8Array(Buffer.from(fixture("tx.hex").trim(), "hex"));
+  const answer = (row: Record<string, unknown>) => ({ "POST /api/txs/test": { body: JSON.stringify([{ txid: TX_ID, wtxid: TX_ID, ...row }]) } });
+  const calls: string[] = [];
+  await esploraIndexer("https://esplora.test/api", fakeEsplora(answer({ allowed: true, vsize: 141, fees: { base: 0.00000282 } }), calls)).simulate(signed);
+  assert.deepEqual(calls, [`POST /api/txs/test ${JSON.stringify([fixture("tx.hex").trim()])}`]);
+  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora(answer({ allowed: false, vsize: null, fees: null, "reject-reason": "missing-inputs" }))).simulate(signed), /simulation rejected the transaction: missing-inputs/);
+  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({})).simulate(signed), /txs\/test answered 404/, "an Esplora without testmempoolaccept stops the send");
+  assert.throws(() => parseMempoolTest([{ txid: PREV_ID, allowed: true }], TX_ID), /tested txid 711b/);
+  assert.throws(() => parseMempoolTest([], TX_ID));
+  assert.throws(() => parseMempoolTest([{ txid: TX_ID, allowed: true }, { txid: TX_ID, allowed: true }], TX_ID));
+  assert.throws(() => parseMempoolTest([{ txid: TX_ID, allowed: "true" }], TX_ID));
 });
 
 test("a bitcoin balance reads confirmed sats as BTC and names pending sats, and refuses another network's address", async () => {

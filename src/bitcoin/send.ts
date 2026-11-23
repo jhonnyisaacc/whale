@@ -91,6 +91,10 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
     await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
     return { kind: "send_bitcoin", status: "signed", reason: HELD, jobs, plan, txid, signedTransaction: hex(signed) };
   }
+  await indexer.simulate(signed).catch(async (error: unknown) => {
+    await release();
+    throw error;
+  });
   await indexer.broadcast(signed).catch(async (error: unknown) => {
     if (error instanceof BroadcastRefused) await release();
     else await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
