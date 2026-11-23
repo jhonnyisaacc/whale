@@ -8,7 +8,7 @@ export type { ExecutorInstance } from "./executor-server.js";
 export { buildPairMap } from "./pairs.js";
 export { run } from "./commands.js";
 export type { Asset, CommandDeps, WalletCommand, WalletResult } from "./commands.js";
-export { pickRoute, planRoutes, combineHopImpact } from "./routing.js";
+export { hasKnownImpact, pickRoute, planRoutes, combineHopImpact } from "./routing.js";
 export { checkLimits } from "./limits.js";
 export { redactError, redactText, Secret } from "./redact.js";
 export { buildOrder, buildLeverage, assertTradableAction, floatToWire } from "./hyperliquid.js";
