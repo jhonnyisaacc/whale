@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
 import type pg from "pg";
+import { audit } from "../src/gateway/accounts.js";
 import { createAgent } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
 import type { ExecutorClient } from "../src/gateway/executor-client.js";
@@ -138,6 +139,34 @@ test("hosted tools stay inside the agent's limits and the wallet policy before r
     await pool.query("UPDATE agents SET revoked_at = now() WHERE id = $1", [agentId]);
     assert.equal((await rpc({ jsonrpc: "2.0", id: 9, method: "tools/list" })).statusCode, 401);
     void app;
+  } finally {
+    await drop();
+  }
+});
+
+test("GET /api/activity filters by agent and by status inside the signed-in account", { skip: !TEST_DATABASE_URL }, async () => {
+  const { app, pool, user, call, agentId, accountId, drop } = await harness();
+  try {
+    assert.equal((await call("quote", { chain: "arbitrum", sellToken: USDC, buyToken: WETH, sellAmount: "1" })).isError, true);
+    assert.equal((await call("swap", { chain: "base", sellToken: USDC, buyToken: WETH, sellAmount: "1000000", idempotencyKey: "swap-0001" })).isError, false);
+    const walletId = (await pool.query("SELECT wallet_id FROM agents WHERE id = $1", [agentId])).rows[0].wallet_id;
+    const other = await createAgent(pool, { accountId, walletId, name: "other", limits: { chains: ["base"], actions: ["transfer"], maxTxUsd: 20, dailyUsd: 40 } });
+    if ("refused" in other) throw new Error(other.refused);
+    await audit(pool, { accountId, walletId, agentId: other.agentId, actor: "agent", action: "mcp.transfer_planned", detail: {} });
+
+    type Row = { agentId: string | null; action: string; status: string | null };
+    const events = async (query: string): Promise<Row[]> => (await app.inject({ method: "GET", url: `/api/activity${query}`, headers: user.headers })).json().events;
+    const summary = (rows: Row[]) => rows.map((row) => `${row.agentId === agentId ? "bot" : row.agentId === other.agentId ? "other" : row.agentId}:${row.action}:${row.status}`);
+
+    assert.deepEqual(summary(await events(`?agentId=${agentId}`)), [`bot:mcp.swap_planned:planned`, `bot:mcp.denied:refused`, `bot:agent.created:null`]);
+    assert.deepEqual(summary(await events("?status=planned")), ["other:mcp.transfer_planned:planned", "bot:mcp.swap_planned:planned"]);
+    assert.deepEqual(summary(await events(`?agentId=${other.agentId}&status=planned`)), ["other:mcp.transfer_planned:planned"]);
+    assert.deepEqual(summary(await events(`?agentId=${other.agentId}&status=refused`)), []);
+    for (const query of ["?status=sent", "?agentId=bot", `?agentId=${agentId}&status=`]) {
+      assert.equal((await app.inject({ method: "GET", url: `/api/activity${query}`, headers: user.headers })).statusCode, 400, query);
+    }
+    const stranger = await signedInAccount(pool);
+    assert.deepEqual((await app.inject({ method: "GET", url: `/api/activity?agentId=${agentId}`, headers: stranger.headers })).json().events, []);
   } finally {
     await drop();
   }
