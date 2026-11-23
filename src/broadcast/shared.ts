@@ -1,22 +1,17 @@
-import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction, type Connection } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction, type Connection } from "@solana/web3.js";
 import bs58 from "bs58";
-import { BaseError, MethodNotFoundRpcError, MethodNotSupportedRpcError, TransactionNotFoundError, TransactionReceiptNotFoundError, createPublicClient, defineChain, encodeFunctionData, erc20Abi, keccak256, parseUnits, toHex, type Hex } from "viem";
+import { BaseError, MethodNotFoundRpcError, MethodNotSupportedRpcError, TransactionNotFoundError, TransactionReceiptNotFoundError, createPublicClient, defineChain, erc20Abi, toHex, type Hex } from "viem";
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
-import type { Fill, RaceQuote, RouteLeg, SendResult, TxOutcome, TxRecord } from "../domain.js";
+import type { RaceQuote, RouteLeg, SendResult, TxRecord } from "../domain.js";
 import { chainByEvmId, chainByKey } from "../chains.js";
 import { allowanceCovers, rememberApproval } from "../approvals.js";
-import { firmJupiter, firmKyber, firmLifi, firmZeroEx, jupiterQuote, jupiterSwap, kyberFromRoute } from "../aggregators.js";
-import { BroadcastError, type SendRequest } from "../executor.js";
-import { nextHyperliquidNonce, readExchangeResponse } from "../hyperliquid.js";
+import { BroadcastError } from "../executor.js";
 import type { EvmSignInput, TransactionSigner } from "../managed-signer.js";
-import { evmNonces, isNonceRejection, type NonceManager } from "../nonce.js";
-import { readLifi, readZeroEx } from "../quotes.js";
+import { evmNonces, type NonceManager } from "../nonce.js";
 import { redactError } from "../redact.js";
 import { anyOk, firstOk, readTransport, solanaConnection } from "../rpc.js";
-import { sellBaseUnits } from "../routing.js";
-import { isSolanaAddress } from "../signer.js";
-import { JUPITER_PROGRAM_ID, WSOL_MINT } from "../signing-policy.js";
+import { WSOL_MINT } from "../signing-policy.js";
 
 export const NATIVE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 export const NATIVE_SELL = new Set([NATIVE_ADDRESS, "0x0000000000000000000000000000000000000000"]);
