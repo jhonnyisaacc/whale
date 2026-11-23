@@ -1,5 +1,6 @@
 import { decodeFunctionData, encodeFunctionData, parseAbi, type Hex } from "viem";
 import type { SendResult } from "../src/domain.js";
+import type { HyperMarketOf } from "../src/executor/hypercore-market.js";
 import { LIFI_ABI } from "../src/signing-policy/swap-terms.js";
 import { LIFI_STEP_TARGETS } from "../src/signing-policy/lifi-steps.js";
 
@@ -11,6 +12,10 @@ export function landedSend(): SendResult {
     held: null,
     shortfall: false,
   };
+}
+
+export function hyperMarketAt(assetIndex: number, szDecimals = 2, coin = "TKN"): HyperMarketOf {
+  return async ({ market }) => ({ coin, market, assetIndex, szDecimals, maxLeverage: 5, midKey: coin });
 }
 
 const ZERO = "0x0000000000000000000000000000000000000000";

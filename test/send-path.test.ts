@@ -16,7 +16,7 @@ import { buildPairMap } from "../src/pairs.js";
 import { screenToken } from "../src/screening.js";
 import { reconcileDecision } from "../src/spend.js";
 import { WSOL_MINT } from "../src/signing-policy.js";
-import { tagOf, zeroExData } from "./fixtures.js";
+import { hyperMarketAt, tagOf, zeroExData } from "./fixtures.js";
 
 const USDC = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const WETH = "0xcccccccccccccccccccccccccccccccccccccccc";
@@ -555,7 +555,7 @@ test("hyperliquid sizes 100/3.7 and 250/0.01234 produce valid wire values", () =
 function hyperIntent(key: string): SwapIntent {
   return {
     ...evmIntent(key),
-    token: { ...evmIntent(key).token, pairMap: buildPairMap([{ ...evmIntent(key).token.pairMap.pools[0], liquidityUsd: 100 }]) },
+    token: { symbol: "TKN", address: "TKN", decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } },
     hyperliquid: { coin: "TKN", assetIndex: 4, market: "perp", maxLeverage: 5 },
   };
 }
@@ -580,7 +580,7 @@ test("hyperliquid replies decide commit or release", async () => {
       config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
       markPrice: async () => 1,
       liquidityOf: async () => 100,
-      szDecimals: async () => 2,
+      hyperMarket: hyperMarketAt(4),
     };
     const report = await execute(hyperIntent(key), deps);
     return { report, spend: spend.get(key), seen };
@@ -607,12 +607,16 @@ test("a hyperliquid spot buy sends only the order, with no leverage action", asy
   const filled = { status: "ok", response: { type: "order", data: { statuses: [{ filled: { totalSz: "5", avgPx: "1.001", oid: 9 } }] } } };
   const deps: ExecutorDeps = {
     ...liveDeps((request, onTx) => broadcastRoute(hyperConfig, evmSigner([]), request, 1, exchange(filled, seen), [], { onTx }), new Map(), [], false),
-    config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
+    config: { ...hyperConfig, enabledChainKeys: new Set(["hyperevm", "hypercore"]) },
     markPrice: async () => 1,
     liquidityOf: async () => 100,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(10_004),
   };
-  const spot = { ...hyperIntent("hl-spot"), hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot" as const, maxLeverage: 1 } };
+  const spot: SwapIntent = {
+    ...hyperIntent("hl-spot"),
+    token: { ...evmIntent("hl-spot").token, chain: { kind: "evm", chainId: 999 }, chainKey: "hyperevm", pairMap: { pools: [], top: null } },
+    hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot", maxLeverage: 1 },
+  };
   const report = await execute(spot, deps);
   assert.equal(report.decision, "sent");
   assert.deepEqual(
@@ -669,12 +673,12 @@ test("a hyperliquid sizing failure is skipped, not thrown", async () => {
   const report = await execute(hyperIntent("hl-size"), {
     ...liveDeps(async () => assert.fail("must not send"), new Map(), [], false),
     config: { ...evmConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
-    markPrice: async () => 1,
+    markPrice: async () => 1_000_000_000,
     liquidityOf: async () => 100,
-    szDecimals: async () => null,
+    hyperMarket: hyperMarketAt(4, 0),
   });
   assert.equal(report.decision, "skipped");
-  assert.match(report.reason, /szDecimals/);
+  assert.match(report.reason, /rounds to zero/);
 });
 
 test("live screening denies a token whose tax fields are missing", async () => {

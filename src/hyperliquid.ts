@@ -276,44 +276,6 @@ export function nextHyperliquidNonce(now = Date.now()): number {
   return lastNonce;
 }
 
-const szCache = new Map<string, number>();
-
-export function resetSzDecimals(): void {
-  szCache.clear();
-}
-
-export async function fetchSzDecimals(url: string, market: { market: "perp" | "spot"; assetIndex: number }, fetchImpl: typeof fetch = fetch): Promise<number | null> {
-  const key = `${url}|${market.market}|${market.assetIndex}`;
-  const cached = szCache.get(key);
-  if (cached !== undefined) return cached;
-  type Meta = {
-    universe?: Array<{ szDecimals?: number; tokens?: number[]; index?: number }>;
-    tokens?: Array<{ szDecimals?: number; index?: number }>;
-  };
-  const body = await withTimeout(1500, async (signal) => {
-    const response = await vendorResponse(fetchImpl, `${url.replace(/\/$/, "")}/info`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: market.market === "spot" ? "spotMeta" : "meta" }),
-      signal,
-    });
-    return response.ok ? (JSON.parse(await readVendorText(response)) as Meta) : null;
-  });
-  if (!body) return null;
-  let value: number | undefined;
-  if (market.market === "perp") {
-    value = body.universe?.[market.assetIndex]?.szDecimals;
-  } else {
-    const spotIndex = market.assetIndex >= 10_000 ? market.assetIndex - 10_000 : market.assetIndex;
-    const pair = body.universe?.find((row) => row.index === spotIndex);
-    const base = pair?.tokens?.[0];
-    value = body.tokens?.find((token) => token.index === base)?.szDecimals;
-  }
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return null;
-  szCache.set(key, value);
-  return value;
-}
-
 export type ExchangeOutcome =
   | { status: "err"; error: string }
   | { status: "ok"; statuses: Array<{ filled?: { totalSz: string; avgPx: string }; error?: string; resting?: unknown }> };
