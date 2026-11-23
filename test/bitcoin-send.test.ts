@@ -96,7 +96,7 @@ function signer(queue: SignerQueue, jobs: Job[], refuse: () => boolean): () => v
 
 type Harness = { send: ReturnType<typeof localSender>; world: World; jobs: Job[]; calls: Call[]; refuse: { next: boolean } };
 
-async function withBitcoin(env: Record<string, string>, coins: bigint[], run: (harness: Harness) => Promise<void>): Promise<void> {
+async function withBitcoin(env: Record<string, string>, coins: bigint[], run: (harness: Harness) => Promise<void>, realPolicy = false): Promise<void> {
   const prices = createServer((request, response) => {
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify(request.url?.includes("ids=bitcoin") ? { bitcoin: { usd: 100_000 } } : { ethereum: { usd: 3000 } }));
@@ -112,7 +112,7 @@ async function withBitcoin(env: Record<string, string>, coins: bigint[], run: (h
     const state = world(coins);
     const base = { BITCOIN_NETWORK: "regtest", BITCOIN_ESPLORA_URL: "http://127.0.0.1:1", BITCOIN_WITHDRAW_ADDRESSES: OWNER, OWNER_WITHDRAW_ADDRESSES: EVM_DEST, COINGECKO_API_BASE: priceUrl, DEXSCREENER_API_BASE: priceUrl, MAX_USD_PER_TRADE: "10", DAILY_USD_CAP: "10" };
     const setup = { evmAddress: EVM, solanaAddress: "So11111111111111111111111111111111111111112", bitcoinPublicKey: hex(secp256k1.getPublicKey(KEY, true)), token: TOKEN, port: 0, answerTimeoutMs: 5_000 };
-    const send = localSender({ ...base, ...env }, queue, setup, { bitcoinIndexer: state.indexer, bitcoinPolicy: fakePolicy(calls) });
+    const send = localSender({ ...base, ...env }, queue, setup, realPolicy ? { bitcoinIndexer: state.indexer } : { bitcoinIndexer: state.indexer, bitcoinPolicy: fakePolicy(calls) });
     await run({ send, world: state, jobs, calls, refuse });
   } finally {
     stop();
@@ -202,3 +202,11 @@ test("BTC and other local sends share one daily USD cap", () =>
     const transfer = await send(eth("eth-after"));
     assert.deepEqual([transfer.status, transfer.reason], ["skipped", "daily cap 10 USD"]);
   }));
+
+test("the real app policy accepts the plan the sender builds, across several inputs with change", () =>
+  withBitcoin({}, [4_000n, 3_000n, 2_500n], async ({ send, jobs }) => {
+    const result = await send(btc("real-policy", "8000"));
+    assert.equal(result.status, "signed", JSON.stringify(result));
+    assert.equal(result.plan?.inputs, 3);
+    assert.equal(jobs[0]?.payload.previous.length, 3);
+  }, true));
