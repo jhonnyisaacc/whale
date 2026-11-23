@@ -179,7 +179,7 @@ A send whose executor died after it was recorded as started stays `in_progress`.
 
 Deploy the executor and the gateway together, executor first, and set the executor's `DATABASE_URL` before either. Both mismatched pairs fail closed, but hosted swaps and transfers are refused until both are on this version. An older gateway sends no `issuedAt`, so this executor refuses each send with 400 and the gateway releases it. A gateway on this version sends `issuedAt`, which an older executor also refuses with 400, and cannot read an older executor's reports, so it keeps those unsettled reservations until that UTC day ends.
 
-`GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else. `walletId=<uuid>` and `agentId=<uuid>` narrow the list. `status=` takes `planned`, `refused`, `requested`, `approved`, or `denied` and keeps only the send events with that status. Each event carries its `status`, which is null for an event outside a send.
+`GET /api/activity` lists the account's audit events, newest first, 50 at a time with `before=<id>`. Refusals are listed with everything else. `walletId=<uuid>` and `agentId=<uuid>` narrow the list. `status=` takes `planned` (a swap or transfer plan), `refused` (the gateway refused an agent tool call, a quote included), `requested`, `approved`, or `denied` (approval requests and their answers). Each event carries its `status`, which is null for every other action, `mcp.send_settled` included.
 
 ### Webhooks and backup passkeys
 
