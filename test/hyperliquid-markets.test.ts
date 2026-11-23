@@ -61,6 +61,7 @@ function dryDeps(sends: string[], marks: string[], status = 200): ExecutorDeps {
       return fetchHyperliquidMid(HL, midKey, info);
     },
     hyperMarket: (query) => fetchHyperMarket(HL, query, info),
+    perpPosition: async () => ({ side: "flat" }),
     send: async () => {
       sends.push("send");
       return { venue: "hypercore", txs: [], fill: null };

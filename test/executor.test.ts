@@ -66,6 +66,7 @@ function deps(sends: string[]): ExecutorDeps {
     }),
     markPrice: async () => 1,
     hyperMarket: hyperMarketAt(4, 2, "MPLX"),
+    perpPosition: async () => ({ side: "flat" }),
     send: async (action) => {
       sends.push(action.kind);
       return landedSend();
@@ -99,7 +100,7 @@ test("a thin pool on another chain gets no hypercore fallback, and a hypercore t
   const report = await execute(hyper, deps(sends));
   assert.equal(report.venue, "hypercore");
   assert.equal(report.decision, "would_send");
-  assert.match(report.reason, /^hypercore MPLX asset 4 leverage 1/);
+  assert.match(report.reason, /^hypercore MPLX asset 4 leverage 1 isolated limit [\d.]+ actions updateLeverage,order$/);
   assert.equal(sends.length, 0);
 });
 

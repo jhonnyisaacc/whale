@@ -80,7 +80,7 @@
   },
   "hypercore": {
     "network": "testnet",
-    "maxLeverage": 1,
+    "maxLeverage": 3,
     "dailyLimits": {
       "hypercore:usdc": "50000000",
       "hypercore:spot:10107": "20000000",

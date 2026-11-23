@@ -141,6 +141,7 @@ export type SwapIntent = {
   side: "buy" | "sell";
   notionalUsd: number;
   slippageBps: number;
+  leverage?: number;
   token: {
     symbol: string;
     address: string;
