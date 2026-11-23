@@ -184,6 +184,93 @@ fn lifi_terms(head: &[u8], args: &[u8]) -> Option<SwapTerms> {
     })
 }
 
+pub struct BridgeTerms {
+    pub provider: &'static str,
+    pub destination_chain: u128,
+    pub recipient: [u8; 20],
+    pub refund: [u8; 20],
+    pub charge: ([u8; 20], u128),
+    pub input_token: [u8; 20],
+    pub output_token: [u8; 20],
+    pub min_output: u128,
+    pub output_multiplier: Option<u128>,
+    pub exclusive: bool,
+    pub destination_call: bool,
+}
+
+fn exclusive(args: &[u8], relayer: usize, period: usize) -> Option<bool> {
+    let named = word(args, relayer)?.iter().any(|byte| *byte != 0);
+    Some(named || uint(args, period)? != 0)
+}
+
+const BRIDGE_DATA: &str =
+    "(bytes32,string,string,address,address,address,uint256,uint256,bool,bool)";
+const ACROSS_V4_DATA: &str =
+    "(bytes32,bytes32,bytes32,bytes32,uint256,uint128,bytes32,uint32,uint32,uint32,bytes)";
+const SPOKE_POOL_DEPOSIT: &str = "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)";
+
+fn has_bytes(data: &[u8], at: usize, base: usize) -> Option<bool> {
+    Some(!bytes_at(data, offset(data, at, base)?)?.is_empty())
+}
+
+fn lifi_bridge(head: &[u8], args: &[u8]) -> Option<BridgeTerms> {
+    if head
+        != selector(&format!(
+            "startBridgeTokensViaAcrossV4({BRIDGE_DATA},{ACROSS_V4_DATA})"
+        ))
+    {
+        return None;
+    }
+    let bridge = offset(args, 0, 0)?;
+    let across = offset(args, 32, 0)?;
+    let sending = address(args, bridge + 4 * 32)?;
+    let recipient = address(args, bridge + 5 * 32)?;
+    let min_amount = uint(args, bridge + 6 * 32)?;
+    if address(args, across)? != recipient || address(args, across + 2 * 32)? != sending {
+        return None;
+    }
+    Some(BridgeTerms {
+        provider: "lifi",
+        destination_chain: uint(args, bridge + 7 * 32)?,
+        recipient,
+        refund: address(args, across + 32)?,
+        charge: (sending, min_amount),
+        input_token: sending,
+        output_token: address(args, across + 3 * 32)?,
+        min_output: uint(args, across + 4 * 32)?,
+        output_multiplier: Some(uint(args, across + 5 * 32)?),
+        exclusive: exclusive(args, across + 6 * 32, across + 9 * 32)?,
+        destination_call: boolean(args, bridge + 9 * 32)?
+            || has_bytes(args, across + 10 * 32, across)?,
+    })
+}
+
+fn across_deposit(head: &[u8], args: &[u8]) -> Option<BridgeTerms> {
+    if head != selector(SPOKE_POOL_DEPOSIT) {
+        return None;
+    }
+    let input_token = address(args, 2 * 32)?;
+    Some(BridgeTerms {
+        provider: "across",
+        destination_chain: uint(args, 6 * 32)?,
+        recipient: address(args, 32)?,
+        refund: address(args, 0)?,
+        charge: (input_token, uint(args, 4 * 32)?),
+        input_token,
+        output_token: address(args, 3 * 32)?,
+        min_output: uint(args, 5 * 32)?,
+        output_multiplier: None,
+        exclusive: exclusive(args, 7 * 32, 10 * 32)?,
+        destination_call: has_bytes(args, 11 * 32, 0)?,
+    })
+}
+
+pub fn bridge_terms(calldata: &[u8]) -> Option<BridgeTerms> {
+    let head = calldata.get(..4)?;
+    let args = &calldata[4..];
+    lifi_bridge(head, args).or_else(|| across_deposit(head, args))
+}
+
 pub fn swap_terms(calldata: &[u8]) -> Option<SwapTerms> {
     let head = calldata.get(..4)?;
     let args = &calldata[4..];

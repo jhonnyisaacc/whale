@@ -1,0 +1,92 @@
+[
+  {
+    "symbol": "USDC",
+    "chainId": 1,
+    "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDC",
+    "chainId": 10,
+    "address": "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDC",
+    "chainId": 137,
+    "address": "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDC",
+    "chainId": 8453,
+    "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDC",
+    "chainId": 42161,
+    "address": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDT",
+    "chainId": 1,
+    "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDT",
+    "chainId": 10,
+    "address": "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDT",
+    "chainId": 137,
+    "address": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDT",
+    "chainId": 8453,
+    "address": "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+    "decimals": 6
+  },
+  {
+    "symbol": "USDT",
+    "chainId": 42161,
+    "address": "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
+    "decimals": 6
+  },
+  {
+    "symbol": "WETH",
+    "chainId": 1,
+    "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "decimals": 18
+  },
+  {
+    "symbol": "WETH",
+    "chainId": 10,
+    "address": "0x4200000000000000000000000000000000000006",
+    "decimals": 18
+  },
+  {
+    "symbol": "WETH",
+    "chainId": 137,
+    "address": "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+    "decimals": 18
+  },
+  {
+    "symbol": "WETH",
+    "chainId": 8453,
+    "address": "0x4200000000000000000000000000000000000006",
+    "decimals": 18
+  },
+  {
+    "symbol": "WETH",
+    "chainId": 42161,
+    "address": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+    "decimals": 18
+  }
+]
