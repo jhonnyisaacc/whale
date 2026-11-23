@@ -18,7 +18,11 @@ export type WalletCommand =
   | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "live"; notionalUsd: number }
   | ({ kind: "bridge" } & BridgeRequest)
   | { kind: "balance"; chainKey: string; address: string }
-  | { kind: "transfer"; idempotencyKey: string; asset: Asset; to: string; amount: string; mode: "dry_run" | "live" };
+  | { kind: "transfer"; idempotencyKey: string; asset: Asset; to: string; amount: string; mode: "dry_run" | "live" }
+  | { kind: "send_bitcoin"; idempotencyKey: string; to: string; sats: string; mode: "dry_run" | "live" }
+  | { kind: "bitcoin_wallet" };
+
+export type BitcoinWalletView = { kind: "bitcoin_wallet"; status: "read"; network: string; address: string; confirmedSats: string; pendingSats: string; usd: number | null };
 
 export type WalletResult =
   | { kind: "quote"; status: "quoted"; quote: RouteQuote }
@@ -28,7 +32,10 @@ export type WalletResult =
   | { kind: "swap"; status: "skipped"; quote: null; reason: string }
   | { kind: "bridge"; plan: RebalancePlan; quotes: BridgeQuote[] }
   | { kind: "balance"; holdings: Holding[]; reason?: string }
-  | { kind: "transfer"; status: "would_send" | "skipped"; reason: string };
+  | { kind: "transfer"; status: "would_send" | "skipped"; reason: string }
+  | { kind: "send_bitcoin"; status: "skipped"; reason: string }
+  | BitcoinWalletView
+  | { kind: "bitcoin_wallet"; status: "skipped"; reason: string };
 
 export type CommandDeps = {
   quote?: (command: Extract<WalletCommand, { kind: "quote" }>) => Promise<RouteQuote | null>;
@@ -36,6 +43,7 @@ export type CommandDeps = {
   swapLimits?: { enabledChainKeys: ReadonlySet<string>; maxSlippageBps: number; executionReserveBps: number };
   bridge?: { policy: BridgePolicy; quotes: (route: BridgeRoute) => Promise<BridgeQuote[]> };
   readBalance?: (chainKey: string, address: string) => Promise<{ holdings: Holding[]; reason?: string }>;
+  readBitcoinWallet?: () => Promise<BitcoinWalletView | { kind: "bitcoin_wallet"; status: "skipped"; reason: string }>;
   now?: () => number;
 };
 
@@ -153,6 +161,8 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
     const holdings = read.holdings.filter((row) => row.chainKey === command.chainKey && addressKey(command.chainKey, row.address) === address);
     return read.reason ? { kind: "balance", holdings, reason: read.reason } : { kind: "balance", holdings };
   }
+  if (command.kind === "bitcoin_wallet") return deps.readBitcoinWallet ? deps.readBitcoinWallet() : { kind: "bitcoin_wallet", status: "skipped", reason: "set BITCOIN_NETWORK and WHALE_SIGNER_KEYSTORE to read the bitcoin wallet" };
+  if (command.kind === "send_bitcoin") return { kind: "send_bitcoin", status: "skipped", reason: "send_bitcoin needs whale-signer. set WHALE_SIGNER_KEYSTORE and BITCOIN_NETWORK and run whale-signer serve" };
   if (command.mode === "live") {
     return { kind: "transfer", status: "skipped", reason: "a live transfer needs whale-signer. set WHALE_SIGNER_KEYSTORE and run whale-signer serve" };
   }

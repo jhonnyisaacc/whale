@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { bitcoinBalance } from "../src/bitcoin/read.js";
 import { BroadcastRefused, esploraIndexer, parseBalance, parseFeeRate, parseUtxos, transactionId } from "../src/bitcoin/esplora.js";
 
 const fixture = (name: string) => readFileSync(new URL(`../../test/fixtures/bitcoin/${name}`, import.meta.url), "utf8");
@@ -68,4 +69,12 @@ test("broadcast posts the hex and accepts only the transaction's own txid back",
   await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { body: PREV_ID } })).broadcast(signed), /answered txid 711b/);
   await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 400, body: "bad-txns-inputs-missingorspent" } })).broadcast(signed), (error: unknown) => error instanceof BroadcastRefused && /missingorspent/.test(error.message));
   await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 502, body: "" } })).broadcast(signed), (error: unknown) => !(error instanceof BroadcastRefused));
+});
+
+test("a bitcoin balance reads confirmed sats as BTC and names pending sats, and refuses another network's address", async () => {
+  const indexer = esploraIndexer("https://esplora.test/api", fakeEsplora({ [`GET /api/address/${ADDRESS}`]: { body: JSON.stringify({ chain_stats: { funded_txo_sum: 150_000_000, spent_txo_sum: 0 }, mempool_stats: { funded_txo_sum: 2_000, spent_txo_sum: 0 } }) } }));
+  const read = await bitcoinBalance(indexer, ADDRESS, "bitcoin");
+  assert.deepEqual(read.holdings.map((row) => [row.symbol, row.amount, row.raw, row.chainKey, row.native]), [["BTC", 1.5, "150000000", "bitcoin", true]]);
+  assert.equal(read.reason, "2000 sats are unconfirmed");
+  assert.deepEqual(await bitcoinBalance(indexer, ADDRESS, "regtest"), { holdings: [], reason: `${ADDRESS} is not a regtest bitcoin address` });
 });

@@ -15,7 +15,28 @@ function deps(): McpDeps {
 test("tools/list names the wallet commands", async () => {
   const handle = createHandler(deps());
   const reply = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: { name: string }[] } };
-  assert.deepEqual(reply.result.tools.map((tool) => tool.name), ["wallet_status", "quote", "swap", "bridge", "balance", "transfer"]);
+  assert.deepEqual(reply.result.tools.map((tool) => tool.name), ["wallet_status", "quote", "swap", "bridge", "balance", "transfer", "bitcoin_wallet", "send_bitcoin"]);
+});
+
+test("send_bitcoin goes to whale-signer in both modes, and without it skips with the setup it needs", async () => {
+  const seen: unknown[] = [];
+  const call = async (localSend: McpDeps["localSend"], args: Record<string, unknown>) => {
+    const handle = createHandler({ ...deps(), ...(localSend ? { localSend } : {}) });
+    const reply = (await handle({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "send_bitcoin", arguments: args } })) as { result: { isError?: boolean; content: { text: string }[] } };
+    return reply.result;
+  };
+  const args = { idempotencyKey: "k", to: "bcrt1qowner", sats: "6000" };
+  const skipped = JSON.parse((await call(undefined, { ...args, mode: "live" })).content[0]?.text ?? "") as { status: string; reason: string };
+  assert.equal(skipped.status, "skipped");
+  assert.match(skipped.reason, /needs whale-signer/);
+  const fake: McpDeps["localSend"] = async (command) => {
+    seen.push(command);
+    return { kind: "send_bitcoin", status: "planned", reason: "dry-run: nothing was signed", jobs: [] };
+  };
+  await call(fake, args);
+  await call(fake, { ...args, mode: "live" });
+  assert.deepEqual(seen, [{ kind: "send_bitcoin", ...args, mode: "dry_run" }, { kind: "send_bitcoin", ...args, mode: "live" }]);
+  assert.equal((await call(fake, { ...args, sats: 6000 })).isError, true, "sats must be a string of satoshis");
 });
 
 test("initialize names the whale server", async () => {
