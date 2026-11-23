@@ -40,7 +40,7 @@ async function quoteWithHop(env: NodeJS.ProcessEnv, command: Extract<WalletComma
     planId: hop.provider ?? "hop",
     kind: "aggregator",
     hops: [`${command.sell.symbol}->${command.buy.symbol}`],
-    priceImpactPct: hop.priceImpactPct ?? 0,
+    priceImpactPct: hop.priceImpactPct,
     feeUsd: hop.feeUsd,
     buyAmount: hop.buyAmount,
     ...(hop.provider ? { provider: hop.provider } : {}),

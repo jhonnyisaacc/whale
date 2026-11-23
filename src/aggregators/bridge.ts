@@ -1,6 +1,9 @@
 import { addressKey, chainByKey } from "../chains.js";
 import type { AppConfig } from "../config.js";
 import { BRIDGE_PROVIDERS, type BridgeProvider, type BridgeQuote, type BridgeRoute } from "../rebalance.js";
+import type { Hex } from "viem";
+import { z } from "zod";
+import type { ExecutableBridge } from "../signing-policy/bridge-terms.js";
 import { withTimeout } from "../timeout.js";
 import { acrossSchema, callProvider, lifiBridgeSchema, lifiHeaders, relayBridgeSchema } from "./shared.js";
 
@@ -41,7 +44,7 @@ function quoteFrom(provider: BridgeProvider, route: BridgeRoute, echo: Echo): Br
   return { provider, feeUsd: Math.round(feeUsd * 1e6) / 1e6, amountInUsd: route.amountInUsd, destination: route.destination };
 }
 
-async function quoteLifi(config: AppConfig, route: BridgeRoute, ids: ChainIds, fetchImpl: typeof fetch, signal: AbortSignal): Promise<BridgeQuote | null> {
+function lifiUrl(config: AppConfig, route: BridgeRoute, ids: ChainIds): URL {
   const url = new URL(`${config.lifiBase}/quote`);
   url.searchParams.set("fromChain", String(ids.from));
   url.searchParams.set("toChain", String(ids.to));
@@ -51,6 +54,11 @@ async function quoteLifi(config: AppConfig, route: BridgeRoute, ids: ChainIds, f
   url.searchParams.set("fromAddress", route.source.address);
   url.searchParams.set("toAddress", route.destination.address);
   if (config.keys.lifiIntegrator) url.searchParams.set("integrator", config.keys.lifiIntegrator);
+  return url;
+}
+
+async function quoteLifi(config: AppConfig, route: BridgeRoute, ids: ChainIds, fetchImpl: typeof fetch, signal: AbortSignal): Promise<BridgeQuote | null> {
+  const url = lifiUrl(config, route, ids);
   const parsed = lifiBridgeSchema.safeParse(await callProvider(config, "lifi-bridge", url.toString(), { headers: lifiHeaders(config) }, fetchImpl, signal));
   if (!parsed.success) return null;
   const { action, estimate } = parsed.data;
@@ -59,7 +67,7 @@ async function quoteLifi(config: AppConfig, route: BridgeRoute, ids: ChainIds, f
   return quoteFrom("lifi", route, { amountIn: action.fromAmount, recipient: action.toAddress, amountOut: estimate.toAmount, costsUsd: [...separate, ...gas] });
 }
 
-async function quoteAcross(config: AppConfig, route: BridgeRoute, ids: ChainIds, fetchImpl: typeof fetch, signal: AbortSignal): Promise<BridgeQuote | null> {
+function acrossRequest(config: AppConfig, route: BridgeRoute, ids: ChainIds): { url: string; headers: Record<string, string> } {
   const url = new URL(`${ACROSS_BASE}/swap/approval`);
   url.searchParams.set("tradeType", "exactInput");
   url.searchParams.set("amount", route.amount);
@@ -70,8 +78,12 @@ async function quoteAcross(config: AppConfig, route: BridgeRoute, ids: ChainIds,
   url.searchParams.set("depositor", route.source.address);
   url.searchParams.set("recipient", route.destination.address);
   if (config.keys.acrossIntegrator) url.searchParams.set("integratorId", config.keys.acrossIntegrator);
-  const headers: Record<string, string> = config.keys.acrossKey ? { Authorization: `Bearer ${config.keys.acrossKey}` } : {};
-  const parsed = acrossSchema.safeParse(await callProvider(config, "across-bridge", url.toString(), { headers }, fetchImpl, signal));
+  return { url: url.toString(), headers: config.keys.acrossKey ? { Authorization: `Bearer ${config.keys.acrossKey}` } : {} };
+}
+
+async function quoteAcross(config: AppConfig, route: BridgeRoute, ids: ChainIds, fetchImpl: typeof fetch, signal: AbortSignal): Promise<BridgeQuote | null> {
+  const { url, headers } = acrossRequest(config, route, ids);
+  const parsed = acrossSchema.safeParse(await callProvider(config, "across-bridge", url, { headers }, fetchImpl, signal));
   if (!parsed.success) return null;
   const gas = parsed.data.fees.originGas ? [parsed.data.fees.originGas.amountUsd] : [];
   return quoteFrom("across", route, { amountIn: parsed.data.inputAmount, recipient: null, amountOut: parsed.data.expectedOutputAmount, costsUsd: gas });
@@ -116,4 +128,34 @@ export async function fetchBridgeQuotes(config: AppConfig, route: BridgeRoute, f
     }),
   );
   return quotes.filter((quote): quote is BridgeQuote => quote !== null);
+}
+
+export type BridgeCall = { to: Hex; data: Hex; value: bigint; gas: bigint | null };
+
+const hex = z.string().regex(/^0x[0-9a-fA-F]*$/).transform((value) => value as Hex);
+const quantity = z.union([z.string().regex(/^(0x[0-9a-fA-F]+|\d+)$/), z.number().int().nonnegative()]).transform((value) => BigInt(value));
+const lifiCallSchema = z.object({ transactionRequest: z.object({ to: hex, data: hex, value: quantity.optional(), gasLimit: quantity.optional() }).loose() }).loose();
+const acrossCallSchema = z.object({ swapTx: z.object({ to: hex, data: hex, value: quantity.optional(), gas: quantity.optional() }).loose() }).loose();
+
+export async function firmBridgeCall(config: AppConfig, provider: ExecutableBridge, route: BridgeRoute, fetchImpl: typeof fetch = fetch): Promise<BridgeCall | null> {
+  const entry = BRIDGE_ROUTE_REGISTRY[provider];
+  if (!entry.calls) return null;
+  const from = providerChainId(entry, route.source.chainKey);
+  const to = providerChainId(entry, route.destination.chainKey);
+  if (from === null || to === null) return null;
+  return withTimeout(config.bridgeQuoteTimeoutMs, async (signal) => {
+    if (provider === "lifi") {
+      const url = lifiUrl(config, route, { from, to });
+      url.searchParams.set("allowBridges", "across");
+      const parsed = lifiCallSchema.safeParse(await callProvider(config, "lifi-bridge", url.toString(), { headers: lifiHeaders(config) }, fetchImpl, signal));
+      if (!parsed.success) return null;
+      const { to: target, data, value, gasLimit } = parsed.data.transactionRequest;
+      return { to: target, data, value: value ?? 0n, gas: gasLimit && gasLimit > 0n ? gasLimit : null };
+    }
+    const { url, headers } = acrossRequest(config, route, { from, to });
+    const parsed = acrossCallSchema.safeParse(await callProvider(config, "across-bridge", url, { headers }, fetchImpl, signal));
+    if (!parsed.success) return null;
+    const { to: target, data, value, gas } = parsed.data.swapTx;
+    return { to: target, data, value: value ?? 0n, gas: gas && gas > 0n ? gas : null };
+  }).catch(() => null);
 }

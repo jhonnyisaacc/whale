@@ -1,0 +1,20 @@
+{
+  "captured": "2026-11-19",
+  "source": "https://li.quest/v1/status?txHash=0x0000000000000000000000000000000000000000000000000000000000000001&fromChain=8453",
+  "txHash": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "answer": {
+    "status": "DONE",
+    "substatus": "COMPLETED",
+    "tool": "paraswap",
+    "sending": {
+      "txHash": "0xe4132a8d8083f5b8a0ba101c06c8885dfd6a7a31ae5c0908e23c03d2e085d836",
+      "chainId": 42161,
+      "amount": "1"
+    },
+    "receiving": {
+      "txHash": "0xe4132a8d8083f5b8a0ba101c06c8885dfd6a7a31ae5c0908e23c03d2e085d836",
+      "chainId": 42161,
+      "amount": "0"
+    }
+  }
+}

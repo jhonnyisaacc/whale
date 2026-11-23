@@ -176,6 +176,10 @@ pub enum Call {
         router: [u8; 20],
         terms: abi::SwapTerms,
     },
+    Bridge {
+        contract: [u8; 20],
+        terms: abi::BridgeTerms,
+    },
     Unknown {
         to: [u8; 20],
         selector: [u8; 4],
@@ -214,6 +218,12 @@ pub fn classify(tx: &Tx) -> Call {
             token: tx.to,
             spender,
             amount,
+        };
+    }
+    if let Some(terms) = abi::bridge_terms(&tx.data) {
+        return Call::Bridge {
+            contract: tx.to,
+            terms,
         };
     }
     match abi::swap_terms(&tx.data) {
