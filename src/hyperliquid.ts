@@ -180,25 +180,17 @@ export function isHyperliquidMainnet(url: string): boolean {
 
 export async function signL1Action(privateKey: Secret, action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<HyperliquidSignature> {
   assertTradableAction(action);
-  const connectionId = actionHash(action, null, nonce, null);
   const account = privateKeyToAccount(privateKey.reveal() as `0x${string}`);
-  const signature = await account.signTypedData({
-    domain: {
-      name: "Exchange",
-      version: "1",
-      chainId: 1337,
-      verifyingContract: "0x0000000000000000000000000000000000000000",
-    },
-    types: {
-      Agent: [
-        { name: "source", type: "string" },
-        { name: "connectionId", type: "bytes32" },
-      ],
-    },
-    primaryType: "Agent",
-    message: { source: isMainnet ? "a" : "b", connectionId },
-  });
-  return splitSignature(signature);
+  return splitSignature(await account.signTypedData(agentTypedData(action, nonce, isMainnet)));
+}
+
+export function agentTypedData(action: HyperliquidAction, nonce: number, isMainnet: boolean) {
+  return {
+    domain: { name: "Exchange", version: "1", chainId: 1337, verifyingContract: "0x0000000000000000000000000000000000000000" as Hex },
+    types: { Agent: [{ name: "source", type: "string" }, { name: "connectionId", type: "bytes32" }] },
+    primaryType: "Agent" as const,
+    message: { source: isMainnet ? "a" : "b", connectionId: actionHash(action, null, nonce, null) },
+  };
 }
 
 export type WithdrawAction = {

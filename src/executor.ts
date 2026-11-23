@@ -304,10 +304,12 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     return report;
   };
   let alternates = intent.alternates ?? [];
+  let primaryKept = true;
   if (intent.hyperliquid !== null) {
     const screened = await screening;
     if (!screened.ok) return rejected();
     alternates = screened.alternates;
+    primaryKept = screened.kept.includes(intent.token);
   }
   let primaryBlocked: string | null = null;
   let latency: Latency = { alertReceivedMs: intent.receivedAtMs };
@@ -315,7 +317,8 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   const liquidityOf = await lookup;
   const liquidity = liquidityOf(intent.token);
   const liquidAlternate = alternates.some((token) => (liquidityOf(token).usd ?? 0) >= deps.config.minLiquidityUsd);
-  const useHyper = intent.hyperliquid !== null && ((intent.token.chain.kind === "hypercore" && deps.config.enabledChainKeys.has("hypercore")) || ((liquidity.usd === null ? liquidity.source === "caller" : liquidity.usd < deps.config.minLiquidityUsd) && !liquidAlternate));
+  const hyperTradable = deps.config.enabledChainKeys.has("hypercore") && !liveTierBlocked(deps.mode, deps.supportTierFor, "hypercore");
+  const useHyper = intent.hyperliquid !== null && ((intent.token.chain.kind === "hypercore" && primaryKept && hyperTradable) || ((liquidity.usd === null ? liquidity.source === "caller" : liquidity.usd < deps.config.minLiquidityUsd) && !liquidAlternate));
   const venueChain = useHyper ? { kind: "hypercore" as const, market: intent.hyperliquid?.market ?? "perp" } : intent.token.chain;
   const venueKey = useHyper ? "hypercore" : intent.token.chainKey;
   const limits = checkLimits(deps.config, {

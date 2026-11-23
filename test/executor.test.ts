@@ -133,3 +133,35 @@ test("Solana recovery tokens keep Base58 case while EVM tokens remain case-insen
   const evm = decideWithdraw({ ...base, mint: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", recoveryAllowlist: ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"], chainKey: "ethereum" });
   assert.deepEqual(evm, { http: 200, decision: "would_send" });
 });
+
+test("a HyperCore token trades on HyperCore in live mode, unless screening dropped it for a kept alternate", async () => {
+  const hyper = { symbol: "MPLX", address: "MPLX", decimals: null, chain: { kind: "hypercore" as const, market: "perp" as const }, chainKey: "hypercore", pairMap: { pools: [], top: null } };
+  const run = async (alternates: SwapIntent["alternates"]) => {
+    resetExecutorState();
+    const sends: string[] = [];
+    await execute({ ...intent(), token: hyper, alternates }, { ...deps(sends), mode: "live", liquidityOf: async () => 2_000_000, screenToken: async (token) => (token.chainKey === "hypercore" ? "deny" : "allow") });
+    return sends;
+  };
+  assert.ok(!(await run([intent().token])).includes("hypercore"), "a HyperCore token that screening dropped is not sent as a perp");
+  resetExecutorState();
+  const sends: string[] = [];
+  await execute({ ...intent(), token: hyper }, { ...deps(sends), mode: "live", liquidityOf: async () => 2_000_000 });
+  assert.deepEqual(sends, ["hypercore"]);
+});
+
+test("a HyperCore token falls back to a liquid alternate when HyperCore cannot trade", async () => {
+  const hyper = { symbol: "MPLX", address: "MPLX", decimals: null, chain: { kind: "hypercore" as const, market: "perp" as const }, chainKey: "hypercore", pairMap: { pools: [], top: null } };
+  const liquidityOf = async (token: { chainKey: string }) => (token.chainKey === "solana" ? 2_000_000 : null);
+  const cases: { name: string; mode: "live" | "dry_run"; extra: Partial<ExecutorDeps> }[] = [
+    { name: "disabled, dry run", mode: "dry_run", extra: { config: { ...limits, enabledChainKeys: new Set(["solana"]) } } },
+    { name: "disabled, live", mode: "live", extra: { config: { ...limits, enabledChainKeys: new Set(["solana"]) } } },
+    { name: "dry-run tier, live", mode: "live", extra: { supportTierFor: (chainKey) => (chainKey === "hypercore" ? "dry_run" : "live") } },
+  ];
+  for (const { name, mode, extra } of cases) {
+    resetExecutorState();
+    const sends: string[] = [];
+    const report = await execute({ ...intent(), token: hyper, alternates: [intent().token] }, { ...deps(sends), mode, liquidityOf, quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10" }), readBalance: async (h) => h.amount, priceOf: (h) => h.usd / h.amount, ...extra });
+    assert.equal(report.venue, "solana", name);
+    assert.ok(!sends.includes("hypercore"), name);
+  }
+});
