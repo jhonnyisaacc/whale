@@ -2,7 +2,7 @@ import { z } from "zod";
 import { addressKey } from "./chains.js";
 import { withTimeout } from "./timeout.js";
 import type { AppConfig } from "./config.js";
-import type { ChainRef } from "./domain.js";
+import type { ChainKind, ChainRef } from "./domain.js";
 import { readVendorText, vendorResponse } from "./vendor-fetch.js";
 
 const BLOCKAID_CHAIN: Record<string, string> = {
@@ -45,8 +45,14 @@ const goplusSchema = z
 
 const blockaidSchema = z.object({ result_type: z.enum(["Benign", "Warning", "Malicious", "Spam"]) }).loose();
 
+const perpUniverseSchema = z.object({ universe: z.array(z.object({ name: z.string(), isDelisted: z.boolean().optional() }).loose()) }).loose();
+
+const HYPERLIQUID_INFO_TIMEOUT_MS = 1500;
+
 type Verdict = "allow" | "deny";
 type Outcome = Verdict | "unavailable";
+type ScreenedToken = { chainKey: string; chain: ChainRef; contract: string };
+type Screen = (config: AppConfig, token: ScreenedToken, fetchImpl: typeof fetch) => Promise<Outcome>;
 
 const caches = new WeakMap<AppConfig, Map<string, { verdict: Promise<Verdict>; atMs: number }>>();
 
@@ -60,7 +66,7 @@ function cacheFor(config: AppConfig): Map<string, { verdict: Promise<Verdict>; a
 
 export async function screenToken(
   config: AppConfig,
-  token: { chainKey: string; chain: ChainRef; contract: string },
+  token: ScreenedToken,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Verdict> {
   if (!config.screening) return "allow";
@@ -69,7 +75,7 @@ export async function screenToken(
   const now = config.now?.() ?? Date.now();
   const cached = verdicts.get(key);
   if (cached && now - cached.atMs < config.screenCacheMs) return cached.verdict;
-  const outcome = screenUncached(config, token, fetchImpl);
+  const outcome = guarded(() => SCREENS[token.chain.kind](config, token, fetchImpl));
   const verdict = outcome.then((result) => (result === "allow" ? "allow" : "deny"));
   if (verdicts.size >= 1024) {
     for (const [stale, row] of verdicts) if (now - row.atMs >= config.screenCacheMs) verdicts.delete(stale);
@@ -81,7 +87,7 @@ export async function screenToken(
   return verdict;
 }
 
-async function screenUncached(config: AppConfig, token: { chainKey: string; chain: ChainRef; contract: string }, fetchImpl: typeof fetch): Promise<Outcome> {
+async function screenByVendors(config: AppConfig, token: ScreenedToken, fetchImpl: typeof fetch): Promise<Outcome> {
   const goplusUrl = goPlusUrl(token);
   if (!goplusUrl) return "deny";
   const blockaidChain = BLOCKAID_CHAIN[token.chainKey];
@@ -93,6 +99,29 @@ async function screenUncached(config: AppConfig, token: { chainKey: string; chai
   if (results.includes("unavailable")) return "unavailable";
   return "allow";
 }
+
+async function screenListedPerp(config: AppConfig, token: ScreenedToken, fetchImpl: typeof fetch): Promise<Outcome> {
+  if (token.chain.kind !== "hypercore" || token.chain.market !== "perp") return "deny";
+  const body = await withTimeout(HYPERLIQUID_INFO_TIMEOUT_MS, async (signal) => {
+    const response = await vendorResponse(fetchImpl, `${config.hyperliquidUrl.replace(/\/$/, "")}/info`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "meta" }),
+      signal,
+    });
+    return response.ok ? (JSON.parse(await readVendorText(response)) as unknown) : null;
+  });
+  if (body === null) return "unavailable";
+  const parsed = perpUniverseSchema.safeParse(body);
+  if (!parsed.success) return "unavailable";
+  return parsed.data.universe.some((row) => row.name === token.contract && row.isDelisted !== true) ? "allow" : "deny";
+}
+
+const SCREENS: Record<ChainKind, Screen> = {
+  evm: screenByVendors,
+  solana: screenByVendors,
+  hypercore: screenListedPerp,
+};
 
 async function guarded(run: () => Promise<Outcome>): Promise<Outcome> {
   try {
