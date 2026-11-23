@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { QUOTE_ASSETS } from "../src/chains.js";
-import { landedSend } from "./fixtures.js";
+import { hyperMarketAt, landedSend } from "./fixtures.js";
 import { Keypair, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { raceProviderQuotes, resetProviderGuards } from "../src/aggregators.js";
 import { holdingFitsChain, holdingsForTrade } from "../src/balances.js";
@@ -717,7 +717,7 @@ test("a flagged alternate is never quoted or sent, and a disabled hypercore rout
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(4),
     send: async () => {
       sends.push("hypercore");
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };

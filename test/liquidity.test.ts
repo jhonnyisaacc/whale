@@ -6,6 +6,7 @@ import { createExecutor } from "../src/executor-server.js";
 import { loadConfig } from "../src/config.js";
 import { buildPairMap } from "../src/pairs.js";
 import type { PairMap, SwapIntent } from "../src/domain.js";
+import { hyperMarketAt } from "./fixtures.js";
 
 const contract = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const usdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -167,7 +168,7 @@ function hyperDeps(sends: string[], enabled: string[], liquidityOf: (token: { ch
   return Object.assign(base, {
     config: { ...base.config, enabledChainKeys: new Set(enabled) },
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(4),
     liquidityOf,
   });
 }

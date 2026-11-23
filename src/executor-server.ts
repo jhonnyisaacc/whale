@@ -15,7 +15,8 @@ import { anyTokenMatches, buildApp, mutatingLimit, shutdown } from "./http.js";
 import { fetchHyperliquidMid, quoteHop } from "./clients.js";
 import { redactError, zeroLoadedSecrets } from "./redact.js";
 import { broadcastRoute, lookupAgedTx, NATIVE_SELL } from "./broadcast.js";
-import { assertApprovedAgent, fetchSzDecimals } from "./hyperliquid.js";
+import { assertApprovedAgent } from "./hyperliquid.js";
+import { fetchHyperMarket } from "./hyperliquid-markets.js";
 import { createLogger } from "./log.js";
 import { assertBoot, loadManagedSigner, type TransactionSigner } from "./managed-signer.js";
 import { seedApprovals } from "./approvals.js";
@@ -94,13 +95,13 @@ function deps(
       const taker = hop.chain.kind === "evm" ? signer?.evmAddress() : hop.chain.kind === "solana" ? signer?.solanaAddress() : null;
       return quoteHop(config, { ...hop, taker: taker ?? null }, reference);
     },
-    markPrice: (coin) => fetchHyperliquidMid(config.hyperliquidUrl, coin),
+    markPrice: (midKey) => fetchHyperliquidMid(config.hyperliquidUrl, midKey),
     send: (request, onTx) => broadcastRoute(config, signer, request, config.maxSlippageBps / 100, fetch, secrets, { onTx }),
     recordTx: async (key, tx) => {
       spent(tx);
       await journal(key, tx);
     },
-    szDecimals: (market) => fetchSzDecimals(config.hyperliquidUrl, market),
+    hyperMarket: (query) => fetchHyperMarket(config.hyperliquidUrl, query),
     state: opts.state ?? createExecutorState(),
     spendScope: opts.spendScope,
     recordSpend: spend.reserve,

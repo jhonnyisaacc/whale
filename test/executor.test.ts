@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { landedSend } from "./fixtures.js";
+import { hyperMarketAt, landedSend } from "./fixtures.js";
 import { spendDay } from "../src/spend.js";
 import { execute, resetExecutorState, spentToday, authorizeWithdraw, decideWithdraw, type ExecutorDeps } from "../src/executor.js";
 import type { SwapIntent } from "../src/domain.js";
@@ -65,7 +65,7 @@ function deps(sends: string[]): ExecutorDeps {
       buyAmount: "10",
     }),
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(4, 2, "MPLX"),
     send: async (action) => {
       sends.push(action.kind);
       return landedSend();
@@ -87,15 +87,19 @@ test("dry-run logs the buy and does not send or spend the daily cap", async () =
   assert.equal(again, report);
 });
 
-test("a thin spot pool falls back to a 1x hypercore plan without sending", async () => {
+test("a thin pool on another chain gets no hypercore fallback, and a hypercore token plans a 1x order", async () => {
   resetExecutorState();
   const thin = intent();
   thin.token.pairMap = buildPairMap([{ ...thin.token.pairMap.pools[0], liquidityUsd: 100 }]);
   const sends: string[] = [];
-  const report = await execute(thin, deps(sends));
+  const refused = await execute(thin, deps(sends));
+  assert.equal(refused.decision, "skipped");
+  assert.equal(refused.reason, "MPLX on solana has no hyperliquid perp market");
+  const hyper = { ...intent(), token: { symbol: "MPLX", address: "MPLX", decimals: null, chain: { kind: "hypercore" as const, market: "perp" as const }, chainKey: "hypercore", pairMap: { pools: [], top: null } } };
+  const report = await execute(hyper, deps(sends));
   assert.equal(report.venue, "hypercore");
   assert.equal(report.decision, "would_send");
-  assert.match(report.reason, /leverage 1/);
+  assert.match(report.reason, /^hypercore MPLX asset 4 leverage 1/);
   assert.equal(sends.length, 0);
 });
 
