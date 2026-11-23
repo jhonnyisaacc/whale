@@ -16,6 +16,7 @@ export const OFFICIAL_HTTP = {
   dexscreenerBase: "https://api.dexscreener.com",
   jitoUrl: "https://mainnet.block-engine.jito.wtf/api/v1/transactions",
   turnkey: "https://api.turnkey.com",
+  esplora: "https://mempool.space/api",
 } as const;
 
 export function sameBase(actual: string, official: string): boolean {
@@ -90,6 +91,7 @@ export function assertLiveEdges(config: AppConfig, env: NodeJS.ProcessEnv): void
     }
   }
   if (!config.live) return;
+  if (config.bitcoin?.network === "bitcoin" && !sameBase(config.bitcoin.esploraUrl, OFFICIAL_HTTP.esplora)) throw new Error(`live mode pins BITCOIN_ESPLORA_URL to ${OFFICIAL_HTTP.esplora}`);
   const l1Fee = CHAINS.find(({ key, chain }) => config.enabledChainKeys.has(key) && chain.kind === "evm" && L1_DATA_FEE_CHAIN_IDS.has(chain.chainId) && !config.evmFeeLimits[chain.chainId]?.l1);
   if (l1Fee) throw new Error(`live mode is closed on ${l1Fee.key} until its separate L1 data fee has a budget`);
   const fields = ["zeroExBase", "jupiterBase", "lifiBase", "oneInchBase", "kyberBase", "veloraBase", "hyperliquidUrl", "coingeckoBase", "dexscreenerBase"] as const;

@@ -4,6 +4,7 @@ import { VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
 import { keccak256 } from "viem";
 import { z } from "zod";
+import { bitcoinWallet } from "./bitcoin/wallet.js";
 import type { TransactionSigner } from "./managed-signer.js";
 import { verifiedEvmTransaction, verifiedSolanaTransaction } from "./signatures.js";
 import type { SignerAnswer, SignerJob, SignerQueue } from "./signer-queue.js";
@@ -19,15 +20,25 @@ export class SignerRefusal extends Error {
   }
 }
 
-const keystoreAddresses = z.object({ evmAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/), solanaAddress: z.string().min(32).max(44) }).loose();
+const keystoreAddresses = z
+  .object({ evmAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/), solanaAddress: z.string().min(32).max(44), bitcoinPublicKey: z.string().regex(/^0[23][0-9a-f]{64}$/).optional() })
+  .loose();
 
-export type WhaleSignerSetup = { evmAddress: string; solanaAddress: string; token: string; port: number; answerTimeoutMs: number };
+export type KeystorePublic = { evmAddress: string; solanaAddress: string; bitcoinPublicKey: string | null };
+export type WhaleSignerSetup = KeystorePublic & { token: string; port: number; answerTimeoutMs: number };
+
+export function keystorePublic(keystore: string): KeystorePublic {
+  const addresses = keystoreAddresses.safeParse(JSON.parse(readFileSync(keystore, "utf8")));
+  if (!addresses.success) throw new Error("WHALE_SIGNER_KEYSTORE is not a whale-signer keystore");
+  const { evmAddress, solanaAddress, bitcoinPublicKey } = addresses.data;
+  if (bitcoinPublicKey) bitcoinWallet(bitcoinPublicKey, evmAddress, "bitcoin");
+  return { evmAddress, solanaAddress, bitcoinPublicKey: bitcoinPublicKey ?? null };
+}
 
 export function whaleSignerSetup(env: NodeJS.ProcessEnv): WhaleSignerSetup | null {
   const keystore = env.WHALE_SIGNER_KEYSTORE?.trim();
   if (!keystore) return null;
-  const addresses = keystoreAddresses.safeParse(JSON.parse(readFileSync(keystore, "utf8")));
-  if (!addresses.success) throw new Error("WHALE_SIGNER_KEYSTORE is not a whale-signer keystore");
+  const addresses = keystorePublic(keystore);
   const parsed = path.parse(keystore);
   const tokenFile = path.join(parsed.dir, `${parsed.name}.token`);
   const token = readFileSync(tokenFile, "utf8").trim();
@@ -36,7 +47,7 @@ export function whaleSignerSetup(env: NodeJS.ProcessEnv): WhaleSignerSetup | nul
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("WHALE_SIGNER_PORT must be a TCP port");
   const answerTimeoutMs = Number(env.WHALE_SIGNER_TIMEOUT_MS ?? "45000");
   if (!Number.isInteger(answerTimeoutMs) || answerTimeoutMs < 1_000) throw new Error("WHALE_SIGNER_TIMEOUT_MS must be at least 1000");
-  return { evmAddress: addresses.data.evmAddress, solanaAddress: addresses.data.solanaAddress, token, port, answerTimeoutMs };
+  return { ...addresses, token, port, answerTimeoutMs };
 }
 
 const evmResult = z.object({ signedTransaction: z.string() });

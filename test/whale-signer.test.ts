@@ -158,7 +158,7 @@ test("mcp live sends go to the local sender, and its refusal is a tool error", a
 
 test("a local send answers a repeated idempotencyKey once and refuses the key for a different command", () =>
   withQueue(async (queue) => {
-    const send = localSender({ OWNER_WITHDRAW_ADDRESSES: "0x2222222222222222222222222222222222222222" }, queue, { evmAddress: evm.address, solanaAddress: solana.publicKey.toBase58(), token: TOKEN, port: 0, answerTimeoutMs: 1_000 });
+    const send = localSender({ OWNER_WITHDRAW_ADDRESSES: "0x2222222222222222222222222222222222222222" }, queue, { evmAddress: evm.address, solanaAddress: solana.publicKey.toBase58(), token: TOKEN, port: 0, answerTimeoutMs: 1_000, bitcoinPublicKey: null });
     const asset = { chain: { kind: "evm" as const, chainId: 8453 }, chainKey: "base", address: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", symbol: "ETH", decimals: 18 };
     const command = { kind: "transfer" as const, idempotencyKey: "same", mode: "live" as const, asset, to: "0x3333333333333333333333333333333333333333", amount: "1" };
     const first = await send(command);

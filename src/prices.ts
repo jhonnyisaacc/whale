@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { withTimeout } from "./timeout.js";
 import { holdingFitsChain } from "./balances.js";
+import { BITCOIN_KEY } from "./bitcoin/wallet.js";
 import { addressKey, chainByKey } from "./chains.js";
 import type { AppConfig } from "./config.js";
 import type { Holding } from "./domain.js";
@@ -34,12 +35,14 @@ export const NATIVE_COINGECKO_ID: Record<string, string> = {
   POL: "polygon-ecosystem-token",
   HYPE: "hyperliquid",
   MON: "monad",
+  BTC: "bitcoin",
 };
 
 const priceSchema = z.record(z.string(), z.object({ usd: z.number() }).loose());
 
 export function priceKey(holding: Holding): string | null {
   if (!holding.chainKey) return null;
+  if (holding.chainKey === BITCOIN_KEY) return holding.native ? "native:BTC" : null;
   const spec = chainByKey(holding.chainKey);
   if (!spec) return null;
   if (holding.native) return `native:${spec.nativeSymbol.toUpperCase()}`;
@@ -105,7 +108,7 @@ export function coingeckoLoader(config: AppConfig, holdings: readonly Holding[],
       const key = priceKey(holding);
       if (key === null || !holding.chainKey) continue;
       if (holding.native) {
-        const id = NATIVE_COINGECKO_ID[chainByKey(holding.chainKey)?.nativeSymbol.toUpperCase() ?? ""];
+        const id = NATIVE_COINGECKO_ID[holding.chainKey === BITCOIN_KEY ? "BTC" : (chainByKey(holding.chainKey)?.nativeSymbol.toUpperCase() ?? "")];
         if (id) natives.set(id, key);
         continue;
       }

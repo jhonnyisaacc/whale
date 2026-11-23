@@ -4,6 +4,7 @@ import { kyberSupports } from "../aggregators.js";
 import { isSolanaAddress } from "../signer.js";
 import { DEFAULT_MAX_VALUE_WEI, SOLANA_BASE_PROGRAMS } from "../signing-policy.js";
 import type { SupportTier } from "../support.js";
+import type { BitcoinConfig } from "./bitcoin.js";
 
 export const DEFAULT_KYBER_CLIENT_ID = "listing-trader";
 
@@ -27,6 +28,7 @@ export type AppConfig = LimitConfig & {
   fullRefreshMs: number;
   liquidityRefreshMs: number;
   withdrawAllowlist: string[];
+  bitcoin: BitcoinConfig | null;
   dexscreenerSlugOverrides: Record<string, string>;
   rpcByChainKey: Record<string, string>;
   rpcUrlsByChainKey: Record<string, string[]>;

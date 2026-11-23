@@ -114,7 +114,7 @@ async function withLocalSender(env: Record<string, string>, run: (send: ReturnTy
   const jobs: Job[] = [];
   const stop = signEveryJob(queue, jobs);
   try {
-    const send = localSender({ OWNER_WITHDRAW_ADDRESSES: DEST, RPC_URL_8453: chain.url, COINGECKO_API_BASE: chain.url, DEXSCREENER_API_BASE: chain.url, ...env }, queue, { evmAddress: evm.address, solanaAddress: solana.publicKey.toBase58(), token: TOKEN, port: 0, answerTimeoutMs: 5_000 });
+    const send = localSender({ OWNER_WITHDRAW_ADDRESSES: DEST, RPC_URL_8453: chain.url, COINGECKO_API_BASE: chain.url, DEXSCREENER_API_BASE: chain.url, ...env }, queue, { evmAddress: evm.address, solanaAddress: solana.publicKey.toBase58(), token: TOKEN, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null });
     await run(send, chain, jobs);
   } finally {
     stop();
