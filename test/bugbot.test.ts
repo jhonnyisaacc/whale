@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { QUOTE_ASSETS } from "../src/chains.js";
-import { landedSend } from "./fixtures.js";
+import { hyperMarketAt, landedSend } from "./fixtures.js";
 import { Keypair, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { raceProviderQuotes, resetProviderGuards } from "../src/aggregators.js";
 import { holdingFitsChain, holdingsForTrade } from "../src/balances.js";
@@ -680,16 +680,7 @@ test("a flagged alternate is never quoted or sent, and a disabled hypercore rout
   assert.deepEqual(altQuoted, [1]);
   assert.deepEqual(altSends, ["1"]);
 
-  const hyperToken: SwapIntent["token"] = {
-    symbol: "TKN",
-    address: "mint",
-    decimals: 6,
-    chain: { kind: "solana" },
-    chainKey: "solana",
-    pairMap: buildPairMap([
-      { poolAddress: "p", dex: "raydium", chainKey: "solana", baseSymbol: "TKN", baseAddress: "mint", quoteSymbol: "SOL", quoteAddress: "So11111111111111111111111111111111111111112", liquidityUsd: 100, priceUsd: 0.5, baseDecimals: 6 },
-    ]),
-  };
+  const hyperToken: SwapIntent["token"] = { symbol: "TKN", address: "TKN", decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } };
   const hyperIntent = (key: string): SwapIntent => ({
     idempotencyKey: key,
     side: "buy",
@@ -717,7 +708,7 @@ test("a flagged alternate is never quoted or sent, and a disabled hypercore rout
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
-    assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
+    hyperMarket: hyperMarketAt(4),
     send: async () => {
       sends.push("hypercore");
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };
@@ -732,6 +723,8 @@ test("a flagged alternate is never quoted or sent, and a disabled hypercore rout
   const tierSends: string[] = [];
   const tierOff = await execute(hyperIntent("hyper-tier-off"), hyperDeps(tierSends, ["solana", "base", "hypercore"], "disabled"));
   assert.equal(tierOff.decision, "skipped");
+  assert.equal(tierOff.venue, "hypercore");
+  assert.doesNotMatch(tierOff.reason, /no hyperliquid/);
   assert.deepEqual(tierSends, []);
 
   resetExecutorState();

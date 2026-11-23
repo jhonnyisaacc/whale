@@ -1,22 +1,17 @@
-import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction, type Connection } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction, type Connection } from "@solana/web3.js";
 import bs58 from "bs58";
-import { BaseError, MethodNotFoundRpcError, MethodNotSupportedRpcError, TransactionNotFoundError, TransactionReceiptNotFoundError, createPublicClient, defineChain, encodeFunctionData, erc20Abi, keccak256, parseUnits, toHex, type Hex } from "viem";
+import { BaseError, MethodNotFoundRpcError, MethodNotSupportedRpcError, TransactionNotFoundError, TransactionReceiptNotFoundError, createPublicClient, defineChain, erc20Abi, toHex, type Hex } from "viem";
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
-import type { Fill, RaceQuote, RouteLeg, SendResult, TxOutcome, TxRecord } from "../domain.js";
+import type { RaceQuote, RouteLeg, SendResult, TxRecord } from "../domain.js";
 import { chainByEvmId, chainByKey } from "../chains.js";
 import { allowanceCovers, rememberApproval } from "../approvals.js";
-import { firmJupiter, firmKyber, firmLifi, firmZeroEx, jupiterQuote, jupiterSwap, kyberFromRoute } from "../aggregators.js";
-import { BroadcastError, type SendRequest } from "../executor.js";
-import { nextHyperliquidNonce, readExchangeResponse } from "../hyperliquid.js";
+import { BroadcastError } from "../executor.js";
 import type { EvmSignInput, TransactionSigner } from "../managed-signer.js";
-import { evmNonces, isNonceRejection, type NonceManager } from "../nonce.js";
-import { readLifi, readZeroEx } from "../quotes.js";
+import { evmNonces, type NonceManager } from "../nonce.js";
 import { redactError } from "../redact.js";
-import { anyOk, firstOk, readTransport, solanaConnection } from "../rpc.js";
-import { sellBaseUnits } from "../routing.js";
-import { isSolanaAddress } from "../signer.js";
-import { JUPITER_PROGRAM_ID, WSOL_MINT } from "../signing-policy.js";
+import { anyOk, assertChainId, firstOk, readTransport, solanaConnection } from "../rpc.js";
+import { WSOL_MINT } from "../signing-policy.js";
 
 export const NATIVE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 export const NATIVE_SELL = new Set([NATIVE_ADDRESS, "0x0000000000000000000000000000000000000000"]);
@@ -31,7 +26,7 @@ export const lifiApprovalSchema = z.object({ estimate: z.object({ approvalAddres
 
 export type EvmCall = { from: Hex; to: Hex; data: Hex; value: bigint };
 
-export type EvmReceipt = { status: "success" | "reverted"; gasUsed: bigint; effectiveGasPrice: bigint };
+export type EvmReceipt = { status: "success" | "reverted"; gasUsed: bigint; effectiveGasPrice: bigint; l1Fee: bigint };
 
 export type EvmRpc = {
   fees(): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }>;
@@ -43,6 +38,7 @@ export type EvmRpc = {
   receipt(hash: Hex): Promise<EvmReceipt | null>;
   seen(hash: Hex): Promise<boolean>;
   balance(token: string, owner: Hex): Promise<bigint>;
+  checkChain(): Promise<void>;
 };
 
 export type SolanaStatus = { err: unknown; confirmationStatus?: string | null } | null;
@@ -149,7 +145,7 @@ export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc 
     async receipt(hash) {
       try {
         const receipt = await client.getTransactionReceipt({ hash });
-        return { status: receipt.status, gasUsed: receipt.gasUsed, effectiveGasPrice: receipt.effectiveGasPrice };
+        return { status: receipt.status, gasUsed: receipt.gasUsed, effectiveGasPrice: receipt.effectiveGasPrice, l1Fee: BigInt((receipt as { l1Fee?: Hex }).l1Fee ?? 0) };
       } catch (error) {
         if (error instanceof TransactionReceiptNotFoundError) return null;
         throw error;
@@ -168,6 +164,7 @@ export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc 
       if (NATIVE_SELL.has(token.toLowerCase())) return client.getBalance({ address: owner });
       return client.readContract({ address: token as Hex, abi: erc20Abi, functionName: "balanceOf", args: [owner] });
     },
+    checkChain: () => assertChainId(chainId, rpcs),
   };
 }
 

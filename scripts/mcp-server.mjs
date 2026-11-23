@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -79,12 +79,11 @@ async function pnpm(args, log, signal) {
 
 const generationFile = (generation) => path.join(lockDir, String(generation));
 
-function topGeneration() {
-  return Math.max(-1, ...readdirSync(lockDir).filter((name) => /^\d+$/.test(name)).map(Number));
-}
+const generations = () => readdirSync(lockDir).filter((name) => /^(0|[1-9]\d*)$/.test(name)).map(BigInt);
+const topGeneration = () => generations().reduce((top, generation) => (generation > top ? generation : top), -1n);
 
 function lastBeat(generation) {
-  if (generation < 0) return 0;
+  if (generation < 0n) return 0;
   try {
     return statSync(generationFile(generation)).mtimeMs;
   } catch (error) {
@@ -106,17 +105,19 @@ function claim(generation) {
 async function takeLock() {
   mkdirSync(lockDir, { recursive: true });
   const deadline = Date.now() + waitMs;
+  let seen;
   for (;;) {
     const top = topGeneration();
     const beat = lastBeat(top);
     if (beat === undefined) continue;
-    if (Date.now() - beat > staleMs) {
-      if (!claim(top + 1)) continue;
-      if (topGeneration() === top + 1) {
-        for (const name of readdirSync(lockDir)) if (Number(name) <= top) rmSync(path.join(lockDir, name), { force: true });
-        return top + 1;
+    if (seen?.top !== top || seen.beat !== beat) seen = { top, beat, at: performance.now() };
+    if (Date.now() - beat > staleMs || performance.now() - seen.at > staleMs) {
+      if (!claim(top + 1n)) continue;
+      if (topGeneration() === top + 1n) {
+        for (const generation of generations()) if (generation <= top) rmSync(generationFile(generation), { force: true });
+        return top + 1n;
       }
-      rmSync(generationFile(top + 1), { force: true });
+      rmSync(generationFile(top + 1n), { force: true });
       continue;
     }
     if (Date.now() > deadline) {
@@ -150,22 +151,27 @@ function hold(generation, lost) {
 }
 
 async function build() {
-  const generation = await takeLock();
-  const lost = new AbortController();
-  const release = hold(generation, lost);
-  try {
-    if (depsReady() && buildReady()) return;
-    const log = openSync(logFile, "w");
-    if (!depsReady()) await pnpm(["install", "--frozen-lockfile"], log, lost.signal);
-    if (!buildReady()) {
-      const before = inputHash();
-      await pnpm(["exec", "tsc", "-p", "tsconfig.json", "--noEmitOnError"], log, lost.signal);
-      lost.signal.throwIfAborted();
-      writeFileSync(`${stampFile}.tmp`, JSON.stringify({ inputs: before, output: outputHash() }));
-      renameSync(`${stampFile}.tmp`, stampFile);
+  for (;;) {
+    const generation = await takeLock();
+    const lost = new AbortController();
+    const release = hold(generation, lost);
+    try {
+      if (depsReady() && buildReady()) return;
+      const log = openSync(logFile, "w");
+      if (!depsReady()) await pnpm(["install", "--frozen-lockfile"], log, lost.signal);
+      if (!buildReady()) {
+        const before = inputHash();
+        await pnpm(["exec", "tsc", "-p", "tsconfig.json", "--noEmitOnError"], log, lost.signal);
+        lost.signal.throwIfAborted();
+        writeFileSync(`${stampFile}.tmp`, JSON.stringify({ inputs: before, output: outputHash() }));
+        renameSync(`${stampFile}.tmp`, stampFile);
+      }
+      return;
+    } catch (error) {
+      if (topGeneration() === generation) throw error;
+    } finally {
+      release();
     }
-  } finally {
-    release();
   }
 }
 
@@ -189,6 +195,13 @@ if (!existsSync(lockfile)) {
   process.exit(1);
 }
 if (!depsReady() || !buildReady()) {
+  try {
+    mkdirSync(lockDir, { recursive: true });
+    closeSync(openSync(logFile, "a"));
+  } catch (error) {
+    process.stderr.write(`whale: cannot build the MCP server in ${root}: ${error.message}. Make ${root} writable by this user and start again\n`);
+    process.exit(1);
+  }
   process.stderr.write(`whale: building the MCP server in ${root}. The build finishes even if this process stops. Log: ${logFile}\n`);
   const built = await runBuilder();
   const log = existsSync(logFile) ? readFileSync(logFile, "utf8") : "";

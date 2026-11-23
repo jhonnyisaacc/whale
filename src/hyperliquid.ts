@@ -286,49 +286,6 @@ export function nextHyperliquidNonce(now = Date.now()): number {
   return lastNonce;
 }
 
-export type AssetMeta = { szDecimals: number; maxLeverage: number };
-
-const metaCache = new Map<string, AssetMeta>();
-
-export function resetAssetMeta(): void {
-  metaCache.clear();
-}
-
-export async function fetchAssetMeta(url: string, market: { market: "perp" | "spot"; assetIndex: number }, fetchImpl: typeof fetch = fetch): Promise<AssetMeta | null> {
-  const key = `${url}|${market.market}|${market.assetIndex}`;
-  const cached = metaCache.get(key);
-  if (cached !== undefined) return cached;
-  type Meta = {
-    universe?: Array<{ szDecimals?: number; maxLeverage?: number; tokens?: number[]; index?: number }>;
-    tokens?: Array<{ szDecimals?: number; index?: number }>;
-  };
-  const body = await withTimeout(1500, async (signal) => {
-    const response = await vendorResponse(fetchImpl, `${url.replace(/\/$/, "")}/info`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: market.market === "spot" ? "spotMeta" : "meta" }),
-      signal,
-    });
-    return response.ok ? (JSON.parse(await readVendorText(response)) as Meta) : null;
-  });
-  if (!body) return null;
-  let row: { szDecimals?: number; maxLeverage?: number } | undefined;
-  if (market.market === "perp") {
-    row = body.universe?.[market.assetIndex];
-  } else {
-    const spotIndex = market.assetIndex >= 10_000 ? market.assetIndex - 10_000 : market.assetIndex;
-    const pair = body.universe?.find((item) => item.index === spotIndex);
-    const base = pair?.tokens?.[0];
-    row = { szDecimals: body.tokens?.find((token) => token.index === base)?.szDecimals, maxLeverage: 1 };
-  }
-  const { szDecimals, maxLeverage } = row ?? {};
-  if (typeof szDecimals !== "number" || !Number.isInteger(szDecimals) || szDecimals < 0) return null;
-  if (typeof maxLeverage !== "number" || !Number.isInteger(maxLeverage) || maxLeverage < 1) return null;
-  const meta = { szDecimals, maxLeverage };
-  metaCache.set(key, meta);
-  return meta;
-}
-
 const clearinghouseSchema = z.object({
   assetPositions: z.array(
     z.object({

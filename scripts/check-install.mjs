@@ -1,7 +1,8 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 const given = process.argv[2];
 const scratch = mkdtempSync(path.join(tmpdir(), "whale-install-"));
@@ -127,14 +128,21 @@ function countRuns() {
   return { installs: runs.filter((run) => run.startsWith("install")).length, builds: runs.filter((run) => run.startsWith("exec tsc")).length };
 }
 
-function plantCrashedLock(pid, ageMs) {
-  writeFileSync(path.join(root, "dist/.mcp-build.lock"), String(pid));
-  const dir = path.join(root, "dist/.mcp-build-lock");
-  mkdirSync(dir, { recursive: true });
-  const lock = path.join(dir, String(Math.max(-1, ...readdirSync(dir).map(Number)) + 1));
+const lockDir = path.join(root, "dist/.mcp-build-lock");
+
+function plantGeneration(name, pid, ageMs) {
+  mkdirSync(lockDir, { recursive: true });
+  const lock = path.join(lockDir, name);
   writeFileSync(lock, String(pid));
   const at = (Date.now() - ageMs) / 1000;
   utimesSync(lock, at, at);
+  return lock;
+}
+
+function plantCrashedLock(pid, ageMs) {
+  writeFileSync(path.join(root, "dist/.mcp-build.lock"), String(pid));
+  mkdirSync(lockDir, { recursive: true });
+  plantGeneration(String(Math.max(-1, ...readdirSync(lockDir).map(Number)) + 1), pid, ageMs);
 }
 
 function deadPid() {
@@ -163,6 +171,65 @@ async function racingStartsPastADeadLock(trial) {
     if (listed < 12) failures.push(`trial ${trial + 1}: only ${listed} of 12 racing starts listed tools\n${tail(results.find((result) => result.tools.length === 0).stderr)}`);
     if (installs !== installsWanted || builds !== 1) failures.push(`trial ${trial + 1}: 12 racing starts ran pnpm install ${installs} times and tsc ${builds} times, not ${installsWanted} and 1`);
   });
+}
+
+function pgrep(pattern) {
+  return spawnSync("pgrep", ["-f", pattern], { encoding: "utf8" }).stdout.trim().split("\n")[0];
+}
+
+async function waitForPid(pattern) {
+  for (let tries = 0; tries < 1200; tries += 1) {
+    const pid = pgrep(pattern);
+    if (pid) return Number(pid);
+    await sleep(50);
+  }
+  throw new Error(`no process matched ${pattern} within 60 s`);
+}
+
+async function stalledBuilderLosesTheLock(resumeAfterMs) {
+  const marker = `whale-check: built past a builder stalled for ${resumeAfterMs} ms`;
+  await withSource(`\nprocess.stderr.write("${marker}\\n");\n`, async () => {
+    const stalled = listTools(codex, 120000);
+    await waitForPid(`${root}/node_modules/.*tsc`);
+    const builder = await waitForPid(`${root}/scripts/mcp-server.mjs --build`);
+    process.kill(builder, "SIGSTOP");
+    const takeover = listTools(codex, 120000);
+    await sleep(resumeAfterMs);
+    process.kill(builder, "SIGCONT");
+    for (const [label, result] of [["the stalled start", await stalled], ["the takeover start", await takeover]]) {
+      console.log(`${label}, builder resumed after ${resumeAfterMs} ms: ${result.tools.length} tools`);
+      if (result.tools.length === 0) failures.push(`${label} with a builder resumed after ${resumeAfterMs} ms listed no tools: ${result.why}\n${tail(result.stderr)}`);
+      else if (!result.stderr.includes(marker)) failures.push(`${label} with a builder resumed after ${resumeAfterMs} ms did not run the edited source`);
+    }
+  });
+}
+
+async function plantedGenerations() {
+  for (const name of ["99999999999999999999", "0999999999", "9007199254740992"]) {
+    rmSync(lockDir, { recursive: true, force: true });
+    plantGeneration(name, deadPid(), 60000);
+    await withSource(`\nexport const planted = "${name}";\n`, () => expectTools(`past a planted lock generation ${name}`, codex, 60000));
+  }
+  rmSync(lockDir, { recursive: true, force: true });
+}
+
+async function lockFromTheFuture() {
+  rmSync(lockDir, { recursive: true, force: true });
+  plantGeneration("0", deadPid(), -3600000);
+  await withSource("\nexport const future = 1;\n", () => expectTools("past a crashed lock dated an hour ahead", codex, 60000));
+}
+
+async function readOnlyCheckout() {
+  const copy = path.join(scratch, "read-only");
+  cpSync(root, copy, { recursive: true, filter: (source) => !["dist", "node_modules"].includes(path.relative(root, source)) });
+  spawnSync("chmod", ["-R", "a-w", copy]);
+  try {
+    const result = await listTools({ ...codex, cwd: copy }, 60000);
+    console.log(`read-only unbuilt checkout: ${result.tools.length} tools (${result.why ?? "replied"})`);
+    if (!/whale: cannot build the MCP server in .*EACCES/.test(result.stderr)) failures.push(`a read-only unbuilt checkout did not name EACCES as the cause\n${tail(result.stderr)}`);
+  } finally {
+    spawnSync("chmod", ["-R", "u+w", copy]);
+  }
 }
 
 function manualBuild() {
@@ -199,6 +266,11 @@ try {
   await expectTools("after node_modules is deleted", codex, 600000);
 
   await crashedBuilderWithReusedPid();
+  await stalledBuilderLosesTheLock(16000);
+  await stalledBuilderLosesTheLock(20000);
+  await plantedGenerations();
+  await lockFromTheFuture();
+  await readOnlyCheckout();
   for (let trial = 0; trial < 8; trial += 1) await racingStartsPastADeadLock(trial);
 } finally {
   writeFileSync(server, original);
@@ -208,4 +280,4 @@ if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exit(1);
 }
-console.log(`install ok: every host manifest starts the MCP server from ${given ? root : "a clean archive of HEAD"} and lists its tools, and the build recovers from a stopped start, a failed build, a manual build, a deleted node_modules, a crashed builder's lock and 12 racing starts`);
+console.log(`install ok: every host manifest starts the MCP server from ${given ? root : "a clean archive of HEAD"} and lists its tools, and the build recovers from a stopped start, a failed build, a manual build, a deleted node_modules, a crashed builder's lock, a stalled builder, planted or future-dated lock files, a read-only checkout and 12 racing starts`);

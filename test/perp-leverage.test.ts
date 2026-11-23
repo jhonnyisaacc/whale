@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { Hex } from "viem";
-import { buildLeverage, fetchAssetMeta, fetchPerpPosition, resetAssetMeta, signL1Action, type HyperliquidAction } from "../src/hyperliquid.js";
+import { buildLeverage, fetchPerpPosition, signL1Action, type HyperliquidAction } from "../src/hyperliquid.js";
+import { fetchHyperMarket, resetHyperMeta } from "../src/hyperliquid-markets.js";
 import { keystoreSigner, withPolicy } from "../src/managed-signer.js";
 import { loadConfig } from "../src/config.js";
 import { Secret } from "../src/redact.js";
@@ -68,20 +69,22 @@ const metaFetch = (async () => new Response(JSON.stringify(captured.meta), { sta
 const perp = (coin: string): HyperliquidMarket => ({ coin, assetIndex: captured.meta.universe.findIndex((row) => row.name === coin), market: "perp", maxLeverage: 50 });
 
 function perpIntent(coin: string, leverage: number | undefined, liquidityUsd = 100, side: "buy" | "sell" = "buy"): SwapIntent {
+  const solanaToken = {
+    symbol: coin,
+    address: "mint",
+    decimals: 6,
+    chain: { kind: "solana" },
+    chainKey: "solana",
+    pairMap: buildPairMap([{ poolAddress: "p", dex: "raydium", chainKey: "solana", baseSymbol: coin, baseAddress: "mint", quoteSymbol: "SOL", quoteAddress: "So11111111111111111111111111111111111111112", liquidityUsd, priceUsd: 1, baseDecimals: 6 }]),
+  };
+  const hypercoreToken = { symbol: coin, address: coin, decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } };
   return intentSchema.parse({
     idempotencyKey: `${coin}-${side}-${leverage}-${liquidityUsd}`,
     side,
     notionalUsd: 5,
     slippageBps: 50,
     leverage,
-    token: {
-      symbol: coin,
-      address: "mint",
-      decimals: 6,
-      chain: { kind: "solana" },
-      chainKey: "solana",
-      pairMap: buildPairMap([{ poolAddress: "p", dex: "raydium", chainKey: "solana", baseSymbol: coin, baseAddress: "mint", quoteSymbol: "SOL", quoteAddress: "So11111111111111111111111111111111111111112", liquidityUsd, priceUsd: 1, baseDecimals: 6 }]),
-    },
+    token: liquidityUsd < loadConfig({}).minLiquidityUsd ? hypercoreToken : solanaToken,
     holdings: [{ symbol: "USDC", address: "usdc", amount: 20, usd: 20, native: false, decimals: 6, chainKey: "solana" }],
     hyperliquid: perp(coin),
     receivedAtMs: 0,
@@ -96,7 +99,7 @@ function perpDeps(mode: "dry_run" | "live", env: Record<string, string>, sent: S
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async (coin) => Number(captured.mids[coin]),
-    assetMeta: (market) => fetchAssetMeta(MAINNET, market, metaFetch),
+    hyperMarket: (query) => fetchHyperMarket(MAINNET, query, metaFetch),
     perpPosition: (coin) => fetchPerpPosition(MAINNET, ACCOUNT, coin, stateFetch(account)),
     send: async (request) => {
       sent.push(request);
@@ -111,17 +114,17 @@ function perpDeps(mode: "dry_run" | "live", env: Record<string, string>, sent: S
 
 test("a dry run on captured mainnet meta plans updateLeverage at the asked leverage, then the order", async () => {
   resetExecutorState();
-  resetAssetMeta();
+  resetHyperMeta();
   const report = await execute(perpIntent("ETH", 2), perpDeps("dry_run", {}, []));
   assert.equal(report.decision, "would_send");
-  assert.equal(report.reason, "hypercore ETH leverage 2 isolated limit 1758.8 actions updateLeverage,order");
+  assert.equal(report.reason, "hypercore ETH asset 1 leverage 2 isolated limit 1758.8 actions updateLeverage,order");
   const fallback = await execute(perpIntent("ETH", undefined), perpDeps("dry_run", {}, []));
-  assert.equal(fallback.reason, "hypercore ETH leverage 1 isolated limit 1758.8 actions updateLeverage,order");
+  assert.equal(fallback.reason, "hypercore ETH asset 1 leverage 1 isolated limit 1758.8 actions updateLeverage,order");
 });
 
 test("a 2x ETH buy sends isolated 2x and an order sized on its 5 USD notional, and both sign under the default policy", async () => {
   resetExecutorState();
-  resetAssetMeta();
+  resetHyperMeta();
   const sent: SendRequest[] = [];
   assert.equal((await execute(perpIntent("ETH", 2), perpDeps("live", {}, sent))).decision, "sent");
   const [lever, order] = sent[0]!.hyperliquidActions;
@@ -131,7 +134,7 @@ test("a 2x ETH buy sends isolated 2x and an order sized on its 5 USD notional, a
 });
 
 test("leverage above min(MAX_PERP_LEVERAGE, the asset's maxLeverage from meta) is refused before anything is signed", async () => {
-  resetAssetMeta();
+  resetHyperMeta();
   const cases: [string, number, Record<string, string>, string][] = [
     ["ETH", 4, {}, "leverage exceeds 3"],
     ["GMX", 4, { MAX_PERP_LEVERAGE: "5" }, "leverage 4 exceeds the 3x maxLeverage of GMX"],
@@ -152,7 +155,7 @@ test("leverage above min(MAX_PERP_LEVERAGE, the asset's maxLeverage from meta) i
 
 test("leverage on a trade that routes to a DEX is refused, not dropped to 1x", async () => {
   resetExecutorState();
-  resetAssetMeta();
+  resetHyperMeta();
   const report = await execute(perpIntent("ETH", 2, 2_000_000), perpDeps("live", {}, [], 2_000_000));
   assert.equal(report.decision, "skipped");
   assert.equal(report.reason, "leverage above 1 applies only to a HyperCore perp");
@@ -164,7 +167,7 @@ const label = (action: HyperliquidAction) => (action.type === "order" ? `order $
 
 test("closing a 3x long with a sell that leaves out leverage sends only the sell, never an updateLeverage decrease", async () => {
   resetExecutorState();
-  resetAssetMeta();
+  resetHyperMeta();
   const sent: SendRequest[] = [];
   const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
   assert.equal((await execute(perpIntent("ETH", 3), perpDeps("live", env, sent))).decision, "sent");
@@ -188,7 +191,7 @@ test("captured clearinghouseState responses parse to the position Whale plans ag
 
 test("a fresh sell opens its short at isolated 1x, and the buy that closes it sends no updateLeverage", async () => {
   resetExecutorState();
-  resetAssetMeta();
+  resetHyperMeta();
   const sent: SendRequest[] = [];
   const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
   const open = await execute(perpIntent("ETH", undefined, 100, "sell"), perpDeps("live", env, sent));
@@ -204,7 +207,7 @@ test("a fresh sell opens its short at isolated 1x, and the buy that closes it se
 
 test("a buy on an open isolated long changes leverage only when the intent sets it, and never on a cross long", async () => {
   resetExecutorState();
-  resetAssetMeta();
+  resetHyperMeta();
   const sent: SendRequest[] = [];
   const long = holding(accounts.isolated, "HYPE", "ETH");
   assert.equal((await execute(perpIntent("ETH", undefined), perpDeps("live", {}, sent, 100, long))).decision, "sent");
@@ -218,7 +221,7 @@ test("a buy on an open isolated long changes leverage only when the intent sets 
 });
 
 test("a perp trade whose position cannot be read is skipped before anything is signed", async () => {
-  resetAssetMeta();
+  resetHyperMeta();
   const down = (async () => new Response("busy", { status: 502 })) as unknown as typeof fetch;
   const cases: [string, Partial<ExecutorDeps>][] = [
     ["info down", { perpPosition: (coin) => fetchPerpPosition(MAINNET, ACCOUNT, coin, down) }],
@@ -238,7 +241,7 @@ test("a perp trade whose position cannot be read is skipped before anything is s
 
 test("a buy that leaves out leverage opens at isolated 1x, and leverage on a sell is refused", async () => {
   resetExecutorState();
-  resetAssetMeta();
+  resetHyperMeta();
   const sent: SendRequest[] = [];
   const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
   assert.equal((await execute(perpIntent("ETH", undefined), perpDeps("live", env, sent))).decision, "sent");
