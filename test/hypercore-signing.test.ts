@@ -12,6 +12,7 @@ import { createMemoryWithdrawJournal } from "../src/withdraw-journal.js";
 import { execute, resetExecutorState, type ExecutorDeps, type SendRequest } from "../src/executor.js";
 import { buildPairMap } from "../src/pairs.js";
 import type { SwapIntent } from "../src/domain.js";
+import { hyperMarketAt } from "./fixtures.js";
 
 const SDK_KEY = new Secret(`0x${"0123456789".repeat(6)}0123`);
 const WALLET_KEY = `0x${"11".repeat(32)}` as Hex;
@@ -151,7 +152,7 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
     spentTodayUsd: 0,
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(4),
     send: async (request) => {
       sent.push(request);
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };

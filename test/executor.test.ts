@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { landedSend } from "./fixtures.js";
+import { hyperMarketAt, landedSend } from "./fixtures.js";
 import { spendDay } from "../src/spend.js";
 import { execute, resetExecutorState, spentToday, authorizeWithdraw, decideWithdraw, type ExecutorDeps } from "../src/executor.js";
 import type { SwapIntent } from "../src/domain.js";
@@ -65,7 +65,7 @@ function deps(sends: string[]): ExecutorDeps {
       buyAmount: "10",
     }),
     markPrice: async () => 1,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(4),
     send: async (action) => {
       sends.push(action.kind);
       return landedSend();
