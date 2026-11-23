@@ -1,0 +1,20 @@
+{
+  "captured": "2026-11-19",
+  "source": "https://li.quest/v1/status?txHash=0x41fd8a13c1fb94c9b67285977776efc59b90752b6cd0edb36ff9bd45060ded31&fromChain=8453",
+  "txHash": "0x41fd8a13c1fb94c9b67285977776efc59b90752b6cd0edb36ff9bd45060ded31",
+  "answer": {
+    "status": "DONE",
+    "substatus": "COMPLETED",
+    "tool": "mayan",
+    "sending": {
+      "txHash": "0x41fd8a13c1fb94c9b67285977776efc59b90752b6cd0edb36ff9bd45060ded31",
+      "chainId": 8453,
+      "amount": "10000000"
+    },
+    "receiving": {
+      "txHash": "0x27cb9071c1196a01df3c49fb2a4d7edec4a594718d72f93b31fc27794e3d55cb",
+      "chainId": 56,
+      "amount": "137265722545116177311"
+    }
+  }
+}

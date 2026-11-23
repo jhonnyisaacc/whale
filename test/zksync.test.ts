@@ -136,6 +136,7 @@ function chainRpc(): { rpc: EvmRpc; sent: Hex[] } {
     receipt: async (hash) => receipts.get(hash) ?? null,
     seen: async (hash) => receipts.has(hash),
     balance: async () => 10n ** 20n,
+    checkChain: async () => undefined,
   };
   return { rpc, sent };
 }

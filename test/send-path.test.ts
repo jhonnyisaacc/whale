@@ -11,6 +11,7 @@ import { BroadcastError, execute, resetExecutorState, type ExecutorDeps } from "
 import { buildOrder, cappedLimitPx, floatToWire, nextHyperliquidNonce, orderSize, readExchangeResponse, wirePrice } from "../src/hyperliquid.js";
 import type { EvmSignInput, TransactionSigner } from "../src/managed-signer.js";
 import { createNonceManager } from "../src/nonce.js";
+import { resetRpcClients } from "../src/rpc.js";
 import { buildPairMap } from "../src/pairs.js";
 import { screenToken } from "../src/screening.js";
 import { reconcileDecision } from "../src/spend.js";
@@ -69,6 +70,7 @@ function fakeChain(): FakeChain {
       receipt: async (hash) => chain.receipts.get(hash) ?? null,
       seen: async (hash) => chain.known.has(hash) || chain.receipts.has(hash),
       balance: async (token) => chain.balances.get(token.toLowerCase()) ?? 10n ** 20n,
+      checkChain: async () => undefined,
     },
   };
   return chain;
@@ -798,4 +800,50 @@ test("a native buy on Base adds the receipt's L1 fee back, so a buy that paid ou
   const result = await broadcastRoute(evmConfig, evmSigner([]), { ...twoHop, legs: [{ ...leg1, buyAddress: NATIVE }] }, 1, zeroEx(quotes, []), [], { io: clockIo(chain.rpc) });
   assert.equal(result.venue === "chain" && result.outcome, "landed");
   assert.equal(result.venue === "chain" && result.shortfall, false, "the L1 fee is gas the wallet paid, not output the swap withheld");
+});
+
+const RELAY = "http://relay.invalid";
+const relayConfig = loadConfig({ RPC_URL_8453: "http://fake.invalid", MEV_RPC_URL_8453: RELAY, ZEROX_API_KEY: "zeroex-key" });
+
+function relayIo(chain: FakeChain, answer: () => string, sleep?: () => void): SendIo {
+  resetRpcClients();
+  mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const { id, method } = JSON.parse(String(init.body)) as { id: number; method: string };
+    if (method === "eth_chainId") return Response.json({ jsonrpc: "2.0", id, result: answer() });
+    if (method === "eth_sendRawTransaction") return Response.json({ jsonrpc: "2.0", id, result: `0x${"ab".repeat(32)}` });
+    return Response.json({ jsonrpc: "2.0", id, error: { code: -32601, message: "not served" } });
+  });
+  const io = clockIo(chain.rpc);
+  return {
+    ...io,
+    evm: (chainId, rpcs) => (rpcs[0] === RELAY ? createViemRpc(chainId, rpcs) : chain.rpc),
+    sleep: async (ms) => {
+      sleep?.();
+      await io.sleep(ms);
+    },
+  };
+}
+
+test("a MEV relay on another chain is refused before signing, so the send is not counted as broadcast", async (t) => {
+  t.after(() => mock.restoreAll());
+  const signed: EvmSignInput[] = [];
+  const io = relayIo(fakeChain(), () => "0x1");
+  await assert.rejects(
+    withdrawNative({ config: relayConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io }),
+    (error: unknown) => error instanceof BroadcastError && !error.broadcast && /MEV_RPC_URL_8453 answered eth_chainId with chain 1\b/.test(error.message),
+  );
+  assert.equal(signed.length, 0);
+});
+
+test("a replacement is not signed once the MEV relay answers another chain", async (t) => {
+  t.after(() => mock.restoreAll());
+  const signed: EvmSignInput[] = [];
+  let answer = "0x2105";
+  const io = relayIo(fakeChain(), () => answer, () => {
+    answer = "0x1";
+    resetRpcClients();
+  });
+  const tx = await withdrawNative({ config: relayConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
+  assert.equal(tx.outcome, "pending");
+  assert.equal(signed.length, 1, "only the first send was signed");
 });

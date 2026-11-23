@@ -41,7 +41,7 @@ function checkChainId(chainId: number, url: string): Promise<ChainCheck> {
   return entry.check;
 }
 
-async function assertChainId(chainId: number, urls: readonly string[]): Promise<void> {
+export async function assertChainId(chainId: number, urls: readonly string[]): Promise<void> {
   const checks = await Promise.all(urls.map((url) => checkChainId(chainId, url)));
   for (const check of checks) {
     if (check.kind !== "mismatch") continue;
