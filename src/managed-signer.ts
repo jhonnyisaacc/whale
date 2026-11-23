@@ -3,7 +3,7 @@ import { VersionedTransaction } from "@solana/web3.js";
 import { recoverTypedDataAddress, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { AppConfig } from "./config.js";
-import { actionHash, isHyperliquidMainnet, signL1Action, signWithdraw, type HyperliquidAction, type HyperliquidSignature, type WithdrawAction } from "./hyperliquid.js";
+import { agentTypedData, isHyperliquidMainnet, signL1Action, signWithdraw, type HyperliquidAction, type HyperliquidSignature, type WithdrawAction } from "./hyperliquid.js";
 import { loadSigner, signerSecrets, solanaSigner, type SignerMaterial } from "./signer.js";
 import { assertEvmFee, assertEvmSigning, assertHyperliquidSigning, assertHyperliquidWithdraw, assertSolanaSigning, routersForChain, type EvmApproval, type EvmPurpose, type SolanaMessage } from "./signing-policy.js";
 import { assertLiveEdges, drainTimeoutMs, serviceTokens } from "./config.js";
@@ -170,12 +170,7 @@ export function turnkeySigner(api: TurnkeyApi, addresses: { evm: string | null; 
     },
     async signHyperliquid(action, nonce, isMainnet) {
       if (!addresses.hyperliquid) throw new Error("hyperliquid agent key is not loaded");
-      const typed = {
-        domain: { name: "Exchange", version: "1", chainId: 1337, verifyingContract: "0x0000000000000000000000000000000000000000" as Hex },
-        types: { Agent: [{ name: "source", type: "string" }, { name: "connectionId", type: "bytes32" }] },
-        primaryType: "Agent" as const,
-        message: { source: isMainnet ? "a" : "b", connectionId: actionHash(action, null, nonce, null) },
-      };
+      const typed = agentTypedData(action, nonce, isMainnet);
       const raw = await api.signEip712(JSON.stringify(typed), addresses.hyperliquid);
       const signature = { r: word(raw.r), s: word(raw.s), v: recoveryId(raw.v) };
       if (BigInt(signature.r) === 0n || BigInt(signature.s) === 0n) throw new Error("hyperliquid: signature is zero");

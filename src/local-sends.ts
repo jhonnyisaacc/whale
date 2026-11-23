@@ -16,12 +16,13 @@ import { readVendorText, vendorResponse } from "./vendor-fetch.js";
 import { WSOL_MINT } from "./signing-policy.js";
 import type { SignerQueue } from "./signer-queue.js";
 import { SignerRefusal, whaleSigner, type SignerJobRecord, type WhaleSignerSetup } from "./whale-signer.js";
+import { perpIntent, perpMarket, type PerpOrder } from "./local-perps.js";
 
-export type LocalSend = Extract<WalletCommand, { kind: "swap"; mode: "live" } | { kind: "transfer" }>;
+export type LocalSend = Extract<WalletCommand, { kind: "swap"; mode: "live" } | { kind: "transfer" }> | PerpOrder;
 
 export type LocalSendResult = {
-  kind: "swap" | "transfer";
-  status: "signed" | "sent" | "skipped";
+  kind: "swap" | "transfer" | "perp";
+  status: "signed" | "sent" | "skipped" | "would_send";
   reason: string;
   broadcast: boolean;
   jobs: SignerJobRecord[];
@@ -138,12 +139,25 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     return settled("transfer", jobs, done ? [done] : txs, done ? `transfer ${done.outcome}` : "transfer refused");
   }
 
+  async function perp(command: PerpOrder): Promise<LocalSendResult> {
+    const market = await perpMarket(config.hyperliquidUrl, command.coin);
+    if (!market) return { kind: "perp", status: "skipped", reason: `${command.coin} is not a listed Hyperliquid perp`, broadcast: false, jobs: [], txs: [] };
+    const jobs: SignerJobRecord[] = [];
+    const signer = signerFor(jobs);
+    const report = await executor.execute(perpIntent(command, market, Date.now()), {
+      mode: command.mode,
+      send: (request, onTx) => broadcastRoute(config, signer, request, config.maxSlippageBps / 100, fetch, secrets, { onTx, hold }),
+    });
+    if (command.mode === "dry_run") return { kind: "perp", status: report.decision === "would_send" ? "would_send" : "skipped", reason: report.reason, broadcast: false, jobs: [], txs: [] };
+    return settled("perp", jobs, report.txs ?? [], report.reason);
+  }
+
   const seen = new Map<string, { fingerprint: string; result: Promise<LocalSendResult> }>();
   return (command: LocalSend): Promise<LocalSendResult> => {
     const fingerprint = JSON.stringify(command);
     const known = seen.get(command.idempotencyKey);
     if (known) return known.fingerprint === fingerprint ? known.result : Promise.reject(new Error("this idempotencyKey was used for a different command"));
-    const result = command.kind === "swap" ? swap(command) : transfer(command);
+    const result = command.kind === "swap" ? swap(command) : command.kind === "perp" ? perp(command) : transfer(command);
     seen.set(command.idempotencyKey, { fingerprint, result });
     result.catch(() => seen.delete(command.idempotencyKey));
     return result;

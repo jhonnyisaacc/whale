@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 import { z } from "zod";
 import { run, type WalletCommand } from "./commands.js";
 import type { LocalSend, LocalSendResult } from "./local-sends.js";
+import { perpOrderSchema } from "./local-perps.js";
 import { bridgeRequestSchema } from "./schemas.js";
 
 export type McpDeps = {
@@ -30,6 +31,7 @@ export const TOOLS = [
   { name: "swap", description: "Swap on one chain. The default dry_run quotes the best signable route and returns would_swap, or skipped with the reason, and signs nothing. mode live needs whale-signer: Whale sizes the trade from notionalUsd, checks its caps, builds and simulates the transaction, and asks whale-signer, whose refusal is final. With WHALE_BROADCAST off the signed job is reported and not sent.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, sell: assetSchema, buy: assetSchema, sellAmount: { type: "string" }, slippageBps: { type: "number" }, mode: { type: "string", enum: ["dry_run", "live"] }, notionalUsd: { type: "number" } }, required: ["idempotencyKey", "sell", "buy", "sellAmount", "slippageBps"] } },
   { name: "bridge", description: "Fetch bridge routes from LI.FI, Across, and Relay and rank them by fee. amount is in the asset's smallest unit. The destination must be an owner address on an enabled chain. The plan never broadcasts.", inputSchema: z.toJSONSchema(bridgeRequestSchema) },
   { name: "balance", description: "Read holdings for one chain and address. On Solana this includes SPL tokens. With no reader this fails.", inputSchema: { type: "object", properties: { chainKey: { type: "string" }, address: { type: "string" } }, required: ["chainKey", "address"] } },
+  { name: "perp", description: "Trade a Hyperliquid perp with an immediate-or-cancel limit order at 1x isolated. coin is the perp's name in Hyperliquid's meta, such as ETH. side buy opens or grows a long, side sell closes a long or opens a short. The default dry_run plans the order from the mark price and signs nothing. mode live needs whale-signer: Whale checks its caps and signing policy, and whale-signer's refusal is final. With WHALE_BROADCAST off the signed actions are reported and not sent.", inputSchema: z.toJSONSchema(perpOrderSchema, { io: "input" }) },
   { name: "transfer", description: "Transfer to an owner address. amount is in the asset's smallest unit. The default dry_run sends nothing. mode live needs whale-signer: the destination must be in OWNER_WITHDRAW_ADDRESSES and inside Whale's USD caps, and whale-signer's refusal is final. With WHALE_BROADCAST off the signed job is reported and not sent.", inputSchema: { type: "object", properties: { idempotencyKey: { type: "string" }, asset: assetSchema, to: { type: "string" }, amount: { type: "string" }, mode: { type: "string", enum: ["dry_run", "live"] } }, required: ["idempotencyKey", "asset", "to", "amount"] } },
 ] as const;
 
@@ -60,6 +62,11 @@ function commandFrom(name: string, args: Record<string, unknown>, liveSigner: bo
 
 export async function callTool(deps: McpDeps, name: string, args: Record<string, unknown>): Promise<unknown> {
   if (name === "wallet_status") return callHttp(deps, "/status");
+  if (name === "perp") {
+    const order = { kind: "perp" as const, ...perpOrderSchema.parse(args) };
+    if (!deps.localSend) return { kind: "perp", status: "skipped", reason: "a perp order needs whale-signer. set WHALE_SIGNER_KEYSTORE and run whale-signer serve" };
+    return deps.localSend(order);
+  }
   const execute = deps.runCommand ?? run;
   const command = commandFrom(name, args, Boolean(deps.localSend));
   if (deps.localSend && (command.kind === "transfer" || command.kind === "swap") && command.mode === "live") return deps.localSend(command);

@@ -34,7 +34,11 @@ async function sendHypercore(ctx: Ctx, request: SendRequest): Promise<SendResult
     } catch (error) {
       throw new BroadcastError(redactError(error, secrets), false);
     }
-    const record: TxRecord = { chainKey: "hypercore", txHash: `hl:${nonce}`, from: config.hyperliquidAccount ?? "", to: action.type, value: "0", outcome: "pending" };
+    const record: TxRecord = { chainKey: "hypercore", txHash: `hl:${nonce}`, from: config.hyperliquidAccount ?? signer.evmAddress() ?? "", to: action.type, value: "0", outcome: "pending" };
+    if (ctx.hold) {
+      txs.push({ ...record, outcome: "signed" });
+      continue;
+    }
     await journal(ctx, record);
     let body: unknown;
     try {
