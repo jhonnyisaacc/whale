@@ -122,7 +122,7 @@ export async function confirmEvm(ctx: EvmCtx, input: EvmSignInput, first: TxReco
   const won = records.find((record) => record.txHash === found.hash) ?? first;
   let received: bigint | null = null;
   if (outcome === "landed" && buyToken && before !== null) {
-    const gasCost = NATIVE_SELL.has(buyToken.toLowerCase()) ? found.receipt.gasUsed * found.receipt.effectiveGasPrice : 0n;
+    const gasCost = NATIVE_SELL.has(buyToken.toLowerCase()) ? found.receipt.gasUsed * found.receipt.effectiveGasPrice + found.receipt.l1Fee : 0n;
     received = await ctx.read
       .balance(buyToken, ctx.owner)
       .then((after) => after - before + gasCost)

@@ -37,7 +37,7 @@ type FakeChain = {
   rejectSimulation: (data: Hex) => boolean;
 };
 
-const success: EvmReceipt = { status: "success", gasUsed: 21_000n, effectiveGasPrice: 1n };
+const success: EvmReceipt = { status: "success", gasUsed: 21_000n, effectiveGasPrice: 1n, l1Fee: 0n };
 
 function fakeChain(): FakeChain {
   const chain: FakeChain = {
