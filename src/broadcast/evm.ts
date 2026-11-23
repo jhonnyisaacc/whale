@@ -50,7 +50,7 @@ async function seenAnywhere(ctx: EvmCtx, hash: Hex): Promise<boolean> {
   }
 }
 
-function sendersOnChain(ctx: EvmCtx): Promise<void[]> {
+export function sendersOnChain(ctx: EvmCtx): Promise<void[]> {
   return Promise.all(ctx.senders.map((rpc) => rpc.checkChain()));
 }
 
