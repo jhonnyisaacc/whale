@@ -41,7 +41,8 @@
               "fill": "$on-ink",
               "content": "Install Whale",
               "fontFamily": "$font-display",
-              "fontSize": 16
+              "fontSize": 16,
+              "fontWeight": "normal"
             },
             {
               "type": "icon",
@@ -93,7 +94,8 @@
               "fill": "$ink",
               "content": "View on GitHub",
               "fontFamily": "$font-display",
-              "fontSize": 16
+              "fontSize": 16,
+              "fontWeight": "normal"
             }
           ]
         },
@@ -389,7 +391,7 @@
                   "fill": "$ink",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Install the Whale wallet from https://github.com/jhonnyisaacc/whale\n\n1. Clone it and run: pnpm install --frozen-lockfile && pnpm run build\n2. Start the executor in the background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token> pnpm run start:executor\n3. Register its MCP server (stdio: node dist/src/mcp-server.js) with\n   EXECUTOR_URL=http://127.0.0.1:8788 and the same EXECUTOR_AUTH_TOKEN,\n   and the skills in skills/, with this host.\n\nThe local MCP is dry-run only: nothing signs or broadcasts.\nThen call wallet_status and show me the result.",
+                  "content": "Install the Whale wallet from https://github.com/jhonnyisaacc/whale\n\n1. Clone it and run: pnpm install --frozen-lockfile && pnpm run build\n2. Start the executor in the background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token> pnpm run start:executor\n3. Register its MCP server (stdio: node dist/src/mcp-server.js) with\n   EXECUTOR_URL=http://127.0.0.1:8788 and the same EXECUTOR_AUTH_TOKEN,\n   and the skills in skills/, with this host.\n\nThe local MCP is dry-run by default: nothing signs or broadcasts.\nThen call wallet_status and show me the result.",
                   "lineHeight": 1.75,
                   "fontFamily": "$font-mono",
                   "fontSize": 14,
@@ -452,7 +454,8 @@
               "fill": "$muted",
               "content": "Compare",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -465,7 +468,8 @@
               "fill": "$muted",
               "content": "Networks",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -478,7 +482,8 @@
               "fill": "$muted",
               "content": "Install",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -491,7 +496,8 @@
               "fill": "$muted",
               "content": "Hosts",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -504,7 +510,8 @@
               "fill": "$muted",
               "content": "Contribute",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             }
           ]
         },
@@ -886,7 +893,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": 560,
-                  "content": "Quote, swap and transfer (dry-run during beta), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
+                  "content": "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-display",
                   "fontSize": 20,
@@ -26350,7 +26357,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -27541,7 +27549,8 @@
                       "lineHeight": 1.4,
                       "textAlign": "center",
                       "fontFamily": "$font-mono",
-                      "fontSize": 13
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -27695,7 +27704,8 @@
                       "lineHeight": 1.4,
                       "textAlign": "center",
                       "fontFamily": "$font-mono",
-                      "fontSize": 13
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -27794,7 +27804,7 @@
           "type": "frame",
           "id": "MipDs",
           "name": "KnownIssues",
-          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 18, 2026. Each ref links to the issue; re-check before publishing.",
+          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 23, 2026. Each ref links to the issue; re-check before publishing.",
           "metadata": {
             "type": "display"
           },
@@ -27828,7 +27838,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Open on public GitHub as of Nov 18, 2026 — ours included.",
+                  "content": "Open on public GitHub as of Nov 23, 2026 — ours included.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
@@ -27875,7 +27885,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 20
+                          "fontSize": 20,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -27904,7 +27915,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Bridge only ranks quotes you supply",
+                          "content": "Bridge execution has no MCP or CLI tool yet",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -27919,7 +27930,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:110",
+                          "content": "execute.ts:147 · commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -27941,7 +27952,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Swap and transfer are dry-run in MCP",
+                          "content": "Hosted MCP sends are dry-run",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -27956,7 +27967,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "mcp-server.ts",
+                          "content": "gateway/mcp-tools.ts:113",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -27978,7 +27989,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "No live send on Base, Optimism, Blast, Scroll or zkSync",
+                          "content": "Blast is quotes only; zkSync is opt-in",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -27993,7 +28004,7 @@
                             "testId": "issue-chains-ts-guard-ts"
                           },
                           "fill": "$violet",
-                          "content": "chains.ts:287 · guard.ts:94",
+                          "content": "chains.ts:307 · support.ts:6",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -28676,7 +28687,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 520,
-              "content": "Same verbs everywhere: quote, swap and transfer (dry-run during beta), plus bridge-quote ranking. Tagged networks have limits today.",
+              "content": "Same verbs everywhere: quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking. Tagged networks have limits today.",
               "lineHeight": 1.5,
               "fontFamily": "$font-display",
               "fontSize": 17,
@@ -28757,37 +28768,46 @@
                       }
                     },
                     {
-                      "id": "V5JTJI",
-                      "type": "ref",
-                      "ref": "RoI5s",
-                      "name": "Chip Base",
-                      "descendants": {
-                        "pgTvz": {
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "logos/c-base.webp",
-                            "mode": "cover"
+                      "type": "frame",
+                      "id": "v5HBa",
+                      "name": "BaseWithBadge",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "V5JTJI",
+                          "type": "ref",
+                          "ref": "RoI5s",
+                          "name": "Chip Base",
+                          "descendants": {
+                            "pgTvz": {
+                              "fill": {
+                                "type": "image",
+                                "enabled": true,
+                                "url": "logos/c-base.webp",
+                                "mode": "cover"
+                              }
+                            },
+                            "CvhT2": {
+                              "icon": "circle"
+                            },
+                            "as2Tg": {
+                              "content": "Base"
+                            }
                           }
                         },
-                        "CvhT2": {
-                          "icon": "circle"
-                        },
-                        "as2Tg": {
-                          "content": "Base"
+                        {
+                          "id": "o65qf",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "name": "Badge self-hosted live",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "self-hosted live"
+                            }
+                          }
                         }
-                      }
-                    },
-                    {
-                      "id": "yapCr",
-                      "type": "ref",
-                      "ref": "UM68F",
-                      "name": "Badge quotes only",
-                      "descendants": {
-                        "k7RLXp": {
-                          "content": "quotes only"
-                        }
-                      }
+                      ]
                     },
                     {
                       "id": "H2SZ4P",
@@ -28812,37 +28832,46 @@
                       }
                     },
                     {
-                      "id": "QvOBN",
-                      "type": "ref",
-                      "ref": "RoI5s",
-                      "name": "Chip Optimism",
-                      "descendants": {
-                        "pgTvz": {
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "logos/c-optimism.webp",
-                            "mode": "cover"
+                      "type": "frame",
+                      "id": "v6Dce",
+                      "name": "OptimismWithBadge",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "QvOBN",
+                          "type": "ref",
+                          "ref": "RoI5s",
+                          "name": "Chip Optimism",
+                          "descendants": {
+                            "pgTvz": {
+                              "fill": {
+                                "type": "image",
+                                "enabled": true,
+                                "url": "logos/c-optimism.webp",
+                                "mode": "cover"
+                              }
+                            },
+                            "CvhT2": {
+                              "icon": "square"
+                            },
+                            "as2Tg": {
+                              "content": "Optimism"
+                            }
                           }
                         },
-                        "CvhT2": {
-                          "icon": "square"
-                        },
-                        "as2Tg": {
-                          "content": "Optimism"
+                        {
+                          "id": "LRkK7",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "name": "Badge self-hosted live",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "self-hosted live"
+                            }
+                          }
                         }
-                      }
-                    },
-                    {
-                      "id": "q3xtg",
-                      "type": "ref",
-                      "ref": "UM68F",
-                      "name": "Badge quotes only",
-                      "descendants": {
-                        "k7RLXp": {
-                          "content": "quotes only"
-                        }
-                      }
+                      ]
                     },
                     {
                       "id": "V8b9gV",
@@ -28920,37 +28949,46 @@
                       }
                     },
                     {
-                      "id": "J1B1JS",
-                      "type": "ref",
-                      "ref": "RoI5s",
-                      "name": "Chip Scroll",
-                      "descendants": {
-                        "pgTvz": {
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "logos/c-scroll.webp",
-                            "mode": "cover"
+                      "type": "frame",
+                      "id": "MqWTa",
+                      "name": "ScrollWithBadge",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "J1B1JS",
+                          "type": "ref",
+                          "ref": "RoI5s",
+                          "name": "Chip Scroll",
+                          "descendants": {
+                            "pgTvz": {
+                              "fill": {
+                                "type": "image",
+                                "enabled": true,
+                                "url": "logos/c-scroll.webp",
+                                "mode": "cover"
+                              }
+                            },
+                            "CvhT2": {
+                              "icon": "star-four"
+                            },
+                            "as2Tg": {
+                              "content": "Scroll"
+                            }
                           }
                         },
-                        "CvhT2": {
-                          "icon": "star-four"
-                        },
-                        "as2Tg": {
-                          "content": "Scroll"
+                        {
+                          "id": "U3CFfN",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "name": "Badge self-hosted live",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "self-hosted live"
+                            }
+                          }
                         }
-                      }
-                    },
-                    {
-                      "id": "ZdPAn",
-                      "type": "ref",
-                      "ref": "UM68F",
-                      "name": "Badge quotes only",
-                      "descendants": {
-                        "k7RLXp": {
-                          "content": "quotes only"
-                        }
-                      }
+                      ]
                     },
                     {
                       "id": "JTaP9",
@@ -29021,10 +29059,10 @@
                           "id": "RQCOi",
                           "type": "ref",
                           "ref": "UM68F",
-                          "name": "Badge quotes only",
+                          "name": "Badge opt-in",
                           "descendants": {
                             "k7RLXp": {
-                              "content": "quotes only"
+                              "content": "opt-in"
                             }
                           }
                         }
@@ -29119,10 +29157,10 @@
                           "id": "kti8u",
                           "type": "ref",
                           "ref": "UM68F",
-                          "name": "Badge opt-in, no router yet",
+                          "name": "Badge opt-in",
                           "descendants": {
                             "k7RLXp": {
-                              "content": "opt-in, no router yet"
+                              "content": "opt-in"
                             }
                           }
                         }
@@ -29366,7 +29404,8 @@
                   "fill": "$ink",
                   "content": "Claude Code",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29411,7 +29450,8 @@
                   "fill": "$muted",
                   "content": "Codex",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29456,7 +29496,8 @@
                   "fill": "$muted",
                   "content": "Grok",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29501,7 +29542,8 @@
                   "fill": "$muted",
                   "content": "Muse",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29546,7 +29588,8 @@
                   "fill": "$muted",
                   "content": "Hermes",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29588,7 +29631,8 @@
                   "fill": "$muted",
                   "content": "Any MCP client",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -29678,7 +29722,8 @@
                               "fill": "$ink",
                               "content": "Prefer the terminal?",
                               "fontFamily": "$font-display",
-                              "fontSize": 18
+                              "fontSize": 18,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -29771,7 +29816,8 @@
                               "fill": "$ink",
                               "content": "Hosted gateway",
                               "fontFamily": "$font-display",
-                              "fontSize": 18
+                              "fontSize": 18,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -30518,7 +30564,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Every swap and transfer is a dry-run during beta. Nothing signs live yet.",
+                  "content": "Every swap and transfer is a dry-run until you turn live sends on. Self-hosted live, hosted pending.",
                   "lineHeight": 1.55,
                   "fontFamily": "$font-display",
                   "fontSize": 15,
@@ -31236,7 +31282,8 @@
                   "fill": "$muted",
                   "content": "GitHub",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -56776,7 +56823,7 @@
           "fill": "$muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Quote, swap and transfer (dry-run during beta), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
+          "content": "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
           "lineHeight": 1.5,
           "fontFamily": "$font-display",
           "fontSize": 17,
@@ -56920,7 +56967,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -58358,7 +58406,7 @@
           "type": "frame",
           "id": "fz5p5",
           "name": "KnownIssues",
-          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 18, 2026. Each ref links to the issue; re-check before publishing.",
+          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 23, 2026. Each ref links to the issue; re-check before publishing.",
           "metadata": {
             "type": "display"
           },
@@ -58392,7 +58440,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Open on public GitHub as of Nov 18, 2026 — ours included.",
+                  "content": "Open on public GitHub as of Nov 23, 2026 — ours included.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
@@ -58439,7 +58487,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 20
+                          "fontSize": 20,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -58468,7 +58517,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Bridge only ranks quotes you supply",
+                          "content": "Bridge execution has no MCP or CLI tool yet",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58482,7 +58531,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:110",
+                          "content": "execute.ts:147 · commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58504,7 +58553,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Swap and transfer are dry-run in MCP",
+                          "content": "Hosted MCP sends are dry-run",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58518,7 +58567,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "mcp-server.ts",
+                          "content": "gateway/mcp-tools.ts:113",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58540,7 +58589,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "No live send on Base, Optimism, Blast, Scroll or zkSync",
+                          "content": "Blast is quotes only; zkSync is opt-in",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58554,7 +58603,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "chains.ts:287 · guard.ts:94",
+                          "content": "chains.ts:307 · support.ts:6",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -59355,17 +59404,26 @@
                   }
                 },
                 {
-                  "id": "sQwhG",
+                  "id": "mn7Au",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge quotes only",
+                  "name": "Badge self-hosted live",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "quotes only",
+                      "content": "self-hosted live",
                       "fontSize": 11
                     }
                   }
-                },
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cI0Z5",
+              "name": "ChipRow",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
                 {
                   "id": "oclyN",
                   "type": "ref",
@@ -59405,12 +59463,52 @@
                       "fontSize": 15
                     }
                   }
+                },
+                {
+                  "id": "a1VBqX",
+                  "type": "ref",
+                  "ref": "RoI5s",
+                  "name": "Chip Polygon",
+                  "height": 48,
+                  "padding": [
+                    10,
+                    16,
+                    10,
+                    10
+                  ],
+                  "descendants": {
+                    "me4NY": {
+                      "width": 26,
+                      "height": 26
+                    },
+                    "pgTvz": {
+                      "fill": {
+                        "type": "image",
+                        "enabled": true,
+                        "url": "logos/c-polygon.webp",
+                        "mode": "cover"
+                      },
+                      "x": 0,
+                      "y": 0,
+                      "width": 26,
+                      "height": 26
+                    },
+                    "CvhT2": {
+                      "icon": "diamond",
+                      "width": 24,
+                      "height": 24
+                    },
+                    "as2Tg": {
+                      "content": "Polygon",
+                      "fontSize": 15
+                    }
+                  }
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "cI0Z5",
+              "id": "DBPSw",
               "name": "ChipRow",
               "gap": 8,
               "alignItems": "center",
@@ -59456,54 +59554,14 @@
                   }
                 },
                 {
-                  "id": "DQcEu",
+                  "id": "oeH9t",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge quotes only",
+                  "name": "Badge self-hosted live",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "quotes only",
+                      "content": "self-hosted live",
                       "fontSize": 11
-                    }
-                  }
-                },
-                {
-                  "id": "a1VBqX",
-                  "type": "ref",
-                  "ref": "RoI5s",
-                  "name": "Chip Polygon",
-                  "height": 48,
-                  "padding": [
-                    10,
-                    16,
-                    10,
-                    10
-                  ],
-                  "descendants": {
-                    "me4NY": {
-                      "width": 26,
-                      "height": 26
-                    },
-                    "pgTvz": {
-                      "fill": {
-                        "type": "image",
-                        "enabled": true,
-                        "url": "logos/c-polygon.webp",
-                        "mode": "cover"
-                      },
-                      "x": 0,
-                      "y": 0,
-                      "width": 26,
-                      "height": 26
-                    },
-                    "CvhT2": {
-                      "icon": "diamond",
-                      "width": 24,
-                      "height": 24
-                    },
-                    "as2Tg": {
-                      "content": "Polygon",
-                      "fontSize": 15
                     }
                   }
                 }
@@ -59707,13 +59765,13 @@
                   }
                 },
                 {
-                  "id": "BNR91",
+                  "id": "waDZl",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge quotes only",
+                  "name": "Badge self-hosted live",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "quotes only",
+                      "content": "self-hosted live",
                       "fontSize": 11
                     }
                   }
@@ -59774,10 +59832,10 @@
                   "id": "OS0C9",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge quotes only",
+                  "name": "Badge opt-in",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "quotes only",
+                      "content": "opt-in",
                       "fontSize": 11
                     }
                   }
@@ -59927,10 +59985,10 @@
                   "id": "TBzre",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge opt-in, no router yet",
+                  "name": "Badge opt-in",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "opt-in, no router yet",
+                      "content": "opt-in",
                       "fontSize": 11
                     }
                   }
@@ -60190,7 +60248,8 @@
                       "fill": "$ink",
                       "content": "Claude Code",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60232,7 +60291,8 @@
                       "fill": "$muted",
                       "content": "Codex",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60274,7 +60334,8 @@
                       "fill": "$muted",
                       "content": "Grok",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60316,7 +60377,8 @@
                       "fill": "$muted",
                       "content": "Muse",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60358,7 +60420,8 @@
                       "fill": "$muted",
                       "content": "Hermes",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60397,7 +60460,8 @@
                       "fill": "$muted",
                       "content": "Any MCP client",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -60428,7 +60492,7 @@
             "N2AfU": {
               "fontSize": 12,
               "lineHeight": 1.65,
-              "content": "Install the Whale wallet from\nhttps://github.com/jhonnyisaacc/whale\n\n1. Clone it and run:\n   pnpm install --frozen-lockfile\n   && pnpm run build\n2. Start the executor in the\n   background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token>\n   pnpm run start:executor\n3. Register its MCP server\n   (stdio: node dist/src/mcp-server.js)\n   with EXECUTOR_URL=\n   http://127.0.0.1:8788 and the same\n   EXECUTOR_AUTH_TOKEN, and the skills\n   in skills/, with this host.\n\nThe local MCP is dry-run only:\nnothing signs or broadcasts.\nThen call wallet_status and show me\nthe result."
+              "content": "Install the Whale wallet from\nhttps://github.com/jhonnyisaacc/whale\n\n1. Clone it and run:\n   pnpm install --frozen-lockfile\n   && pnpm run build\n2. Start the executor in the\n   background with a random token:\n   PORT=8788 EXECUTOR_AUTH_TOKEN=<token>\n   pnpm run start:executor\n3. Register its MCP server\n   (stdio: node dist/src/mcp-server.js)\n   with EXECUTOR_URL=\n   http://127.0.0.1:8788 and the same\n   EXECUTOR_AUTH_TOKEN, and the skills\n   in skills/, with this host.\n\nThe local MCP is dry-run by default:\nnothing signs or broadcasts.\nThen call wallet_status and show me\nthe result."
             }
           }
         },
@@ -61110,7 +61174,7 @@
                       "fill": "$muted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Every swap and transfer is a dry-run during beta. Nothing signs live yet.",
+                      "content": "Every swap and transfer is a dry-run until you turn live sends on. Self-hosted live, hosted pending.",
                       "lineHeight": 1.5,
                       "fontFamily": "$font-display",
                       "fontSize": 14,
@@ -61743,7 +61807,8 @@
                   "fill": "$muted",
                   "content": "GitHub",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -61789,7 +61854,7 @@
       "name": "Note Placeholders to fill",
       "width": 420,
       "height": 300,
-      "content": "Still to verify\n\n• Compare cells come from public docs as of Nov 18, 2026 (metamask.com/agent-wallet, docs.phantom.com, paybox.sh/llms.txt). Phantom docs were unreachable; Phantom cells rely on search summaries + npm readme mentions.\n• Hermes has no Whale manifest in the repo yet; marked 'planned'.\n• Logos: hosts from @lobehub/icons-static-svg 1.71.0, chains from DefiLlama icons + cryptocurrency-icons 0.18.1, saved in ./logos. Check each brand's usage guidelines before launch.\n• Contributor avatars are placeholder circles."
+      "content": "Still to verify\n\n• Compare cells come from public docs as of Nov 18, 2026 (metamask.com/agent-wallet, docs.phantom.com, paybox.sh/llms.txt). Phantom docs were unreachable; Phantom cells rely on search summaries + npm readme mentions.\n• Hermes has a manifest (plugin.json, mcp.json) since #108, but hermes plugins install blocks the package on its scan; still marked 'planned'.\n• Logos: hosts from @lobehub/icons-static-svg 1.71.0, chains from DefiLlama icons + cryptocurrency-icons 0.18.1, saved in ./logos. Check each brand's usage guidelines before launch.\n• Contributor avatars are placeholder circles."
     },
     {
       "type": "note",
@@ -61862,7 +61927,8 @@
               "fill": "$muted",
               "content": "Compare",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61875,7 +61941,8 @@
               "fill": "$muted",
               "content": "Networks",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61888,7 +61955,8 @@
               "fill": "$muted",
               "content": "Install",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61901,7 +61969,8 @@
               "fill": "$muted",
               "content": "Hosts",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61914,7 +61983,8 @@
               "fill": "$muted",
               "content": "Contribute",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             }
           ]
         },
@@ -62031,7 +62101,8 @@
                       "fill": "$ink",
                       "content": "Install",
                       "fontFamily": "$font-display",
-                      "fontSize": 15
+                      "fontSize": 15,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -62911,7 +62982,7 @@
                           "id": "I80gb",
                           "name": "Loads",
                           "fill": "$muted",
-                          "content": ".mcp.json + skills/ (no manifest yet)",
+                          "content": "plugin.json + mcp.json + skills/",
                           "fontFamily": "$font-mono",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -62991,7 +63062,7 @@
                   "fill": "$ink",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Defaults are safe. The local MCP is dry-run only. Spend caps live in the executor, and no step ever asks for a seed phrase.",
+                  "content": "Defaults are safe. The local MCP is dry-run by default. Spend caps live in the executor, and no step ever asks for a seed phrase.",
                   "lineHeight": 1.55,
                   "fontFamily": "$font-display",
                   "fontSize": 15,
@@ -63125,7 +63196,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 16
+                          "fontSize": 16,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -64316,7 +64388,8 @@
                           "lineHeight": 1.4,
                           "textAlign": "center",
                           "fontFamily": "$font-mono",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -64470,7 +64543,8 @@
                           "lineHeight": 1.4,
                           "textAlign": "center",
                           "fontFamily": "$font-mono",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -64569,7 +64643,7 @@
               "type": "frame",
               "id": "rwopu",
               "name": "KnownIssues",
-              "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 18, 2026. Each ref links to the issue; re-check before publishing.",
+              "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 23, 2026. Each ref links to the issue; re-check before publishing.",
               "metadata": {
                 "type": "display"
               },
@@ -64603,7 +64677,7 @@
                       "fill": "$muted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Open on public GitHub as of Nov 18, 2026 — ours included.",
+                      "content": "Open on public GitHub as of Nov 23, 2026 — ours included.",
                       "lineHeight": 1.5,
                       "fontFamily": "$font-mono",
                       "fontSize": 12,
@@ -64650,7 +64724,8 @@
                               "fill": "$ink",
                               "content": "Whale",
                               "fontFamily": "$font-display",
-                              "fontSize": 20
+                              "fontSize": 20,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -64679,7 +64754,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Bridge only ranks quotes you supply",
+                              "content": "Bridge execution has no MCP or CLI tool yet",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64693,7 +64768,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "commands.ts:110",
+                              "content": "execute.ts:147 · commands.ts:131",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -64715,7 +64790,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Swap and transfer are dry-run in MCP",
+                              "content": "Hosted MCP sends are dry-run",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64729,7 +64804,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "mcp-server.ts",
+                              "content": "gateway/mcp-tools.ts:113",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -64751,7 +64826,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "No live send on Base, Optimism, Blast, Scroll or zkSync",
+                              "content": "Blast is quotes only; zkSync is opt-in",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64765,7 +64840,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "chains.ts:287 · guard.ts:94",
+                              "content": "chains.ts:307 · support.ts:6",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -88629,7 +88704,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -88856,7 +88932,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -89453,7 +89530,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -89768,7 +89846,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -89822,7 +89901,8 @@
                           "fill": "$ink",
                           "content": "W",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89843,7 +89923,8 @@
                           "fill": "$ink",
                           "content": "D",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89864,7 +89945,8 @@
                           "fill": "$ink",
                           "content": "J",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89885,7 +89967,8 @@
                           "fill": "$ink",
                           "content": "B",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89915,7 +89998,8 @@
                           "fill": "$ink",
                           "content": "M",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89936,7 +90020,8 @@
                           "fill": "$ink",
                           "content": "J",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89957,7 +90042,8 @@
                           "fill": "$ink",
                           "content": "H",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89978,7 +90064,8 @@
                           "fill": "$ink",
                           "content": "T",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -90817,7 +90904,8 @@
                   "fill": "$ink",
                   "content": "Copy this key now. Whale stores only its hash.",
                   "fontFamily": "$font-display",
-                  "fontSize": 16
+                  "fontSize": 16,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -90993,7 +91081,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -92221,7 +92310,8 @@
                           "fill": "$ink",
                           "content": "This computer only",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92342,7 +92432,8 @@
                           "fill": "$ink",
                           "content": "Claude Code · Codex · Cursor",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92452,7 +92543,8 @@
                           "fill": "$ink",
                           "content": "Grok",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92562,7 +92654,8 @@
                           "fill": "$ink",
                           "content": "VPS · SSH · Hermes",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92683,7 +92776,8 @@
                           "fill": "$ink",
                           "content": "Your own bot",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -93241,7 +93335,8 @@
                       "fill": "$ink",
                       "content": "W",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93262,7 +93357,8 @@
                       "fill": "$ink",
                       "content": "D",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93283,7 +93379,8 @@
                       "fill": "$ink",
                       "content": "J",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93304,7 +93401,8 @@
                       "fill": "$ink",
                       "content": "B",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93334,7 +93432,8 @@
                       "fill": "$ink",
                       "content": "M",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93355,7 +93454,8 @@
                       "fill": "$ink",
                       "content": "J",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93376,7 +93476,8 @@
                       "fill": "$ink",
                       "content": "H",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93397,7 +93498,8 @@
                       "fill": "$ink",
                       "content": "T",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -93759,6 +93861,5 @@
       "type": "number",
       "value": 1200
     }
-  },
-  "fileToken": "fcc78ed4-fdee-478d-a03e-a6fff4fdea27"
+  }
 }

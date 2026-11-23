@@ -1,6 +1,8 @@
 import { decodeFunctionData, encodeFunctionData, parseAbi, type Hex } from "viem";
 import type { SendResult } from "../src/domain.js";
+import type { HyperMarketOf } from "../src/executor/hypercore-market.js";
 import { LIFI_ABI } from "../src/signing-policy/swap-terms.js";
+import { LIFI_STEP_TARGETS } from "../src/signing-policy/lifi-steps.js";
 
 export function landedSend(): SendResult {
   return {
@@ -10,6 +12,10 @@ export function landedSend(): SendResult {
     held: null,
     shortfall: false,
   };
+}
+
+export function hyperMarketAt(assetIndex: number, szDecimals = 2, coin = "TKN"): HyperMarketOf {
+  return async ({ market }) => ({ coin, market, assetIndex, szDecimals, maxLeverage: 5, midKey: coin });
 }
 
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -92,13 +98,13 @@ export function tagOf(data: Hex | undefined): Hex | undefined {
   }
 }
 
-export type LifiSwap = { sell: string; buy: string; amount: bigint; deposit?: boolean };
+export type LifiSwap = { sell: string; buy: string; amount: bigint; deposit?: boolean; target?: string };
 export type LifiFunction = (typeof LIFI_ABI)[number] extends infer Item ? (Item extends { name: infer Name } ? Name : never) : never;
 
 export function lifiData(functionName: LifiFunction, recipient: string, minOut: bigint, swaps: readonly LifiSwap[], tag: Hex = "0x01"): Hex {
   const data = swaps.map((swap) => ({
-    callTo: SETTLER as Hex,
-    approveTo: SETTLER as Hex,
+    callTo: (swap.target ?? LIFI_STEP_TARGETS[324]!.targets[1]!) as Hex,
+    approveTo: (swap.target ?? LIFI_STEP_TARGETS[324]!.targets[1]!) as Hex,
     sendingAssetId: swap.sell as Hex,
     receivingAssetId: swap.buy as Hex,
     fromAmount: swap.amount,

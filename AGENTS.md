@@ -15,7 +15,7 @@ Multichain wallet for AI agents. EVM and Solana. Dry-run is the default. Live si
 - `src/gateway-server.ts` and `src/gateway/` are the public process from ADR 0003: sign-in, sessions, and the dashboard API. It holds no signing credential and imports no signer, sender, or executor module.
 - `signer/` is the self-hosted Rust signer. Crates are pinned with `=`, `Cargo.lock` is committed, and `vectors/` is regenerated with `node signer/vectors/generate.mjs`. A change to `signer/src/policy.rs` is a security change.
 - `web/` is the dashboard: Vite and React, no UI or state library. The gateway serves `web/dist`. Passkey ceremonies and the Turnkey delegation step run in the browser under the user's passkey.
-- `src/local-sends.ts` runs a local MCP live swap or transfer through the executor and the send path, with `src/whale-signer.ts` as the signer and `src/signer-queue.ts` as the loopback queue `whale-signer serve` polls.
+- `src/local-sends.ts` runs a local MCP live swap, transfer, or perp order (`src/local-perps.ts`) through the executor and the send path, with `src/whale-signer.ts` as the signer and `src/signer-queue.ts` as the loopback queue `whale-signer serve` polls.
 - `src/db/` runs the numbered SQL files in `migrations/`. A shipped migration never changes. Add the next number instead.
 
 ## Rules an agent cannot infer

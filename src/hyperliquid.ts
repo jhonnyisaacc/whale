@@ -1,4 +1,5 @@
 import { encode } from "@msgpack/msgpack";
+import { z } from "zod";
 import { withTimeout } from "./timeout.js";
 import { keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -90,8 +91,17 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
   return { type: "updateLeverage", asset, isCross: false, leverage };
 }
 
-export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction): HyperliquidAction[] {
-  return market.market === "spot" ? [order] : [buildLeverage(market.assetIndex, 1), order];
+export type PerpPosition = { side: "flat" } | { side: "long" | "short"; margin: "isolated" | "cross"; leverage: number };
+
+export function tradeActions(market: { market: "perp" | "spot"; coin: string; assetIndex: number; maxLeverage: number }, order: OrderAction, leverage: number | undefined, position: PerpPosition | null): HyperliquidAction[] {
+  if (market.market === "spot") return [order];
+  if (leverage !== undefined && leverage > market.maxLeverage) throw new Error(`leverage ${leverage} exceeds the ${market.maxLeverage}x maxLeverage of ${market.coin}`);
+  if (position === null) throw new Error("hyperliquid position unreadable");
+  const isBuy = order.orders[0]?.b === true;
+  if (position.side === "flat") return [buildLeverage(market.assetIndex, isBuy ? (leverage ?? 1) : 1), order];
+  if (!isBuy || position.side === "short" || leverage === undefined) return [order];
+  if (position.margin === "cross") throw new Error(`leverage cannot be set on the open cross ${market.coin} long`);
+  return [buildLeverage(market.assetIndex, leverage), order];
 }
 
 export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): number {
@@ -170,25 +180,17 @@ export function isHyperliquidMainnet(url: string): boolean {
 
 export async function signL1Action(privateKey: Secret, action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<HyperliquidSignature> {
   assertTradableAction(action);
-  const connectionId = actionHash(action, null, nonce, null);
   const account = privateKeyToAccount(privateKey.reveal() as `0x${string}`);
-  const signature = await account.signTypedData({
-    domain: {
-      name: "Exchange",
-      version: "1",
-      chainId: 1337,
-      verifyingContract: "0x0000000000000000000000000000000000000000",
-    },
-    types: {
-      Agent: [
-        { name: "source", type: "string" },
-        { name: "connectionId", type: "bytes32" },
-      ],
-    },
-    primaryType: "Agent",
-    message: { source: isMainnet ? "a" : "b", connectionId },
-  });
-  return splitSignature(signature);
+  return splitSignature(await account.signTypedData(agentTypedData(action, nonce, isMainnet)));
+}
+
+export function agentTypedData(action: HyperliquidAction, nonce: number, isMainnet: boolean) {
+  return {
+    domain: { name: "Exchange", version: "1", chainId: 1337, verifyingContract: "0x0000000000000000000000000000000000000000" as Hex },
+    types: { Agent: [{ name: "source", type: "string" }, { name: "connectionId", type: "bytes32" }] },
+    primaryType: "Agent" as const,
+    message: { source: isMainnet ? "a" : "b", connectionId: actionHash(action, null, nonce, null) },
+  };
 }
 
 export type WithdrawAction = {
@@ -276,42 +278,33 @@ export function nextHyperliquidNonce(now = Date.now()): number {
   return lastNonce;
 }
 
-const szCache = new Map<string, number>();
+const clearinghouseSchema = z.object({
+  assetPositions: z.array(
+    z.object({
+      position: z.object({
+        coin: z.string(),
+        szi: z.string().regex(/^-?\d+(\.\d+)?$/),
+        leverage: z.object({ type: z.enum(["isolated", "cross"]), value: z.number().int().positive() }),
+      }),
+    }),
+  ),
+});
 
-export function resetSzDecimals(): void {
-  szCache.clear();
-}
-
-export async function fetchSzDecimals(url: string, market: { market: "perp" | "spot"; assetIndex: number }, fetchImpl: typeof fetch = fetch): Promise<number | null> {
-  const key = `${url}|${market.market}|${market.assetIndex}`;
-  const cached = szCache.get(key);
-  if (cached !== undefined) return cached;
-  type Meta = {
-    universe?: Array<{ szDecimals?: number; tokens?: number[]; index?: number }>;
-    tokens?: Array<{ szDecimals?: number; index?: number }>;
-  };
-  const body = await withTimeout(1500, async (signal) => {
+export async function fetchPerpPosition(url: string, user: string, coin: string, fetchImpl: typeof fetch = fetch): Promise<PerpPosition> {
+  const body: unknown = await withTimeout(1500, async (signal) => {
     const response = await vendorResponse(fetchImpl, `${url.replace(/\/$/, "")}/info`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: market.market === "spot" ? "spotMeta" : "meta" }),
+      body: JSON.stringify({ type: "clearinghouseState", user }),
       signal,
     });
-    return response.ok ? (JSON.parse(await readVendorText(response)) as Meta) : null;
+    if (!response.ok) throw new Error("hyperliquid clearinghouseState failed");
+    return JSON.parse(await readVendorText(response)) as unknown;
   });
-  if (!body) return null;
-  let value: number | undefined;
-  if (market.market === "perp") {
-    value = body.universe?.[market.assetIndex]?.szDecimals;
-  } else {
-    const spotIndex = market.assetIndex >= 10_000 ? market.assetIndex - 10_000 : market.assetIndex;
-    const pair = body.universe?.find((row) => row.index === spotIndex);
-    const base = pair?.tokens?.[0];
-    value = body.tokens?.find((token) => token.index === base)?.szDecimals;
-  }
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return null;
-  szCache.set(key, value);
-  return value;
+  const row = clearinghouseSchema.parse(body).assetPositions.find((item) => item.position.coin === coin)?.position;
+  const size = row === undefined ? 0 : Number(row.szi);
+  if (row === undefined || size === 0) return { side: "flat" };
+  return { side: size > 0 ? "long" : "short", margin: row.leverage.type, leverage: row.leverage.value };
 }
 
 export type ExchangeOutcome =

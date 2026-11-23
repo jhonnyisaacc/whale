@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
-import { keccak256 } from "viem";
+import { hashTypedData, keccak256, recoverAddress, type Hex } from "viem";
 import { z } from "zod";
 import { bitcoinWallet } from "./bitcoin/wallet.js";
+import { agentTypedData, withdrawTypedData, type HyperliquidSignature } from "./hyperliquid.js";
 import type { TransactionSigner } from "./managed-signer.js";
 import { verifiedEvmTransaction, verifiedSolanaTransaction } from "./signatures.js";
 import type { SignerAnswer, SignerJob, SignerQueue } from "./signer-queue.js";
@@ -27,12 +28,21 @@ const keystoreAddresses = z
 export type KeystorePublic = { evmAddress: string; solanaAddress: string; bitcoinPublicKey: string | null };
 export type WhaleSignerSetup = KeystorePublic & { token: string; port: number; answerTimeoutMs: number };
 
-export function keystorePublic(keystore: string): KeystorePublic {
+function readKeystoreAddresses(keystore: string): z.infer<typeof keystoreAddresses> {
   const addresses = keystoreAddresses.safeParse(JSON.parse(readFileSync(keystore, "utf8")));
   if (!addresses.success) throw new Error("WHALE_SIGNER_KEYSTORE is not a whale-signer keystore");
-  const { evmAddress, solanaAddress, bitcoinPublicKey } = addresses.data;
+  return addresses.data;
+}
+
+export function keystorePublic(keystore: string): KeystorePublic {
+  const { evmAddress, solanaAddress, bitcoinPublicKey } = readKeystoreAddresses(keystore);
   if (bitcoinPublicKey) bitcoinWallet(bitcoinPublicKey, evmAddress, "bitcoin");
   return { evmAddress, solanaAddress, bitcoinPublicKey: bitcoinPublicKey ?? null };
+}
+
+export function whaleSignerEvmAddress(env: NodeJS.ProcessEnv): string | null {
+  const keystore = env.WHALE_SIGNER_KEYSTORE?.trim();
+  return keystore ? readKeystoreAddresses(keystore).evmAddress : null;
 }
 
 export function whaleSignerSetup(env: NodeJS.ProcessEnv): WhaleSignerSetup | null {
@@ -52,6 +62,8 @@ export function whaleSignerSetup(env: NodeJS.ProcessEnv): WhaleSignerSetup | nul
 
 const evmResult = z.object({ signedTransaction: z.string() });
 const solanaResult = z.object({ signature: z.string().max(90) });
+const word = z.string().regex(/^0x[0-9a-f]{64}$/).transform((value) => value as Hex);
+const hypercoreResult = z.object({ signature: z.object({ r: word, s: word, v: z.union([z.literal(27), z.literal(28)]) }) });
 
 export function whaleSigner(queue: SignerQueue, addresses: { evm: string; solana: string }, jobs: SignerJobRecord[]): TransactionSigner {
   const ask = async (job: SignerJob) => {
@@ -61,6 +73,16 @@ export function whaleSigner(queue: SignerQueue, addresses: { evm: string; solana
       throw new SignerRefusal(id, answer.reasons);
     }
     return { id, result: answer.result };
+  };
+  const signHypercore = async (payload: Record<string, unknown>, digest: Hex): Promise<HyperliquidSignature> => {
+    const { id, result } = await ask({ kind: "hypercore", payload });
+    const parsed = hypercoreResult.safeParse(result);
+    if (!parsed.success) throw new Error(`whale-signer answered job ${id} without a signature`);
+    const { r, s, v } = parsed.data.signature;
+    const signer = await recoverAddress({ hash: digest, signature: { r, s, v: BigInt(v) } }).catch(() => null);
+    if (signer?.toLowerCase() !== addresses.evm.toLowerCase()) throw new Error(`whale-signer answered job ${id} with a signature that does not recover to ${addresses.evm}`);
+    jobs.push({ id, kind: "hypercore", decision: "signed", hash: digest });
+    return { r, s, v };
   };
   return {
     backend: "whale-signer",
@@ -88,8 +110,11 @@ export function whaleSigner(queue: SignerQueue, addresses: { evm: string; solana
       jobs.push({ id, kind: "solana", decision: "signed", hash: parsed.data.signature });
       return signed;
     },
-    async signHyperliquid() {
-      throw new Error("whale-signer does not sign HyperCore actions");
+    signHyperliquid(action, nonce, isMainnet) {
+      return signHypercore({ network: isMainnet ? "mainnet" : "testnet", nonce, action }, hashTypedData(agentTypedData(action, nonce, isMainnet)));
+    },
+    signHyperliquidWithdraw(action) {
+      return signHypercore({ network: action.hyperliquidChain === "Mainnet" ? "mainnet" : "testnet", nonce: action.time, action }, hashTypedData(withdrawTypedData(action)));
     },
   };
 }

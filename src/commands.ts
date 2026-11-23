@@ -1,5 +1,6 @@
 import type { ChainRef, ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
 import { addressKey, chainByKey } from "./chains.js";
+import type { PerpAccount } from "./perp-state.js";
 import { hasKnownImpact, pickRoute, signableRoute } from "./routing.js";
 import { bridgeRoute, planRebalance, type BridgePolicy, type BridgeQuote, type BridgeRequest, type BridgeRoute, type RebalancePlan } from "./rebalance.js";
 import { intentSchema } from "./schemas.js";
@@ -18,6 +19,7 @@ export type WalletCommand =
   | { kind: "swap"; idempotencyKey: string; sell: Asset; buy: Asset; sellAmount: string; slippageBps: number; mode: "live"; notionalUsd: number }
   | ({ kind: "bridge" } & BridgeRequest)
   | { kind: "balance"; chainKey: string; address: string }
+  | { kind: "perp_positions" }
   | { kind: "transfer"; idempotencyKey: string; asset: Asset; to: string; amount: string; mode: "dry_run" | "live" }
   | { kind: "send_bitcoin"; idempotencyKey: string; to: string; sats: string; mode: "dry_run" | "live" }
   | { kind: "bitcoin_wallet" };
@@ -32,6 +34,7 @@ export type WalletResult =
   | { kind: "swap"; status: "skipped"; quote: null; reason: string }
   | { kind: "bridge"; plan: RebalancePlan; quotes: BridgeQuote[] }
   | { kind: "balance"; holdings: Holding[]; reason?: string }
+  | { kind: "perp_positions"; account: PerpAccount }
   | { kind: "transfer"; status: "would_send" | "skipped"; reason: string }
   | { kind: "send_bitcoin"; status: "skipped"; reason: string }
   | BitcoinWalletView
@@ -44,6 +47,7 @@ export type CommandDeps = {
   bridge?: { policy: BridgePolicy; quotes: (route: BridgeRoute) => Promise<BridgeQuote[]> };
   readBalance?: (chainKey: string, address: string) => Promise<{ holdings: Holding[]; reason?: string }>;
   readBitcoinWallet?: () => Promise<BitcoinWalletView | { kind: "bitcoin_wallet"; status: "skipped"; reason: string }>;
+  readPerpAccount?: () => Promise<PerpAccount>;
   now?: () => number;
 };
 
@@ -160,6 +164,10 @@ export async function run(command: WalletCommand, deps: CommandDeps = {}): Promi
     const address = addressKey(command.chainKey, command.address);
     const holdings = read.holdings.filter((row) => row.chainKey === command.chainKey && addressKey(command.chainKey, row.address) === address);
     return read.reason ? { kind: "balance", holdings, reason: read.reason } : { kind: "balance", holdings };
+  }
+  if (command.kind === "perp_positions") {
+    if (!deps.readPerpAccount) throw new Error("no hyperliquid account configured. set HYPERLIQUID_ACCOUNT_ADDRESS or WHALE_SIGNER_KEYSTORE");
+    return { kind: "perp_positions", account: await deps.readPerpAccount() };
   }
   if (command.kind === "bitcoin_wallet") return deps.readBitcoinWallet ? deps.readBitcoinWallet() : { kind: "bitcoin_wallet", status: "skipped", reason: "set BITCOIN_NETWORK and WHALE_SIGNER_KEYSTORE to read the bitcoin wallet" };
   if (command.kind === "send_bitcoin") return { kind: "send_bitcoin", status: "skipped", reason: "send_bitcoin needs whale-signer. set WHALE_SIGNER_KEYSTORE and BITCOIN_NETWORK and run whale-signer serve" };

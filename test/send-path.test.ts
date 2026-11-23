@@ -1,20 +1,22 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { readFileSync } from "node:fs";
+import test, { mock } from "node:test";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { keccak256, toHex, type Hex } from "viem";
 import { rememberApproval, resetApprovals } from "../src/approvals.js";
-import { broadcastRoute, lookupAgedTx, receivedFromMeta, solanaRpcOver, withdrawNative, type EvmReceipt, type EvmRpc, type SendIo, type SolanaRpc } from "../src/broadcast.js";
+import { broadcastRoute, createViemRpc, lookupAgedTx, receivedFromMeta, solanaRpcOver, withdrawNative, type EvmReceipt, type EvmRpc, type SendIo, type SolanaRpc } from "../src/broadcast.js";
 import { loadConfig } from "../src/config.js";
 import type { RouteLeg, SwapIntent, TxRecord } from "../src/domain.js";
 import { BroadcastError, execute, resetExecutorState, type ExecutorDeps } from "../src/executor.js";
 import { buildOrder, cappedLimitPx, floatToWire, nextHyperliquidNonce, orderSize, readExchangeResponse, wirePrice } from "../src/hyperliquid.js";
 import type { EvmSignInput, TransactionSigner } from "../src/managed-signer.js";
 import { createNonceManager } from "../src/nonce.js";
+import { resetRpcClients } from "../src/rpc.js";
 import { buildPairMap } from "../src/pairs.js";
 import { screenToken } from "../src/screening.js";
 import { reconcileDecision } from "../src/spend.js";
 import { WSOL_MINT } from "../src/signing-policy.js";
-import { tagOf, zeroExData } from "./fixtures.js";
+import { hyperMarketAt, tagOf, zeroExData } from "./fixtures.js";
 
 const USDC = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const WETH = "0xcccccccccccccccccccccccccccccccccccccccc";
@@ -36,7 +38,7 @@ type FakeChain = {
   rejectSimulation: (data: Hex) => boolean;
 };
 
-const success: EvmReceipt = { status: "success", gasUsed: 21_000n, effectiveGasPrice: 1n };
+const success: EvmReceipt = { status: "success", gasUsed: 21_000n, effectiveGasPrice: 1n, l1Fee: 0n };
 
 function fakeChain(): FakeChain {
   const chain: FakeChain = {
@@ -68,6 +70,7 @@ function fakeChain(): FakeChain {
       receipt: async (hash) => chain.receipts.get(hash) ?? null,
       seen: async (hash) => chain.known.has(hash) || chain.receipts.has(hash),
       balance: async (token) => chain.balances.get(token.toLowerCase()) ?? 10n ** 20n,
+      checkChain: async () => undefined,
     },
   };
   return chain;
@@ -552,7 +555,7 @@ test("hyperliquid sizes 100/3.7 and 250/0.01234 produce valid wire values", () =
 function hyperIntent(key: string): SwapIntent {
   return {
     ...evmIntent(key),
-    token: { ...evmIntent(key).token, pairMap: buildPairMap([{ ...evmIntent(key).token.pairMap.pools[0], liquidityUsd: 100 }]) },
+    token: { symbol: "TKN", address: "TKN", decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } },
     hyperliquid: { coin: "TKN", assetIndex: 4, market: "perp", maxLeverage: 5 },
   };
 }
@@ -577,7 +580,8 @@ test("hyperliquid replies decide commit or release", async () => {
       config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
       markPrice: async () => 1,
       liquidityOf: async () => 100,
-      szDecimals: async () => 2,
+      hyperMarket: hyperMarketAt(4),
+      perpPosition: async () => ({ side: "flat" }),
     };
     const report = await execute(hyperIntent(key), deps);
     return { report, spend: spend.get(key), seen };
@@ -604,12 +608,16 @@ test("a hyperliquid spot buy sends only the order, with no leverage action", asy
   const filled = { status: "ok", response: { type: "order", data: { statuses: [{ filled: { totalSz: "5", avgPx: "1.001", oid: 9 } }] } } };
   const deps: ExecutorDeps = {
     ...liveDeps((request, onTx) => broadcastRoute(hyperConfig, evmSigner([]), request, 1, exchange(filled, seen), [], { onTx }), new Map(), [], false),
-    config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
+    config: { ...hyperConfig, enabledChainKeys: new Set(["hyperevm", "hypercore"]) },
     markPrice: async () => 1,
     liquidityOf: async () => 100,
-    szDecimals: async () => 2,
+    hyperMarket: hyperMarketAt(10_004),
   };
-  const spot = { ...hyperIntent("hl-spot"), hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot" as const, maxLeverage: 1 } };
+  const spot: SwapIntent = {
+    ...hyperIntent("hl-spot"),
+    token: { ...evmIntent("hl-spot").token, chain: { kind: "evm", chainId: 999 }, chainKey: "hyperevm", pairMap: { pools: [], top: null } },
+    hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot", maxLeverage: 1 },
+  };
   const report = await execute(spot, deps);
   assert.equal(report.decision, "sent");
   assert.deepEqual(
@@ -666,12 +674,12 @@ test("a hyperliquid sizing failure is skipped, not thrown", async () => {
   const report = await execute(hyperIntent("hl-size"), {
     ...liveDeps(async () => assert.fail("must not send"), new Map(), [], false),
     config: { ...evmConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
-    markPrice: async () => 1,
+    markPrice: async () => 1_000_000_000,
     liquidityOf: async () => 100,
-    szDecimals: async () => null,
+    hyperMarket: hyperMarketAt(4, 0),
   });
   assert.equal(report.decision, "skipped");
-  assert.match(report.reason, /szDecimals/);
+  assert.match(report.reason, /rounds to zero/);
 });
 
 test("live screening denies a token whose tax fields are missing", async () => {
@@ -775,4 +783,72 @@ test("a held send signs, journals the signed record, sends nothing, and gives th
   const sent = await withdrawNative({ config: evmConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
   assert.equal(sent.outcome, "landed");
   assert.deepEqual(signed.map((input) => input.nonce), [7, 7], "the held signature did not use up the nonce");
+});
+
+test("a native buy on Base adds the receipt's L1 fee back, so a buy that paid out its minimum is not reported short", async (t) => {
+  const NATIVE = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+  const raw = JSON.parse(readFileSync(new URL("../../test/fixtures/base/l1-fee-receipt.json", import.meta.url), "utf8")) as Record<string, string>;
+  t.after(() => mock.restoreAll());
+  mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const { id, method } = JSON.parse(String(init.body)) as { id: number; method: string };
+    return Response.json({ jsonrpc: "2.0", id, result: method === "eth_chainId" ? "0x2105" : raw });
+  });
+  const receipt = await createViemRpc(8453, ["http://base-receipt.invalid"]).receipt(raw.transactionHash as Hex);
+  assert.ok(receipt);
+  approveRouter();
+  const chain = fakeChain();
+  chain.balances.set(NATIVE, 0n);
+  const minOut = 2_490_000_000_000_000n;
+  const paid = BigInt(raw.gasUsed ?? 0) * BigInt(raw.effectiveGasPrice ?? 0) + BigInt(raw.l1Fee ?? 0);
+  deliver(chain, { "0x01": { token: NATIVE, amount: minOut - paid, receipt } });
+  const quotes = { [NATIVE]: { buyAmount: "2500000000000000", minBuyAmount: minOut.toString(), data: "0x01" as Hex } };
+  const result = await broadcastRoute(evmConfig, evmSigner([]), { ...twoHop, legs: [{ ...leg1, buyAddress: NATIVE }] }, 1, zeroEx(quotes, []), [], { io: clockIo(chain.rpc) });
+  assert.equal(result.venue === "chain" && result.outcome, "landed");
+  assert.equal(result.venue === "chain" && result.shortfall, false, "the L1 fee is gas the wallet paid, not output the swap withheld");
+});
+
+const RELAY = "http://relay.invalid";
+const relayConfig = loadConfig({ RPC_URL_8453: "http://fake.invalid", MEV_RPC_URL_8453: RELAY, ZEROX_API_KEY: "zeroex-key" });
+
+function relayIo(chain: FakeChain, answer: () => string, sleep?: () => void): SendIo {
+  resetRpcClients();
+  mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const { id, method } = JSON.parse(String(init.body)) as { id: number; method: string };
+    if (method === "eth_chainId") return Response.json({ jsonrpc: "2.0", id, result: answer() });
+    if (method === "eth_sendRawTransaction") return Response.json({ jsonrpc: "2.0", id, result: `0x${"ab".repeat(32)}` });
+    return Response.json({ jsonrpc: "2.0", id, error: { code: -32601, message: "not served" } });
+  });
+  const io = clockIo(chain.rpc);
+  return {
+    ...io,
+    evm: (chainId, rpcs) => (rpcs[0] === RELAY ? createViemRpc(chainId, rpcs) : chain.rpc),
+    sleep: async (ms) => {
+      sleep?.();
+      await io.sleep(ms);
+    },
+  };
+}
+
+test("a MEV relay on another chain is refused before signing, so the send is not counted as broadcast", async (t) => {
+  t.after(() => mock.restoreAll());
+  const signed: EvmSignInput[] = [];
+  const io = relayIo(fakeChain(), () => "0x1");
+  await assert.rejects(
+    withdrawNative({ config: relayConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io }),
+    (error: unknown) => error instanceof BroadcastError && !error.broadcast && /MEV_RPC_URL_8453 answered eth_chainId with chain 1\b/.test(error.message),
+  );
+  assert.equal(signed.length, 0);
+});
+
+test("a replacement is not signed once the MEV relay answers another chain", async (t) => {
+  t.after(() => mock.restoreAll());
+  const signed: EvmSignInput[] = [];
+  let answer = "0x2105";
+  const io = relayIo(fakeChain(), () => answer, () => {
+    answer = "0x1";
+    resetRpcClients();
+  });
+  const tx = await withdrawNative({ config: relayConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
+  assert.equal(tx.outcome, "pending");
+  assert.equal(signed.length, 1, "only the first send was signed");
 });

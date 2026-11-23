@@ -6,6 +6,8 @@ import { encode } from "@msgpack/msgpack";
 import { decodeFunctionData, encodeFunctionData, keccak256, maxUint256, pad, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DEFAULT_EVM_FEE_LIMITS, signerChainTable } from "../../src/chains.ts";
+import { LIFI_STEP_TARGETS } from "../../src/signing-policy/lifi-steps.ts";
+import { LIFI_ABI } from "../../src/signing-policy/swap-terms.ts";
 import { BRIDGE_TOKENS } from "../../src/signing-policy/bridge-tokens.ts";
 import { bitcoinVectors } from "./bitcoin.mjs";
 
@@ -52,7 +54,8 @@ const settlerCall = (recipient) => encodeFunctionData({ abi: settlerAbi, functio
 const tx = (to, data = "0x", value = 0n, chainId = CHAIN_ID, fees = {}) => ({ chainId, nonce: 7, to, value, data, gas: 300000n, maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n, type: "eip1559", ...fees });
 const job = (name, transaction) => ({ id: name, kind: "evm", chainId: transaction.chainId, tx: { nonce: String(transaction.nonce), to: transaction.to, value: String(transaction.value), data: transaction.data, gas: String(transaction.gas), maxFeePerGas: String(transaction.maxFeePerGas), maxPriorityFeePerGas: String(transaction.maxPriorityFeePerGas) } });
 
-const lifiStep = (sell, buy, amount, requiresDeposit = false) => ({ callTo: EXECUTOR, approveTo: EXECUTOR, sendingAssetId: sell, receivingAssetId: buy, fromAmount: amount, callData: "0xabcdef", requiresDeposit });
+const ZKSYNC_SUSHI = LIFI_STEP_TARGETS[ZKSYNC].targets[1];
+const lifiStep = (sell, buy, amount, requiresDeposit = false) => ({ callTo: ZKSYNC_SUSHI, approveTo: ZKSYNC_SUSHI, sendingAssetId: sell, receivingAssetId: buy, fromAmount: amount, callData: "0xabcdef", requiresDeposit });
 const lifiSwap = (functionName, recipient, swaps) => encodeFunctionData({ abi: lifiAbi, functionName, args: [`0x${"00".repeat(32)}`, "whale", "", recipient, 1n, functionName.startsWith("swapTokensSingle") ? swaps[0] : swaps] });
 const zkFees = { gas: 4_415_200n, maxFeePerGas: 54_300_000n, maxPriorityFeePerGas: 0n };
 const zk = (to, data = "0x", value = 0n) => tx(to, data, value, ZKSYNC, zkFees);
@@ -142,6 +145,22 @@ const bridgeCases = [
   ["a real Relay deposit, which names no destination", onBase(relayDeposit.to, relayDeposit.data), "refused", "not one the signer can read"],
   ["an exact approval to the listed SpokePool", onBase(USDC, encodeFunctionData({ abi: erc20, functionName: "approve", args: [BASE_SPOKE_POOL, 2_000_000n] })), "signed"],
 ];
+const ARBITRUM_USDC = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
+const capturedSwaps = JSON.parse(readFileSync(new URL("./lifi-quotes.json", import.meta.url), "utf8"));
+if (capturedSwaps.own !== own) throw new Error("lifi-quotes.json was captured for another wallet; rerun node signer/vectors/lifi-capture.mjs");
+const quote = (name) => capturedSwaps.quotes.find((item) => item.name === name);
+const real = (name) => { const item = quote(name); return tx(item.to, item.data, BigInt(item.value), item.chainId, item.chainId === ZKSYNC ? zkFees : {}); };
+const feeAbi = parseAbi(["function forwardERC20Fees(address _token, (address recipient, uint256 amount)[] _distributions)", "function forwardERC20FeesShares(address _token, (address recipient, uint256 share)[] _distributions)"]);
+const nativeFeeAbi = parseAbi(["function forwardNativeFees((address recipient, uint256 amount)[] _distributions) payable"]);
+const mutate = (name, edit) => {
+  const item = quote(name);
+  const call = decodeFunctionData({ abi: LIFI_ABI, data: item.data });
+  const steps = call.args[5].map((step) => ({ ...step }));
+  const head = edit(steps, call.args.slice(0, 5));
+  return tx(item.to, encodeFunctionData({ abi: LIFI_ABI, functionName: call.functionName, args: [...head, steps] }), BigInt(item.value), item.chainId, item.chainId === ZKSYNC ? zkFees : {});
+};
+const zkUsdcToEth = "zkSync USDC to ETH";
+const attacked = mutate(zkUsdcToEth, (steps, args) => { steps[1].callTo = ATTACKER; steps[1].approveTo = ATTACKER; return [...args.slice(0, 4), 1n]; });
 const BASE_L1 = DEFAULT_EVM_FEE_LIMITS[BASE].l1;
 const baseSwap = tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 5_000_000n), "0x", "0x"] }), 0n, BASE);
 
@@ -153,6 +172,20 @@ const evmCases = [
   ["a zkSync LI.FI swap that also pulls a second token", zk(ZKSYNC_LIFI, usdcToNative(own, [lifiStep(ZKSYNC_USDC, ZKSYNC_USDC, 5_000_000n, true), lifiStep(ZKSYNC_ZK, NONE, 1n, true)])), "refused", "not one the signer can read"],
   ["a zkSync LI.FI swap whose deposits cross the daily token limit", zk(ZKSYNC_LIFI, usdcToNative(own, [lifiStep(ZKSYNC_USDC, ZKSYNC_USDC, 6_000_000n, true), lifiStep(ZKSYNC_USDC, NONE, 6_000_000n, true)])), "refused", "above its whole 10000000 daily limit", own],
   ["a zkSync LI.FI swap sent to a diamond not listed for zkSync", zk(LIFI, usdcToNative(own)), "refused", "not listed for this chain", own],
+  ["a real zkSync LI.FI USDC to ETH swap", real(zkUsdcToEth), "signed", null, own],
+  ["a real zkSync LI.FI ETH to USDC swap", real("zkSync ETH to USDC"), "signed", null, own],
+  ["a real Base LI.FI USDC to WETH swap", real("Base USDC to WETH"), "signed", null, own],
+  ["a real Arbitrum LI.FI USDC to WETH swap", real("Arbitrum USDC to WETH"), "signed", null, own],
+  ["a real zkSync LI.FI swap whose swap step calls and approves an attacker with minAmountOut 1", attacked, "refused", `the LI.FI swap step calls 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`, own],
+  ["a real zkSync LI.FI swap whose swap step approves an attacker", mutate(zkUsdcToEth, (steps, args) => { steps[1].approveTo = ATTACKER; return args; }), "refused", `the LI.FI swap step approves 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`, own],
+  ["a real zkSync LI.FI swap whose fee step forwards the whole sale to an attacker", mutate(zkUsdcToEth, (steps, args) => { steps[0].callData = encodeFunctionData({ abi: feeAbi, functionName: "forwardERC20Fees", args: [ZKSYNC_USDC, [{ recipient: ATTACKER, amount: 5_000_000n }]] }); return args; }), "refused", "the LI.FI fee steps forward 5000000, above 50 bps of the 5000000 the swap deposits", own],
+  ["a real zkSync LI.FI swap whose fee step forwards one unit over 50 bps", mutate(zkUsdcToEth, (steps, args) => { steps[0].callData = encodeFunctionData({ abi: feeAbi, functionName: "forwardERC20Fees", args: [ZKSYNC_USDC, [{ recipient: ATTACKER, amount: 25_001n }]] }); return args; }), "refused", "the LI.FI fee steps forward 25001, above 50 bps of the 5000000 the swap deposits", own],
+  ["a real zkSync LI.FI swap whose fee step forwards exactly 50 bps", mutate(zkUsdcToEth, (steps, args) => { steps[0].callData = encodeFunctionData({ abi: feeAbi, functionName: "forwardERC20Fees", args: [ZKSYNC_USDC, [{ recipient: ATTACKER, amount: 25_000n }]] }); return args; }), "signed", null, own],
+  ["a real zkSync LI.FI swap whose fee step forwards balance shares", mutate(zkUsdcToEth, (steps, args) => { steps[0].callData = encodeFunctionData({ abi: feeAbi, functionName: "forwardERC20FeesShares", args: [ZKSYNC_USDC, [{ recipient: ATTACKER, share: 10n ** 18n }]] }); return args; }), "refused", "the LI.FI fee step is not a forwardERC20Fees or forwardNativeFees of the token the swap deposits", own],
+  ["a real zkSync LI.FI swap whose fee step forwards another token", mutate(zkUsdcToEth, (steps, args) => { steps[0].callData = encodeFunctionData({ abi: feeAbi, functionName: "forwardERC20Fees", args: [ZKSYNC_ZK, [{ recipient: ATTACKER, amount: 1n }]] }); return args; }), "refused", "the LI.FI fee step is not a forwardERC20Fees or forwardNativeFees of the token the swap deposits", own],
+  ["a real zkSync LI.FI swap whose second fee step claims an inflated fromAmount", mutate(zkUsdcToEth, (steps, args) => { steps[1] = { ...steps[0], requiresDeposit: false, fromAmount: 1_000_000_000n, callData: encodeFunctionData({ abi: feeAbi, functionName: "forwardERC20Fees", args: [ZKSYNC_USDC, [{ recipient: ATTACKER, amount: 4_987_500n }]] }) }; return [...args.slice(0, 4), 0n]; }), "refused", "the LI.FI fee steps forward 5000000, above 50 bps of the 5000000 the swap deposits", own],
+  ["a real zkSync LI.FI native swap with a second native fee step", mutate("zkSync ETH to USDC", (steps, args) => { steps.splice(1, 0, { ...steps[0], callData: encodeFunctionData({ abi: nativeFeeAbi, functionName: "forwardNativeFees", args: [[{ recipient: ATTACKER, amount: 2_500_000_000_001n }]] }) }); return args; }), "refused", "the LI.FI fee steps forward 5000000000001, above 50 bps of the 1000000000000000 the swap deposits", own],
+  ["a real Base LI.FI swap replayed on Optimism, which lists no LI.FI step targets", { ...real("Base USDC to WETH"), chainId: 10 }, "refused", "chain 10 lists no LI.FI swap step targets", own],
   ["a zkSync native transfer to a listed destination", zk(DESTINATION, "0x", 1_000_000_000_000_000n), "signed"],
   ["kyber simple swap to this wallet", tx(KYBER, encodeFunctionData({ abi: kyberAbi, functionName: "swapSimpleMode", args: [EXECUTOR, desc(own, 5_000_000n), "0x", "0x"] })), "signed", null, own],
   ["kyber swap paying an attacker", tx(KYBER, kyberSwap(desc(ATTACKER, 5_000_000n))), "refused", "not this wallet", ATTACKER],
@@ -268,7 +301,7 @@ const policy = {
   version: 1,
   evm: {
     chains: [CHAIN_ID, 10, BASE, 81457, 534352, ZKSYNC, ARBITRUM],
-    routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER], [BASE]: [KYBER], [ZKSYNC]: [ZKSYNC_LIFI] },
+    routers: { [CHAIN_ID]: [KYBER, ALLOWANCE_HOLDER], 10: [LIFI], [BASE]: [KYBER, LIFI], [ZKSYNC]: [ZKSYNC_LIFI], [ARBITRUM]: [LIFI] },
     settlers: { [CHAIN_ID]: [SETTLER] },
     kyberExecutors: { [CHAIN_ID]: [EXECUTOR], [BASE]: [EXECUTOR] },
     bridges: { [BASE]: { lifi: LIFI_DIAMOND, across: BASE_SPOKE_POOL } },
@@ -276,7 +309,7 @@ const policy = {
     destinations: [DESTINATION, LISTED_BRIDGE_DESTINATION],
     maxValueWei: "2000000000000000",
     maxFeeWei: "1000000000000000",
-    dailyLimits: { [`${CHAIN_ID}:${USDC}`]: "10000000", [`${CHAIN_ID}:native`]: "5000000000000000", [`${BASE}:${USDC}`]: "10000000", [`${BASE}:native`]: "5000000000000000", [`${ZKSYNC}:${ZKSYNC_USDC}`]: "10000000", [`${ZKSYNC}:native`]: "5000000000000000" },
+    dailyLimits: { [`${CHAIN_ID}:${USDC}`]: "10000000", [`${CHAIN_ID}:native`]: "5000000000000000", [`${BASE}:${USDC}`]: "10000000", [`${BASE}:native`]: "5000000000000000", [`${ZKSYNC}:${ZKSYNC_USDC}`]: "10000000", [`${ZKSYNC}:native`]: "5000000000000000", [`${ARBITRUM}:${ARBITRUM_USDC}`]: "200000000", [`${ARBITRUM}:native`]: "5000000000000000" },
   },
   solana: {
     programs: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
@@ -286,7 +319,7 @@ const policy = {
   },
   hypercore: {
     network: "testnet",
-    maxLeverage: 1,
+    maxLeverage: 3,
     dailyLimits: { "hypercore:usdc": "50000000", "hypercore:spot:10107": "20000000", "hypercore:perp:4:sold": "50000000000" },
   },
   bitcoin: bitcoin.policy,
@@ -313,6 +346,10 @@ const hlOrder = (a, p, sz, tif = "Ioc") => ({ type: "order", orders: [{ a, b: tr
 const hlWithdraw = (destination, amount) => ({ type: "withdraw3", hyperliquidChain: "Testnet", signatureChainId: "0x66eee", destination, amount, time: HL_NONCE });
 const hypercoreCases = [
   ["isolated leverage 1", { type: "updateLeverage", asset: 4, isCross: false, leverage: 1 }, "signed"],
+  ["isolated leverage 2", { type: "updateLeverage", asset: 4, isCross: false, leverage: 2 }, "signed"],
+  ["isolated leverage 4 above the ceiling", { type: "updateLeverage", asset: 4, isCross: false, leverage: 4 }, "refused", "leverage 4 is outside 1 to 3"],
+  ["captured mainnet block 1000000567 tx 0x97b19e21 isolated 2x on SOL", { type: "updateLeverage", asset: 5, isCross: false, leverage: 2 }, "signed"],
+  ["captured mainnet block 1000000286 tx 0x809a3421 BTC buy of 502 USD notional", { type: "order", orders: [{ a: 0, b: true, p: "78752", s: "0.00638", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" }, "refused", "is above its whole 50000000 daily limit"],
   ["a perp ioc order", hlOrder(4, "1670.1", "0.0147"), "signed"],
   ["a spot ioc order", hlOrder(10107, "12.5", "1"), "signed"],
   ["a cancel with a large order id", { type: "cancel", cancels: [{ a: 4, o: 91_000_000_000 }, { a: 300, o: 70_000 }] }, "signed"],
@@ -333,6 +370,7 @@ for (const [name, action, expect, reason] of hypercoreCases) {
 writeFileSync(`${out}chains.json`, `${JSON.stringify(signerChainTable(), null, 2)}\n`);
 const bridgeTokens = Object.entries(BRIDGE_TOKENS).flatMap(([symbol, byChain]) => Object.entries(byChain).map(([chainId, token]) => ({ symbol, chainId: Number(chainId), address: token.address.toLowerCase(), decimals: token.decimals })));
 writeFileSync(`${out}bridge-tokens.json`, `${JSON.stringify(bridgeTokens, null, 2)}\n`);
+writeFileSync(`${out}lifi-steps.json`, `${JSON.stringify(LIFI_STEP_TARGETS, null, 2)}\n`);
 writeFileSync(`${out}policy.json`, `${JSON.stringify(policy, null, 2)}\n`);
 const registration = "Whale signer registration\nwallet:8f0c1a52-3f0e-4c7e-9a0b-0d9c1f6a2b31\ncode:wreg_example";
 const personalSign = { message: registration, signature: await account.signMessage({ message: registration }) };

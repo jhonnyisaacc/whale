@@ -15,11 +15,18 @@
         "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5",
         "0x0000000000001fF3684f28c67538d4D072C22734"
       ],
+      "10": [
+        "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE"
+      ],
       "324": [
         "0x341e94069f53234fe6dabef707ad424830525715"
       ],
       "8453": [
-        "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5"
+        "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5",
+        "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE"
+      ],
+      "42161": [
+        "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE"
       ]
     },
     "settlers": {
@@ -54,7 +61,9 @@
       "8453:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913": "10000000",
       "8453:native": "5000000000000000",
       "324:0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4": "10000000",
-      "324:native": "5000000000000000"
+      "324:native": "5000000000000000",
+      "42161:0xaf88d065e77c8cC2239327C5EDb3A432268e5831": "200000000",
+      "42161:native": "5000000000000000"
     }
   },
   "solana": {
@@ -71,7 +80,7 @@
   },
   "hypercore": {
     "network": "testnet",
-    "maxLeverage": 1,
+    "maxLeverage": 3,
     "dailyLimits": {
       "hypercore:usdc": "50000000",
       "hypercore:spot:10107": "20000000",

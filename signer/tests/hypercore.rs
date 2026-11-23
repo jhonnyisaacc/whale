@@ -288,9 +288,9 @@ fn hypercore_refuses_what_whale_does_not_build() {
         "only isolated leverage",
     );
     signer.refused(
-        "leverage 2",
-        json!({ "type": "updateLeverage", "asset": 4, "isCross": false, "leverage": 2 }),
-        "leverage 2 is outside 1 to 1",
+        "leverage 4",
+        json!({ "type": "updateLeverage", "asset": 4, "isCross": false, "leverage": 4 }),
+        "leverage 4 is outside 1 to 3",
     );
     signer.refused(
         "attacker",
@@ -387,4 +387,45 @@ fn a_spot_sell_is_never_charged_at_its_own_limit_price() {
         sell(10107, "0.01", "2", false),
         "would be 400000000, above the 300000000 limit",
     );
+}
+
+fn leverage(asset: u64, leverage: u64) -> Value {
+    json!({ "type": "updateLeverage", "asset": asset, "isCross": false, "leverage": leverage })
+}
+
+#[test]
+fn the_default_policy_signs_isolated_2x_and_refuses_4x() {
+    let mut file = load("policy.json");
+    file["hypercore"]
+        .as_object_mut()
+        .unwrap()
+        .remove("maxLeverage");
+    let signer = Signer::new("default leverage", file);
+    signer.signed("2x", NONCE, leverage(4, 2));
+    signer.signed("3x", NONCE + 1, leverage(4, 3));
+    signer.refused("4x", leverage(4, 4), "leverage 4 is outside 1 to 3");
+}
+
+#[test]
+fn a_policy_ceiling_above_50x_is_refused_at_load() {
+    let mut file = load("policy.json");
+    file["hypercore"]["maxLeverage"] = 50.into();
+    assert!(whale_signer::policy::Policy::parse(&file).is_ok());
+    file["hypercore"]["maxLeverage"] = 51.into();
+    assert_eq!(
+        whale_signer::policy::Policy::parse(&file).err().as_deref(),
+        Some("hypercore.maxLeverage must be a whole number from 1 to 50")
+    );
+}
+
+#[test]
+fn a_3x_order_is_charged_its_notional_not_its_margin() {
+    let signer = Signer::fixture("notional at 3x");
+    signer.signed("3x", NONCE, leverage(4, 3));
+    signer.refused(
+        "60 USD notional on 20 USD of margin",
+        ioc(4, "60", "1"),
+        "hypercore:usdc is above its whole 50000000 daily limit",
+    );
+    signer.signed("50 USD notional", NONCE + 1, ioc(4, "50", "1"));
 }

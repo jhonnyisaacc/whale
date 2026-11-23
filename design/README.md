@@ -33,11 +33,11 @@ The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `expo
 
 ## Install
 
-One block that a user pastes into any agent host that can run shell commands. The agent clones and builds the repo, starts the executor, registers the MCP server and skills, and then calls `wallet_status`. The local MCP is dry-run only. The block is the `InstallBlock` component. The mobile instance overrides the text with narrower line breaks, so change both when the steps change.
+One block that a user pastes into any agent host that can run shell commands. The agent clones and builds the repo, starts the executor, registers the MCP server and skills, and then calls `wallet_status`. The local MCP is dry-run by default. The block is the `InstallBlock` component. The mobile instance overrides the text with narrower line breaks, so change both when the steps change.
 
 ## Comparison
 
-The competitor cells and the Known issues block come from public docs and public GitHub issues as of 2026-11-18. Check them again before publishing.
+The competitor cells come from public docs as of 2026-11-18. The Known issues block comes from public GitHub issues, each confirmed still open on 2026-11-23. Check them again before publishing.
 
 - MetaMask: https://metamask.com/agent-wallet, `MetaMask/metamask-docs#3032`, `MetaMask/agent-skills#66`, `MetaMask/agent-wallet-plugin-template#6` and `#7`, `MetaMask/metamask-extension#47534`
 - Phantom: https://docs.phantom.com/phantom-mcp-server, `phantom/phantom-connect-sdk#405`, `#407`, `#408`, `#410`
@@ -47,17 +47,17 @@ The Known issues block lists Whale's own gaps first.
 
 ## Copy claims only what the code backs
 
-Each claim was checked against `origin/main` on 2026-11-18.
+Each claim was checked against `origin/main` on 2026-11-23.
 
 | Topic | Site copy | Why |
 | --- | --- | --- |
-| Verbs | "Quote, swap and transfer (dry-run during beta), plus bridge-quote ranking" | `bridge` ranks quotes the caller supplies and never broadcasts (`src/commands.ts:110`). The CLI refuses it. |
-| Swap and transfer | Labelled dry-run | The local MCP forces dry-run (`src/mcp-server.ts:46`). Hosted sends stay dry-run until hosted live opens. |
-| Networks | "15 networks", with a badge on each limited chain | Ethereum: opt-in. Monad: opt-in, routers shipped (`DEFAULT_ROUTERS` in `src/chains.ts`). zkSync: quotes only. Base, Optimism, Blast and Scroll: quotes only, because live mode refuses chains with an unbounded L1 data fee (`L1_DATA_FEE_CHAIN_IDS` at `src/chains.ts:287`, enforced at `src/config/guard.ts:94`). HyperCore: orders only. |
+| Verbs | "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking" | `bridge` ranks quotes and never broadcasts (`src/commands.ts:131`). `executeBridge` from #134 (`src/bridge/execute.ts:147`) has no MCP tool or CLI command yet, so the Known issues block reads "Bridge execution has no MCP or CLI tool yet". |
+| Swap and transfer | Dry-run by default, self-hosted live | Since #133 the local MCP sends live swaps and transfers through whale-signer when the caller asks for live. Hosted sends stay dry-run until gate #80 (`src/gateway/mcp-tools.ts:113`). |
+| Networks | "15 networks", with a badge on each limited chain | Ethereum: opt-in. Monad: opt-in, routers shipped (`src/chains.ts:296`), and its support tier defaults to disabled (`src/support.ts:6`). zkSync: opt-in, because its support tier defaults to dry_run (`src/support.ts:6`) and hosted wallets exclude it (`src/chains.ts:309`). Base, Optimism and Scroll: self-hosted live, because they have L1 fee budgets (`src/chains.ts:283-285`) and the hosted Turnkey policy skips every L1 data fee chain (`src/signing-policy/turnkey.ts:83`). Blast: quotes only, because it has no L1 fee budget (`src/chains.ts:307`). HyperCore: orders only. |
 | Approval | "Trades on its own inside per-trade and daily USD caps" | On `main` since #88, the owner approval threshold defaults to none, and hosted swaps and transfers are both priced and counted against the per-trade and daily USD caps. An owner can still set a threshold, and sends above it wait for a passkey approval. The unused approval-mode module was removed in #95. |
 | Hosted gateway | "Sends are dry-run during beta" | Hosted live is not open. |
-| Signer | "Self-hosted signer, for EVM and Solana" | `whale-signer` does not sign HyperCore, and it is not wired to the MCP send path. |
-| Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`, starts the executor on port 8788 with an `EXECUTOR_AUTH_TOKEN` (the default port is 8080, and `.mcp.json` points at 8788), then registers the MCP server with the same token, so `wallet_status` can reach it. Hermes stays "planned" because it has no manifest. |
+| Signer | "Self-hosted signer, for EVM and Solana" | Since #133 the local MCP swaps and transfers sign through `whale-signer`. #129 adds HyperCore actions and withdrawals to the signer, but the local MCP does not send them. |
+| Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`, starts the executor on port 8788 with an `EXECUTOR_AUTH_TOKEN` (the default port is 8080, and `.mcp.json` points at 8788), then registers the MCP server with the same token, so `wallet_status` can reach it. Hermes stays "planned". It has a manifest since #108, but `hermes plugins install` blocks the package on its scan. |
 | License | "MIT License" | The `LICENSE` file landed in #94. |
 | Add a network | "An entry in src/chains.ts plus its fee limits" | A new EVM chain also needs a `DEFAULT_EVM_FEE_LIMITS` entry, or it gets no Turnkey clause (`src/signing-policy/turnkey.ts:83`). |
 

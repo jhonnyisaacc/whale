@@ -16,7 +16,7 @@ Every host manifest starts `node scripts/mcp-server.mjs` over stdio. That launch
 
 In a checkout, start the executor with `pnpm run start:executor`, the CLI with `pnpm run start:cli`, and MCP with `pnpm run start:mcp`.
 
-The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read `GET /status`. Leave `WHALE_BROADCAST` unset. If `LISTING_TRADER_LIVE` is set, boot throws. If `WITHDRAW_ENABLED` is set, boot throws. `POST /withdraw` is absent.
+The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp`, `perp_positions`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`. Set `EXECUTOR_URL` and `EXECUTOR_AUTH_TOKEN` so `wallet_status` can read `GET /status`. Leave `WHALE_BROADCAST` unset. If `LISTING_TRADER_LIVE` is set, boot throws. If `WITHDRAW_ENABLED` is set, boot throws. `POST /withdraw` is absent.
 
 ## Claude
 
@@ -41,6 +41,7 @@ Hermes starts the `whale` server as `node scripts/mcp-server.mjs` from the packa
 
 - `EXECUTOR_URL`, `EXECUTOR_AUTH_TOKEN`, `WHALE_GATEWAY_URL`, and `WHALE_API_KEY`.
 - Each chain's RPC variable and its list form, such as `SOLANA_RPC_URL` and `RPC_URL_8453` or `RPC_URLS_8453`. `balance` needs the RPC variable of the chain it reads.
+- `HYPERLIQUID_API_URL` and `HYPERLIQUID_ACCOUNT_ADDRESS`. `perp_positions` reads that account.
 - The quote provider keys `ZEROX_API_KEY`, `JUPITER_API_KEY`, `LIFI_API_KEY`, `ONEINCH_API_KEY`, and `OKX_API_KEY`. `quote` needs at least one.
 
 Each entry is written as `${NAME}`, so the file holds no value, and Hermes drops a variable that is unset. A test fails when the server reads one of these variables and `mcp.json` does not forward it. The retired `AUTH_TOKEN` is not forwarded. Use `EXECUTOR_AUTH_TOKEN`.

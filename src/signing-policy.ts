@@ -2,9 +2,11 @@ import { PublicKey } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { isAllowanceHolderExec, swapTerms, type SwapTerms } from "./signing-policy/swap-terms.js";
 import { bridgeSpenders, checkBridge } from "./signing-policy/bridge-terms.js";
+import { lifiCharge, lifiStepRefusal } from "./signing-policy/lifi-steps.js";
 import { chainByEvmId, CHAINS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from "./chains.js";
 
 export * from "./signing-policy/swap-terms.js";
+export * from "./signing-policy/lifi-steps.js";
 export * from "./signing-policy/bridge-terms.js";
 export * from "./signing-policy/bridge-tokens.js";
 export * from "./signing-policy/turnkey.js";
@@ -155,6 +157,10 @@ function checkEvmSigning(input: EvmSigningInput): void {
     if (terms.provider === "zeroex") {
       if (!terms.exec) throw new Error("direct Settler calls are not accepted without decodable actions");
       assertSettler(terms, to, input.settlers);
+    }
+    if (terms.provider === "lifi") {
+      const refusal = lifiStepRefusal(input.chainId, terms.steps, lifiCharge(terms.deposit, input.value));
+      if (refusal) throw new Error(refusal);
     }
     return;
   }

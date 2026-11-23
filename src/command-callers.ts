@@ -8,10 +8,11 @@ import { quoteHop } from "./clients.js";
 import type { BitcoinWalletView, CommandDeps, WalletCommand } from "./commands.js";
 import { configSecrets, loadConfig, rpcLists, type AppConfig } from "./config.js";
 import type { ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
+import { readPerpAccount } from "./perp-state.js";
 import { chainAddresses, type BridgePolicy } from "./rebalance.js";
 import { redactError, urlSecretForms } from "./redact.js";
 import { evmReadClient, solanaConnection } from "./rpc.js";
-import { keystorePublic } from "./whale-signer.js";
+import { keystorePublic, whaleSignerEvmAddress } from "./whale-signer.js";
 
 const SPL_TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"] as const;
 export const QUOTE_KEY_NAMES = ["ZEROX_API_KEY", "JUPITER_API_KEY", "LIFI_API_KEY", "ONEINCH_API_KEY", "OKX_API_KEY"] as const;
@@ -186,6 +187,11 @@ export function commandDeps(env: NodeJS.ProcessEnv, command: WalletCommand, fetc
   if (command.kind === "quote" && quoteProviderConfigured(env)) return { quote: (item) => quoteWithHop(env, item) };
   if (command.kind === "bitcoin_wallet") return { readBitcoinWallet: () => readBitcoinWallet(env) };
   if (command.kind === "balance") return { readBalance: (chainKey, address) => readAddressBalance(env, chainKey, address) };
+  if (command.kind === "perp_positions") {
+    const config = loadConfig(env);
+    const account = config.hyperliquidAccount?.trim() || whaleSignerEvmAddress(env);
+    return account ? { readPerpAccount: () => readPerpAccount(config.hyperliquidUrl, account, fetchImpl) } : {};
+  }
   if (command.kind === "swap" && command.mode === "dry_run") {
     const config = loadConfig(env);
     const swapLimits = { enabledChainKeys: config.enabledChainKeys, maxSlippageBps: config.maxSlippageBps, executionReserveBps: config.minExecutionSlippageBps ?? 0 };

@@ -82,7 +82,7 @@ export function assertHyperliquidSigning(action: { type: string }, limits: Hyper
   if (!Number.isSafeInteger(row.asset)) refuse("leverage asset is not an index");
   if (row.isCross !== false) refuse("only isolated leverage is signed");
   if (!Number.isSafeInteger(row.leverage) || (row.leverage as number) < 1) refuse("leverage is not a whole number of at least 1");
-  if ((row.leverage as number) > limits.maxLeverage) refuse("leverage exceeds the signing policy");
+  if ((row.leverage as number) > limits.maxLeverage) refuse(`leverage ${row.leverage as number} exceeds the ${limits.maxLeverage}x signing policy`);
 }
 
 export function assertHyperliquidWithdraw(action: WithdrawAction, policy: HypercoreWithdrawPolicy): void {

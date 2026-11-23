@@ -50,6 +50,10 @@ async function seenAnywhere(ctx: EvmCtx, hash: Hex): Promise<boolean> {
   }
 }
 
+export function sendersOnChain(ctx: EvmCtx): Promise<void[]> {
+  return Promise.all(ctx.senders.map((rpc) => rpc.checkChain()));
+}
+
 export function bumpFee(fee: bigint): bigint {
   const step = (fee * 125n + 999n) / 1000n;
   return fee + (step > 0n ? step : 1n);
@@ -87,6 +91,7 @@ export async function replaceEvm(ctx: EvmCtx, input: EvmSignInput): Promise<TxRe
   const { maxFeePerGas, maxPriorityFeePerGas } = replacementFees(input, current, ctx.config.evmFeeLimits[ctx.chainId]?.maxFeePerGas);
   let signed: Hex;
   try {
+    await sendersOnChain(ctx);
     signed = await ctx.signer.signEvm({ ...input, maxFeePerGas, maxPriorityFeePerGas });
   } catch {
     return null;
@@ -122,7 +127,7 @@ export async function confirmEvm(ctx: EvmCtx, input: EvmSignInput, first: TxReco
   const won = records.find((record) => record.txHash === found.hash) ?? first;
   let received: bigint | null = null;
   if (outcome === "landed" && buyToken && before !== null) {
-    const gasCost = NATIVE_SELL.has(buyToken.toLowerCase()) ? found.receipt.gasUsed * found.receipt.effectiveGasPrice : 0n;
+    const gasCost = NATIVE_SELL.has(buyToken.toLowerCase()) ? found.receipt.gasUsed * found.receipt.effectiveGasPrice + found.receipt.l1Fee : 0n;
     received = await ctx.read
       .balance(buyToken, ctx.owner)
       .then((after) => after - before + gasCost)
@@ -137,6 +142,7 @@ export async function submitEvm(ctx: EvmCtx, tx: EvmTx, buyToken: string | null)
   let gas: bigint;
   let before: bigint | null;
   try {
+    await sendersOnChain(ctx);
     [fees, gas, before] = await Promise.all([
       ctx.read.fees(),
       tx.gas ?? ctx.read.estimateGas(call),
