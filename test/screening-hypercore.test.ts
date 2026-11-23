@@ -74,7 +74,7 @@ function perpIntent(coin: string, assetIndex: number): SwapIntent {
   };
 }
 
-test("with WHALE_BROADCAST on, the real live executor passes a listed perp through screening and refuses a delisted or unlisted coin before signing", async (t) => {
+test("with WHALE_BROADCAST on, the real live executor refuses a delisted or unlisted coin before signing and signs a listed perp", async (t) => {
   const config = loadConfig({ WHALE_BROADCAST: "true", HYPERLIQUID_API_URL: HL, MAX_USD_PER_TRADE: "5" });
   const exchange: unknown[] = [];
   const signed: HyperliquidAction[] = [];
@@ -96,13 +96,17 @@ test("with WHALE_BROADCAST on, the real live executor passes a listed perp throu
   assert.equal(executor.deps.mode, "live");
   assert.ok(executor.deps.screenToken);
 
-  assert.equal(await executor.deps.screenToken({ chainKey: "hypercore", chain: { kind: "hypercore", market: "perp" }, contract: "HYPE" }), "allow");
-  const listed = await executor.execute(perpIntent("HYPE", 159));
-  assert.notEqual(listed.reason, "token screening rejected the contract");
+  const flat = { perpPosition: async () => ({ side: "flat" as const }) };
 
   for (const [coin, index] of [["MATIC", mainnetMeta.body.universe.findIndex((row) => row.name === "MATIC")], ["NOTACOIN", 0]] as const) {
-    const refused = await executor.execute(perpIntent(coin, index));
+    const refused = await executor.execute(perpIntent(coin, index), flat);
     assert.deepEqual([refused.decision, refused.reason], ["skipped", "token screening rejected the contract"], coin);
   }
-  assert.deepEqual([signed.length, exchange.length], [0, 0]);
+  assert.deepEqual([signed.length, exchange.length], [0, 0], "a delisted or unlisted perp signs and sends nothing");
+
+  assert.equal(await executor.deps.screenToken({ chainKey: "hypercore", chain: { kind: "hypercore", market: "perp" }, contract: "HYPE" }), "allow");
+  const listed = await executor.execute(perpIntent("HYPE", 159), flat);
+  assert.equal(listed.decision, "sent", listed.reason);
+  assert.deepEqual(signed.map((action) => [action.type, action.type === "order" ? action.orders[0]?.a : action.type === "updateLeverage" ? action.asset : null]), [["updateLeverage", 159], ["order", 159]]);
+  assert.equal(exchange.length, 2);
 });
