@@ -66,6 +66,7 @@ function deps(sends: string[]): ExecutorDeps {
     }),
     markPrice: async () => 1,
     assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
+    perpPosition: async () => ({ side: "flat" }),
     send: async (action) => {
       sends.push(action.kind);
       return landedSend();

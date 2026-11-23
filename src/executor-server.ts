@@ -15,7 +15,7 @@ import { anyTokenMatches, buildApp, mutatingLimit, shutdown } from "./http.js";
 import { fetchHyperliquidMid, quoteHop } from "./clients.js";
 import { redactError, zeroLoadedSecrets } from "./redact.js";
 import { broadcastRoute, lookupAgedTx, NATIVE_SELL } from "./broadcast.js";
-import { assertApprovedAgent, fetchAssetMeta } from "./hyperliquid.js";
+import { assertApprovedAgent, fetchAssetMeta, fetchPerpPosition } from "./hyperliquid.js";
 import { createLogger } from "./log.js";
 import { assertBoot, loadManagedSigner, type TransactionSigner } from "./managed-signer.js";
 import { seedApprovals } from "./approvals.js";
@@ -81,6 +81,7 @@ function deps(
   const databaseUrl = opts.databaseUrl !== undefined ? opts.databaseUrl : config.databaseUrl;
   const spend = opts.journal ?? executorJournal(config, databaseUrl);
   const spent = (tx: TxRecord) => balances?.invalidate(tx.chainKey);
+  const account = config.hyperliquidAccount;
   return {
     config,
     priceOf,
@@ -101,6 +102,7 @@ function deps(
       await journal(key, tx);
     },
     assetMeta: (market) => fetchAssetMeta(config.hyperliquidUrl, market),
+    perpPosition: account === null ? undefined : (coin) => fetchPerpPosition(config.hyperliquidUrl, account, coin),
     state: opts.state ?? createExecutorState(),
     spendScope: opts.spendScope,
     recordSpend: spend.reserve,

@@ -152,6 +152,7 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async () => 1,
     assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
+    perpPosition: async () => ({ side: "flat" }),
     send: async (request) => {
       sent.push(request);
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };

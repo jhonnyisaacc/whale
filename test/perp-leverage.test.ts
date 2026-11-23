@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { Hex } from "viem";
-import { buildLeverage, fetchAssetMeta, resetAssetMeta, signL1Action, type HyperliquidAction } from "../src/hyperliquid.js";
+import { buildLeverage, fetchAssetMeta, fetchPerpPosition, resetAssetMeta, signL1Action, type HyperliquidAction } from "../src/hyperliquid.js";
 import { keystoreSigner, withPolicy } from "../src/managed-signer.js";
 import { loadConfig } from "../src/config.js";
 import { Secret } from "../src/redact.js";
@@ -56,6 +56,14 @@ test("captured mainnet orders are charged their notional whatever leverage backs
 
 const captured = JSON.parse(readFileSync(new URL("../../test/fixtures/hyperliquid/mainnet-meta.json", import.meta.url), "utf8")) as { meta: { universe: { name: string }[] }; mids: Record<string, string> };
 const MAINNET = "https://api.hyperliquid.xyz";
+const ACCOUNT = `0x${"22".repeat(20)}`;
+type Clearinghouse = { assetPositions: { position: { coin: string; szi: string; leverage: { type: string; value: number } } }[] };
+const accounts = JSON.parse(readFileSync(new URL("../../test/fixtures/hyperliquid/mainnet-clearinghouse.json", import.meta.url), "utf8")) as Record<"isolated" | "cross" | "flat", Clearinghouse>;
+const stateFetch = (state: Clearinghouse) => (async () => new Response(JSON.stringify(state), { status: 200 })) as unknown as typeof fetch;
+const holding = (from: Clearinghouse, sourceCoin: string, coin: string, szi?: string): Clearinghouse => {
+  const row = from.assetPositions.find((item) => item.position.coin === sourceCoin)!;
+  return { ...from, assetPositions: [{ ...row, position: { ...row.position, coin, szi: szi ?? row.position.szi } }] };
+};
 const metaFetch = (async () => new Response(JSON.stringify(captured.meta), { status: 200 })) as unknown as typeof fetch;
 const perp = (coin: string): HyperliquidMarket => ({ coin, assetIndex: captured.meta.universe.findIndex((row) => row.name === coin), market: "perp", maxLeverage: 50 });
 
@@ -80,7 +88,7 @@ function perpIntent(coin: string, leverage: number | undefined, liquidityUsd = 1
   });
 }
 
-function perpDeps(mode: "dry_run" | "live", env: Record<string, string>, sent: SendRequest[], liquidityUsd = 100): ExecutorDeps {
+function perpDeps(mode: "dry_run" | "live", env: Record<string, string>, sent: SendRequest[], liquidityUsd = 100, account: Clearinghouse = accounts.flat): ExecutorDeps {
   return {
     config: { ...loadConfig(env), enabledChainKeys: new Set(["solana", "hypercore"]) },
     mode,
@@ -89,6 +97,7 @@ function perpDeps(mode: "dry_run" | "live", env: Record<string, string>, sent: S
     quoteHop: async () => ({ priceImpactPct: 0.2, feeUsd: 0.01, buyAmount: "10", signable: true }),
     markPrice: async (coin) => Number(captured.mids[coin]),
     assetMeta: (market) => fetchAssetMeta(MAINNET, market, metaFetch),
+    perpPosition: (coin) => fetchPerpPosition(MAINNET, ACCOUNT, coin, stateFetch(account)),
     send: async (request) => {
       sent.push(request);
       return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1" } };
@@ -151,16 +160,80 @@ test("leverage on a trade that routes to a DEX is refused, not dropped to 1x", a
   assert.throws(() => perpIntent("ETH", 0), /Too small/);
 });
 
+const label = (action: HyperliquidAction) => (action.type === "order" ? `order ${action.orders[0]!.b ? "buy" : "sell"}` : action.type === "updateLeverage" ? `updateLeverage ${action.leverage}` : action.type);
+
 test("closing a 3x long with a sell that leaves out leverage sends only the sell, never an updateLeverage decrease", async () => {
   resetExecutorState();
   resetAssetMeta();
   const sent: SendRequest[] = [];
   const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
   assert.equal((await execute(perpIntent("ETH", 3), perpDeps("live", env, sent))).decision, "sent");
-  const close = await execute(perpIntent("ETH", undefined, 100, "sell"), perpDeps("live", env, sent));
+  const close = await execute(perpIntent("ETH", undefined, 100, "sell"), perpDeps("live", env, sent, 100, holding(accounts.isolated, "HYPE", "ETH")));
   assert.equal(close.decision, "sent", close.reason);
-  const label = (action: HyperliquidAction) => (action.type === "order" ? `order ${action.orders[0]!.b ? "buy" : "sell"}` : action.type === "updateLeverage" ? `updateLeverage ${action.leverage}` : action.type);
   assert.deepEqual(sent.map((request) => request.hyperliquidActions.map(label)), [["updateLeverage 3", "order buy"], ["order sell"]]);
+});
+
+test("captured clearinghouseState responses parse to the position Whale plans against", async () => {
+  const read = (account: Clearinghouse, coin: string) => fetchPerpPosition(MAINNET, ACCOUNT, coin, stateFetch(account));
+  assert.deepEqual(await read(accounts.isolated, "ETH"), { side: "short", margin: "isolated", leverage: 3 });
+  assert.deepEqual(await read(accounts.isolated, "HYPE"), { side: "long", margin: "isolated", leverage: 3 });
+  assert.deepEqual(await read(accounts.cross, "ETH"), { side: "long", margin: "cross", leverage: 10 });
+  assert.deepEqual(await read(accounts.cross, "WLD"), { side: "short", margin: "cross", leverage: 10 });
+  assert.deepEqual(await read(accounts.flat, "ETH"), { side: "flat" });
+  assert.deepEqual(await read(accounts.isolated, "BTC"), { side: "flat" });
+  await assert.rejects(() => read({ assetPositions: [{ position: { coin: "ETH", szi: "1", leverage: { type: "margin", value: 3 } } }] }, "ETH"));
+  const down = (async () => new Response("busy", { status: 502 })) as unknown as typeof fetch;
+  await assert.rejects(() => fetchPerpPosition(MAINNET, ACCOUNT, "ETH", down), /clearinghouseState failed/);
+});
+
+test("a fresh sell opens its short at isolated 1x, and the buy that closes it sends no updateLeverage", async () => {
+  resetExecutorState();
+  resetAssetMeta();
+  const sent: SendRequest[] = [];
+  const env = { HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "100000000" }) };
+  const open = await execute(perpIntent("ETH", undefined, 100, "sell"), perpDeps("live", env, sent));
+  assert.equal(open.decision, "sent", open.reason);
+  const short = holding(accounts.isolated, "ETH", "ETH", "-0.0028");
+  const close = await execute(perpIntent("ETH", undefined), perpDeps("live", env, sent, 100, short));
+  assert.equal(close.decision, "sent", close.reason);
+  const crossShort = holding(accounts.cross, "WLD", "ETH");
+  assert.equal((await execute(perpIntent("ETH", 2), perpDeps("live", env, sent, 100, crossShort))).decision, "sent");
+  assert.deepEqual(sent.map((request) => request.hyperliquidActions.map(label)), [["updateLeverage 1", "order sell"], ["order buy"], ["order buy"]]);
+  assert.deepEqual(sent[0]!.hyperliquidActions[0], buildLeverage(1, 1));
+});
+
+test("a buy on an open isolated long changes leverage only when the intent sets it, and never on a cross long", async () => {
+  resetExecutorState();
+  resetAssetMeta();
+  const sent: SendRequest[] = [];
+  const long = holding(accounts.isolated, "HYPE", "ETH");
+  assert.equal((await execute(perpIntent("ETH", undefined), perpDeps("live", {}, sent, 100, long))).decision, "sent");
+  assert.equal((await execute(perpIntent("ETH", 2), perpDeps("live", {}, sent, 100, long))).decision, "sent");
+  assert.deepEqual(sent.map((request) => request.hyperliquidActions.map(label)), [["order buy"], ["updateLeverage 2", "order buy"]]);
+  resetExecutorState();
+  const cross = await execute(perpIntent("ETH", 2), perpDeps("live", {}, sent, 100, accounts.cross));
+  assert.equal(cross.decision, "skipped");
+  assert.equal(cross.reason, "leverage cannot be set on the open cross ETH long");
+  assert.equal(sent.length, 2);
+});
+
+test("a perp trade whose position cannot be read is skipped before anything is signed", async () => {
+  resetAssetMeta();
+  const down = (async () => new Response("busy", { status: 502 })) as unknown as typeof fetch;
+  const cases: [string, Partial<ExecutorDeps>][] = [
+    ["info down", { perpPosition: (coin) => fetchPerpPosition(MAINNET, ACCOUNT, coin, down) }],
+    ["no account", { perpPosition: undefined }],
+  ];
+  for (const [name, override] of cases) {
+    for (const side of ["buy", "sell"] as const) {
+      resetExecutorState();
+      const sent: SendRequest[] = [];
+      const report = await execute(perpIntent("ETH", undefined, 100, side), { ...perpDeps("live", {}, sent), ...override });
+      assert.equal(report.decision, "skipped", name);
+      assert.equal(report.reason, "hyperliquid position unreadable", name);
+      assert.equal(sent.length, 0, name);
+    }
+  }
 });
 
 test("a buy that leaves out leverage opens at isolated 1x, and leverage on a sell is refused", async () => {

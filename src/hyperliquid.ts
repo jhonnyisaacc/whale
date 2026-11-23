@@ -1,4 +1,5 @@
 import { encode } from "@msgpack/msgpack";
+import { z } from "zod";
 import { withTimeout } from "./timeout.js";
 import { keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -90,10 +91,16 @@ export function buildLeverage(asset: number, leverage: number): LeverageAction {
   return { type: "updateLeverage", asset, isCross: false, leverage };
 }
 
-export function tradeActions(market: { market: "perp" | "spot"; assetIndex: number }, order: OrderAction, leverage: number | undefined): HyperliquidAction[] {
-  const row = order.orders[0];
-  const opens = market.market === "perp" && row !== undefined && row.b && !row.r;
-  return opens ? [buildLeverage(market.assetIndex, leverage ?? 1), order] : [order];
+export type PerpPosition = { side: "flat" } | { side: "long" | "short"; margin: "isolated" | "cross"; leverage: number };
+
+export function tradeActions(market: { market: "perp" | "spot"; coin: string; assetIndex: number }, order: OrderAction, leverage: number | undefined, position: PerpPosition | null): HyperliquidAction[] {
+  if (market.market === "spot") return [order];
+  if (position === null) throw new Error("hyperliquid position unreadable");
+  const isBuy = order.orders[0]?.b === true;
+  if (position.side === "flat") return [buildLeverage(market.assetIndex, isBuy ? (leverage ?? 1) : 1), order];
+  if (!isBuy || position.side === "short" || leverage === undefined) return [order];
+  if (position.margin === "cross") throw new Error(`leverage cannot be set on the open cross ${market.coin} long`);
+  return [buildLeverage(market.assetIndex, leverage), order];
 }
 
 export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): number {
@@ -319,6 +326,35 @@ export async function fetchAssetMeta(url: string, market: { market: "perp" | "sp
   const meta = { szDecimals, maxLeverage };
   metaCache.set(key, meta);
   return meta;
+}
+
+const clearinghouseSchema = z.object({
+  assetPositions: z.array(
+    z.object({
+      position: z.object({
+        coin: z.string(),
+        szi: z.string().regex(/^-?\d+(\.\d+)?$/),
+        leverage: z.object({ type: z.enum(["isolated", "cross"]), value: z.number().int().positive() }),
+      }),
+    }),
+  ),
+});
+
+export async function fetchPerpPosition(url: string, user: string, coin: string, fetchImpl: typeof fetch = fetch): Promise<PerpPosition> {
+  const body: unknown = await withTimeout(1500, async (signal) => {
+    const response = await vendorResponse(fetchImpl, `${url.replace(/\/$/, "")}/info`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "clearinghouseState", user }),
+      signal,
+    });
+    if (!response.ok) throw new Error("hyperliquid clearinghouseState failed");
+    return JSON.parse(await readVendorText(response)) as unknown;
+  });
+  const row = clearinghouseSchema.parse(body).assetPositions.find((item) => item.position.coin === coin)?.position;
+  const size = row === undefined ? 0 : Number(row.szi);
+  if (row === undefined || size === 0) return { side: "flat" };
+  return { side: size > 0 ? "long" : "short", margin: row.leverage.type, leverage: row.leverage.value };
 }
 
 export type ExchangeOutcome =

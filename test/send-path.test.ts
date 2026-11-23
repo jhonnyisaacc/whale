@@ -578,6 +578,7 @@ test("hyperliquid replies decide commit or release", async () => {
       markPrice: async () => 1,
       liquidityOf: async () => 100,
       assetMeta: async () => ({ szDecimals: 2, maxLeverage: 5 }),
+      perpPosition: async () => ({ side: "flat" }),
     };
     const report = await execute(hyperIntent(key), deps);
     return { report, spend: spend.get(key), seen };
