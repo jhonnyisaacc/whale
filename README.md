@@ -83,6 +83,6 @@ Set `BITCOIN_NETWORK` to `bitcoin`, `testnet`, `signet`, or `regtest` to turn it
 3. Its app policy checks the exact unsigned bytes and every previous transaction. It reads each amount from a previous transaction that hashes to its outpoint.
 4. It prices the spend (inputs minus change) in USD against `MAX_USD_PER_TRADE` and reserves it on the same daily cap as every other local send.
 5. whale-signer checks its own `bitcoin` policy section and signs. Whale verifies each signature against the BIP143 digest before it accepts the answer.
-6. With `WHALE_BROADCAST` unset, the result is `signed` with the txid and `signedTransaction`, and nothing is sent.
+6. With `WHALE_BROADCAST` unset, the result is `signed` with the txid and `signedTransaction`, and nothing is sent. The spend stays charged to the daily cap, because anyone holding the signed transaction can still send it.
 
 Bitcoin has no pre-broadcast simulation. Esplora cannot run `testmempoolaccept`, and both policies read every byte of the transaction. `node scripts/bitcoin-regtest-proof.mjs` proves the held transaction passes `testmempoolaccept` on a regtest node and that whale-signer refuses a destination outside its policy. Set `BITCOIN_CLI` to a `bitcoin-cli` wrapper, or `BITCOIN_RPC_URL`, `BITCOIN_RPC_USER`, and `BITCOIN_RPC_PASSWORD`. `BITCOIN_RPC_WALLET` names the funded wallet (default `miner`). Build the signer first with `cargo build --release --locked` in `signer/`.

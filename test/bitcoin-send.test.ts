@@ -169,14 +169,13 @@ test("a send above MAX_USD_PER_TRADE is refused before signing", () =>
     assert.equal(jobs.length, 0);
   }));
 
-test("a held or refused send gives its USD reservation back, and a broadcast one keeps it", () =>
+test("a held send keeps its USD reservation because its signed transaction can still be sent, and a refused one gives it back", () =>
   withBitcoin({}, [100_000n], async ({ send, refuse }) => {
-    assert.equal((await send(btc("h1", "6000"))).status, "signed");
-    assert.equal((await send(btc("h2", "6000"))).status, "signed", "a held send spent nothing");
     refuse.next = true;
     await assert.rejects(send(btc("r1", "6000")), /whale-signer refused/);
     refuse.next = false;
-    assert.equal((await send(btc("h3", "6000"))).status, "signed", "a refused send spent nothing");
+    assert.equal((await send(btc("h1", "6000"))).status, "signed", "a refused send spent nothing");
+    assert.equal((await send(btc("h2", "6000"))).reason, "daily cap 10 USD", "a held send counts against the cap");
   }).then(() =>
     withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
       const sent = await send(btc("b1", "6000"));

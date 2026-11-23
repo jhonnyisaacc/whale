@@ -88,7 +88,7 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
   });
   const txid = transactionId(signed);
   if (deps.hold) {
-    await release();
+    await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
     return { kind: "send_bitcoin", status: "signed", reason: HELD, jobs, plan, txid, signedTransaction: hex(signed) };
   }
   await indexer.broadcast(signed).catch(async (error: unknown) => {
