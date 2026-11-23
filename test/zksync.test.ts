@@ -131,7 +131,7 @@ function chainRpc(): { rpc: EvmRpc; sent: Hex[] } {
     simulate: async () => undefined,
     sendRaw: async (signed) => {
       sent.push(signed);
-      receipts.set(keccak256(signed), { status: "success", gasUsed: 2_000_000n, effectiveGasPrice: 45_250_000n });
+      receipts.set(keccak256(signed), { status: "success", gasUsed: 2_000_000n, effectiveGasPrice: 45_250_000n, l1Fee: 0n });
     },
     receipt: async (hash) => receipts.get(hash) ?? null,
     seen: async (hash) => receipts.has(hash),

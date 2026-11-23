@@ -26,7 +26,7 @@ export const lifiApprovalSchema = z.object({ estimate: z.object({ approvalAddres
 
 export type EvmCall = { from: Hex; to: Hex; data: Hex; value: bigint };
 
-export type EvmReceipt = { status: "success" | "reverted"; gasUsed: bigint; effectiveGasPrice: bigint };
+export type EvmReceipt = { status: "success" | "reverted"; gasUsed: bigint; effectiveGasPrice: bigint; l1Fee: bigint };
 
 export type EvmRpc = {
   fees(): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }>;
@@ -145,7 +145,7 @@ export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc 
     async receipt(hash) {
       try {
         const receipt = await client.getTransactionReceipt({ hash });
-        return { status: receipt.status, gasUsed: receipt.gasUsed, effectiveGasPrice: receipt.effectiveGasPrice };
+        return { status: receipt.status, gasUsed: receipt.gasUsed, effectiveGasPrice: receipt.effectiveGasPrice, l1Fee: BigInt((receipt as { l1Fee?: Hex }).l1Fee ?? 0) };
       } catch (error) {
         if (error instanceof TransactionReceiptNotFoundError) return null;
         throw error;
