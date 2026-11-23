@@ -13,8 +13,8 @@ export function landedSend(): SendResult {
   };
 }
 
-export function hyperMarketAt(assetIndex: number, szDecimals = 2): HyperMarketOf {
-  return async ({ coin, market }) => ({ coin, market, assetIndex, szDecimals, maxLeverage: 5, midKey: coin });
+export function hyperMarketAt(assetIndex: number, szDecimals = 2, coin = "TKN"): HyperMarketOf {
+  return async ({ market }) => ({ coin, market, assetIndex, szDecimals, maxLeverage: 5, midKey: coin });
 }
 
 const ZERO = "0x0000000000000000000000000000000000000000";

@@ -1,22 +1,28 @@
 import type { SwapIntent } from "../domain.js";
-import type { HyperMarket } from "../hyperliquid-markets.js";
+import type { HyperMarket, HyperMarketQuery } from "../hyperliquid-markets.js";
 
-export type HyperMarketOf = (query: { coin: string; market: "perp" | "spot" }) => Promise<HyperMarket | null>;
+export type HyperMarketOf = (query: HyperMarketQuery) => Promise<HyperMarket | null>;
+
+function marketQuery(token: SwapIntent["token"], market: "perp" | "spot"): HyperMarketQuery | string {
+  if (token.chain.kind === "hypercore") return market === "perp" && token.chain.market === "perp" ? { market, coin: token.address } : `${token.address} is not a hypercore ${market} token`;
+  if (token.chainKey === "hyperevm" && market === "spot") return { market, evmContract: token.address };
+  return `${token.symbol} on ${token.chainKey} has no hyperliquid ${market} market`;
+}
 
 export async function tokenHyperMarket(intent: SwapIntent, marketOf: HyperMarketOf | undefined): Promise<HyperMarket | string> {
   const claim = intent.hyperliquid;
-  const { token } = intent;
   if (!claim || !marketOf) return "hyperliquid market unverifiable";
-  if (token.chain.kind === "hypercore" && token.chain.market !== claim.market) return `${token.symbol} is a hypercore ${token.chain.market} token, not ${claim.market}`;
+  const query = marketQuery(intent.token, claim.market);
+  if (typeof query === "string") return query;
   let market: HyperMarket | null;
   try {
-    market = await marketOf({ coin: token.symbol, market: claim.market });
+    market = await marketOf(query);
   } catch {
     return "hyperliquid market unverifiable";
   }
-  if (!market) return `${token.symbol} has no hyperliquid ${claim.market} market`;
+  if (!market) return `${intent.token.address} has no hyperliquid ${claim.market} market`;
   if (claim.coin !== market.coin || claim.assetIndex !== market.assetIndex) {
-    return `hyperliquid ${claim.coin} asset ${claim.assetIndex} is not the ${claim.market} market of ${token.symbol}, asset ${market.assetIndex}`;
+    return `hyperliquid ${claim.coin} asset ${claim.assetIndex} is not the ${claim.market} market of ${intent.token.address}, asset ${market.assetIndex}`;
   }
   return market;
 }

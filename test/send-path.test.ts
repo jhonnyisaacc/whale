@@ -552,7 +552,7 @@ test("hyperliquid sizes 100/3.7 and 250/0.01234 produce valid wire values", () =
 function hyperIntent(key: string): SwapIntent {
   return {
     ...evmIntent(key),
-    token: { ...evmIntent(key).token, pairMap: buildPairMap([{ ...evmIntent(key).token.pairMap.pools[0], liquidityUsd: 100 }]) },
+    token: { symbol: "TKN", address: "TKN", decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } },
     hyperliquid: { coin: "TKN", assetIndex: 4, market: "perp", maxLeverage: 5 },
   };
 }
@@ -604,12 +604,16 @@ test("a hyperliquid spot buy sends only the order, with no leverage action", asy
   const filled = { status: "ok", response: { type: "order", data: { statuses: [{ filled: { totalSz: "5", avgPx: "1.001", oid: 9 } }] } } };
   const deps: ExecutorDeps = {
     ...liveDeps((request, onTx) => broadcastRoute(hyperConfig, evmSigner([]), request, 1, exchange(filled, seen), [], { onTx }), new Map(), [], false),
-    config: { ...hyperConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
+    config: { ...hyperConfig, enabledChainKeys: new Set(["hyperevm", "hypercore"]) },
     markPrice: async () => 1,
     liquidityOf: async () => 100,
     hyperMarket: hyperMarketAt(10_004),
   };
-  const spot = { ...hyperIntent("hl-spot"), hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot" as const, maxLeverage: 1 } };
+  const spot: SwapIntent = {
+    ...hyperIntent("hl-spot"),
+    token: { ...evmIntent("hl-spot").token, chain: { kind: "evm", chainId: 999 }, chainKey: "hyperevm", pairMap: { pools: [], top: null } },
+    hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot", maxLeverage: 1 },
+  };
   const report = await execute(spot, deps);
   assert.equal(report.decision, "sent");
   assert.deepEqual(

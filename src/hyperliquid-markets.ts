@@ -22,7 +22,7 @@ export const perpMetaSchema = z
 export const spotMetaSchema = z
   .object({
     universe: z.array(z.object({ name: z.string(), index: count, tokens: z.tuple([count, count]) }).loose()),
-    tokens: z.array(z.object({ name: z.string(), index: count, szDecimals: count }).loose()),
+    tokens: z.array(z.object({ name: z.string(), index: count, szDecimals: count, evmContract: z.object({ address: z.string() }).loose().nullable().optional() }).loose()),
   })
   .loose();
 
@@ -38,13 +38,15 @@ export function perpMarket(meta: PerpMeta, coin: string): HyperMarket | null {
   return { coin, market: "perp", assetIndex, szDecimals: row.szDecimals, maxLeverage: row.maxLeverage, midKey: coin };
 }
 
-export function spotMarket(meta: SpotMeta, coin: string): HyperMarket | null {
+export type HyperMarketQuery = { market: "perp"; coin: string } | { market: "spot"; evmContract: string };
+
+export function spotMarket(meta: SpotMeta, evmContract: string): HyperMarket | null {
   const usdc = meta.tokens.find((token) => token.name === "USDC");
-  const base = meta.tokens.find((token) => token.name === coin);
+  const base = meta.tokens.find((token) => token.evmContract?.address.toLowerCase() === evmContract.toLowerCase());
   if (!usdc || !base) return null;
   const pair = meta.universe.find((row) => row.tokens[0] === base.index && row.tokens[1] === usdc.index);
   if (!pair) return null;
-  return { coin, market: "spot", assetIndex: SPOT_ASSET_OFFSET + pair.index, szDecimals: base.szDecimals, maxLeverage: 1, midKey: pair.name };
+  return { coin: base.name, market: "spot", assetIndex: SPOT_ASSET_OFFSET + pair.index, szDecimals: base.szDecimals, maxLeverage: 1, midKey: pair.name };
 }
 
 const META_TTL_MS = 300_000;
@@ -81,7 +83,7 @@ export function resetHyperMeta(): void {
   spotMeta.clear();
 }
 
-export async function fetchHyperMarket(url: string, query: { coin: string; market: "perp" | "spot" }, fetchImpl: typeof fetch = fetch, nowMs = Date.now()): Promise<HyperMarket | null> {
-  if (query.market === "spot") return spotMarket(await spotMeta.read(url, fetchImpl, nowMs), query.coin);
+export async function fetchHyperMarket(url: string, query: HyperMarketQuery, fetchImpl: typeof fetch = fetch, nowMs = Date.now()): Promise<HyperMarket | null> {
+  if (query.market === "spot") return spotMarket(await spotMeta.read(url, fetchImpl, nowMs), query.evmContract);
   return perpMarket(await perpMeta.read(url, fetchImpl, nowMs), query.coin);
 }
