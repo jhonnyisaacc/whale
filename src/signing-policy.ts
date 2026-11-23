@@ -9,6 +9,7 @@ export * from "./signing-policy/bridge-terms.js";
 export * from "./signing-policy/bridge-tokens.js";
 export * from "./signing-policy/turnkey.js";
 export * from "./signing-policy/hypercore.js";
+export * from "./signing-policy/bitcoin.js";
 
 export const JUPITER_PROGRAM_ID = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
