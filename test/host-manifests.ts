@@ -192,7 +192,7 @@ function checkAgentPluginMcp(root: string, file: string): string[] {
 
 function forwardedEnv(root: string): string[] {
   const rpc = CHAINS.flatMap((chain) => [chain.rpcEnv, rpcListEnv(chain.rpcEnv) ?? []].flat());
-  return [...new Set([...mcpServerEnv(root).filter((name) => !retiredEnv.includes(name)), ...rpc, ...QUOTE_KEY_NAMES])];
+  return [...new Set([...mcpServerEnv(root).filter((name) => !retiredEnv.includes(name)), ...rpc, ...QUOTE_KEY_NAMES, "HYPERLIQUID_ACCOUNT_ADDRESS"])];
 }
 
 function mcpServerEnv(root: string): string[] {

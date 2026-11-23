@@ -46,6 +46,7 @@ export function parseCommand(argv: readonly string[]): WalletCommand {
     if (!chainKey || !address) throw new Error("--chain and --address are required");
     return { kind, chainKey, address };
   }
+  if (kind === "perp-positions") return { kind: "perp_positions" };
   if (kind === "transfer") {
     const idempotencyKey = flag(rest, "--idempotency-key");
     const to = flag(rest, "--to");
@@ -65,7 +66,7 @@ export function parseCommand(argv: readonly string[]): WalletCommand {
     if (!SMALLEST_UNIT.test(amount)) throw new Error("--amount must be a positive whole number in the asset's smallest unit");
     return { kind, fromChainKey, destination: { chainKey: toChainKey, address: to }, asset, amount };
   }
-  throw new Error("usage: quote | swap | bridge | balance | transfer");
+  throw new Error("usage: quote | swap | bridge | balance | perp-positions | transfer");
 }
 
 function liveSwapSkipped(command: Extract<WalletCommand, { kind: "swap"; mode: "live" }>): WalletResult {
