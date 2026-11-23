@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { readFileSync } from "node:fs";
+import test, { mock } from "node:test";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { keccak256, toHex, type Hex } from "viem";
 import { rememberApproval, resetApprovals } from "../src/approvals.js";
-import { broadcastRoute, lookupAgedTx, receivedFromMeta, solanaRpcOver, withdrawNative, type EvmReceipt, type EvmRpc, type SendIo, type SolanaRpc } from "../src/broadcast.js";
+import { broadcastRoute, createViemRpc, lookupAgedTx, receivedFromMeta, solanaRpcOver, withdrawNative, type EvmReceipt, type EvmRpc, type SendIo, type SolanaRpc } from "../src/broadcast.js";
 import { loadConfig } from "../src/config.js";
 import type { RouteLeg, SwapIntent, TxRecord } from "../src/domain.js";
 import { BroadcastError, execute, resetExecutorState, type ExecutorDeps } from "../src/executor.js";
@@ -775,4 +776,26 @@ test("a held send signs, journals the signed record, sends nothing, and gives th
   const sent = await withdrawNative({ config: evmConfig, signer: evmSigner(signed), chainKey: "base", to: DEST, amount: 100_000_000_000_000n, io });
   assert.equal(sent.outcome, "landed");
   assert.deepEqual(signed.map((input) => input.nonce), [7, 7], "the held signature did not use up the nonce");
+});
+
+test("a native buy on Base adds the receipt's L1 fee back, so a buy that paid out its minimum is not reported short", async (t) => {
+  const NATIVE = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+  const raw = JSON.parse(readFileSync(new URL("../../test/fixtures/base/l1-fee-receipt.json", import.meta.url), "utf8")) as Record<string, string>;
+  t.after(() => mock.restoreAll());
+  mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const { id, method } = JSON.parse(String(init.body)) as { id: number; method: string };
+    return Response.json({ jsonrpc: "2.0", id, result: method === "eth_chainId" ? "0x2105" : raw });
+  });
+  const receipt = await createViemRpc(8453, ["http://base-receipt.invalid"]).receipt(raw.transactionHash as Hex);
+  assert.ok(receipt);
+  approveRouter();
+  const chain = fakeChain();
+  chain.balances.set(NATIVE, 0n);
+  const minOut = 2_490_000_000_000_000n;
+  const paid = BigInt(raw.gasUsed ?? 0) * BigInt(raw.effectiveGasPrice ?? 0) + BigInt(raw.l1Fee ?? 0);
+  deliver(chain, { "0x01": { token: NATIVE, amount: minOut - paid, receipt } });
+  const quotes = { [NATIVE]: { buyAmount: "2500000000000000", minBuyAmount: minOut.toString(), data: "0x01" as Hex } };
+  const result = await broadcastRoute(evmConfig, evmSigner([]), { ...twoHop, legs: [{ ...leg1, buyAddress: NATIVE }] }, 1, zeroEx(quotes, []), [], { io: clockIo(chain.rpc) });
+  assert.equal(result.venue === "chain" && result.outcome, "landed");
+  assert.equal(result.venue === "chain" && result.shortfall, false, "the L1 fee is gas the wallet paid, not output the swap withheld");
 });
