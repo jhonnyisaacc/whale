@@ -10,7 +10,7 @@ import { BroadcastError } from "../executor.js";
 import type { EvmSignInput, TransactionSigner } from "../managed-signer.js";
 import { evmNonces, type NonceManager } from "../nonce.js";
 import { redactError } from "../redact.js";
-import { anyOk, firstOk, readTransport, solanaConnection } from "../rpc.js";
+import { anyOk, assertChainId, firstOk, readTransport, solanaConnection } from "../rpc.js";
 import { WSOL_MINT } from "../signing-policy.js";
 
 export const NATIVE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
@@ -38,6 +38,7 @@ export type EvmRpc = {
   receipt(hash: Hex): Promise<EvmReceipt | null>;
   seen(hash: Hex): Promise<boolean>;
   balance(token: string, owner: Hex): Promise<bigint>;
+  checkChain(): Promise<void>;
 };
 
 export type SolanaStatus = { err: unknown; confirmationStatus?: string | null } | null;
@@ -163,6 +164,7 @@ export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc 
       if (NATIVE_SELL.has(token.toLowerCase())) return client.getBalance({ address: owner });
       return client.readContract({ address: token as Hex, abi: erc20Abi, functionName: "balanceOf", args: [owner] });
     },
+    checkChain: () => assertChainId(chainId, rpcs),
   };
 }
 

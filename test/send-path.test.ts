@@ -69,6 +69,7 @@ function fakeChain(): FakeChain {
       receipt: async (hash) => chain.receipts.get(hash) ?? null,
       seen: async (hash) => chain.known.has(hash) || chain.receipts.has(hash),
       balance: async (token) => chain.balances.get(token.toLowerCase()) ?? 10n ** 20n,
+      checkChain: async () => undefined,
     },
   };
   return chain;

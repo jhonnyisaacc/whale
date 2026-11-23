@@ -316,6 +316,7 @@ function fakeChain(failSend = false): Chain {
       receipt: async (hash) => receipts.get(hash) ?? null,
       seen: async (hash) => receipts.has(hash),
       balance: async () => 10n ** 20n,
+      checkChain: async () => undefined,
     },
   };
   return chain;
