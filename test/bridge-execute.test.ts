@@ -231,6 +231,16 @@ test("with broadcast on, the bridge sends, commits its spend, and tracks the tra
   assert.equal(result.status === "sent" && result.transfer?.sourceTx, keccak256(run.sent[1] ?? "0x"));
 });
 
+test("a bridge that landed keeps its reservation and reports sent when the spend commit fails", async () => {
+  const run = harness({ broadcast: true });
+  run.deps.spend = { ...run.deps.spend, commit: async () => Promise.reject(new Error("db connection reset")) };
+  const result = await executeBridge(run.deps, order());
+  assert.equal(result.status, "sent", JSON.stringify(result));
+  assert.equal(run.sent.length, 2);
+  assert.match(result.reason, /db connection reset/);
+  assert.deepEqual(run.spend, ["reserve bridge:k1 2"]);
+});
+
 test("a bridge that needs an approval waits for the root-quorum approval while ALLOW_HOT_APPROVAL is off", async () => {
   const run = harness({ config: loadConfig({ RPC_URL_8453: "http://base.invalid", ENABLED_CHAINS: "base,arbitrum", MAX_BRIDGE_FEE_BPS: "100" }) });
   const result = await executeBridge(run.deps, order());

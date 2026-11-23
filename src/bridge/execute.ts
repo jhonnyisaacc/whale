@@ -156,8 +156,11 @@ export async function executeBridge(deps: BridgeDeps, order: BridgeOrder): Promi
       return { status: "signed", provider: planned.provider, reason: HELD, txs };
     }
     const { txs, transfer } = await sendLive(deps, planned);
-    await deps.spend.commit(key);
-    return { status: "sent", provider: planned.provider, reason: `bridge ${transfer.state}`, txs, transfer };
+    const committed = await deps.spend.commit(key).then(
+      () => "",
+      (error: unknown) => `, and its spend stays reserved because the commit failed: ${redactError(error, deps.evm.secrets)}`,
+    );
+    return { status: "sent", provider: planned.provider, reason: `bridge ${transfer.state}${committed}`, txs, transfer };
   } catch (error) {
     const maybeSent = error instanceof BroadcastError && error.broadcast;
     if (!maybeSent) await deps.spend.release(key).catch(() => undefined);
