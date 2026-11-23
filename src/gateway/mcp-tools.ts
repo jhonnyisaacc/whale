@@ -7,8 +7,8 @@ import type { AgentContext } from "./agents.js";
 import { cancelRequest, openRequests } from "./approvals.js";
 import type { ExecutorClient } from "./executor-client.js";
 import { dailyRefusal, perTxRefusal, planSend, thresholdReason, today } from "./mcp-sends.js";
-import { remainingUsd } from "./send-ledger.js";
 import { effectiveLimits, type WalletPolicy } from "./policy.js";
+import { remainingUsd } from "./send-ledger.js";
 import { x402Quote, type Fetch402, type X402Payment, type X402Verdict } from "./x402.js";
 import type { WalletView } from "./wallets.js";
 
