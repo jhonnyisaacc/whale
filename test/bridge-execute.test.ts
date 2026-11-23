@@ -52,7 +52,7 @@ function signer(raw: Hex[], policy = config): TransactionSigner {
   return withPolicy(inner, policy);
 }
 
-function chain() {
+function chain(checkChain: EvmRpc["checkChain"] = async () => undefined) {
   const sent: Hex[] = [];
   const receipts = new Map<string, EvmReceipt>();
   const rpc: EvmRpc = {
@@ -68,6 +68,7 @@ function chain() {
     receipt: async (hash) => receipts.get(hash) ?? null,
     seen: async (hash) => receipts.has(hash),
     balance: async () => 10n ** 20n,
+    checkChain,
   };
   let clock = 0;
   const io: SendIo = {
@@ -88,11 +89,11 @@ function chain() {
 
 type Harness = { deps: BridgeDeps; raw: Hex[]; sent: Hex[]; spend: string[]; simulated: number[] };
 
-function harness(options: { config?: typeof config; call?: BridgeCall | null; allowance?: bigint; screen?: "allow" | "deny"; reserve?: "reserved" | "exists" | "cap"; simulate?: BridgeReads["simulate"]; broadcast?: boolean; statuses?: BridgeStatus["state"][] } = {}): Harness {
+function harness(options: { config?: typeof config; call?: BridgeCall | null; allowance?: bigint; screen?: "allow" | "deny"; reserve?: "reserved" | "exists" | "cap"; simulate?: BridgeReads["simulate"]; broadcast?: boolean; statuses?: BridgeStatus["state"][]; checkChain?: EvmRpc["checkChain"] } = {}): Harness {
   const raw: Hex[] = [];
   const spend: string[] = [];
   const simulated: number[] = [];
-  const { sent, io } = chain();
+  const { sent, io } = chain(options.checkChain);
   const evm = evmContext({ config: options.config ?? config, signer: signer(raw, options.config ?? config), io, onTx: async () => undefined, fetchImpl: fetch, secrets: [] }, "base", ["http://base.invalid"]);
   const ledger: BridgeSpend = {
     reserve: async (key, usd) => (spend.push(`reserve ${key} ${usd}`), options.reserve ?? "reserved"),
@@ -138,6 +139,23 @@ test("a live bridge with WHALE_BROADCAST off ends at a signed approval and bridg
   const terms = bridgeTerms(bridge.data ?? "0x");
   assert.equal(terms?.recipient.toLowerCase(), OWN.toLowerCase());
   assert.equal(terms?.destinationChainId, 42161n);
+});
+
+test("a relay that answers another chain refuses a held or live bridge before it signs and releases the spend", async () => {
+  for (const broadcast of [false, true]) {
+    const run = harness({
+      broadcast,
+      checkChain: async () => {
+        throw new Error("MEV_RPC_URL_8453 answered eth_chainId with chain 1");
+      },
+    });
+    const result = await executeBridge(run.deps, order());
+    assert.equal(result.status, "skipped", `broadcast ${broadcast}`);
+    assert.match(result.status === "skipped" ? result.reason : "", /answered eth_chainId with chain 1/);
+    assert.deepEqual(run.raw, [], `broadcast ${broadcast}`);
+    assert.deepEqual(run.sent, []);
+    assert.deepEqual(run.spend, ["reserve bridge:k1 2", "release bridge:k1"]);
+  }
 });
 
 test("an Across bridge whose allowance is already set signs only the deposit", async () => {
