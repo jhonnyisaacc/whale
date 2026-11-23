@@ -65,14 +65,17 @@ fn distributed(args: &[u8], slot: usize) -> Option<u128> {
     })
 }
 
-fn forwarded_fee(step: &LifiStep) -> Option<u128> {
+fn forwarded_fee(step: &LifiStep, token: [u8; 20]) -> Option<u128> {
+    if step.sending != token {
+        return None;
+    }
     let head = step.call_data.get(..4)?;
     let args = &step.call_data[4..];
-    let native = step.sending == [0u8; 20];
+    let native = token == [0u8; 20];
     if head == abi::selector(FORWARD_NATIVE) && native {
         return distributed(args, 0);
     }
-    if head == abi::selector(FORWARD_ERC20) && !native && abi::address(args, 0)? == step.sending {
+    if head == abi::selector(FORWARD_ERC20) && !native && abi::address(args, 0)? == token {
         return distributed(args, 1);
     }
     None
@@ -85,42 +88,39 @@ fn unlisted(what: &str, address: &[u8; 20]) -> String {
     )
 }
 
-fn refusal(table: &StepTable, step: &LifiStep) -> Option<String> {
-    let is = |address: &[u8; 20], listed: &str| hex::encode(address) == listed;
-    if is(&step.call_to, table.fee_forwarder) {
-        if !is(&step.approve_to, table.fee_forwarder) {
-            return Some(unlisted("approves", &step.approve_to));
-        }
-        let Some(fee) = forwarded_fee(step) else {
-            return Some(
-                "the LI.FI fee step is not a forwardERC20Fees or forwardNativeFees of the token it sells"
-                    .into(),
-            );
-        };
-        if fee
-            .checked_mul(10_000 / MAX_LIFI_FEE_BPS)
-            .is_none_or(|scaled| scaled > step.amount)
-        {
-            return Some(format!(
-                "the LI.FI fee step forwards {fee}, above {MAX_LIFI_FEE_BPS} bps of {}",
-                step.amount
-            ));
-        }
-        return None;
-    }
-    let listed = |address: &[u8; 20]| table.targets.iter().any(|target| is(address, target));
-    if !listed(&step.call_to) {
-        return Some(unlisted("calls", &step.call_to));
-    }
-    if !listed(&step.approve_to) {
-        return Some(unlisted("approves", &step.approve_to));
-    }
-    None
-}
-
-pub fn step_refusal(chain: u64, steps: &[LifiStep]) -> Option<String> {
+pub fn step_refusal(chain: u64, steps: &[LifiStep], charge: ([u8; 20], u128)) -> Option<String> {
     let Some(table) = STEP_TARGETS.iter().find(|table| table.chain == chain) else {
         return Some(format!("chain {chain} lists no LI.FI swap step targets"));
     };
-    steps.iter().find_map(|step| refusal(table, step))
+    let is = |address: &[u8; 20], listed: &str| hex::encode(address) == listed;
+    let listed = |address: &[u8; 20]| table.targets.iter().any(|target| is(address, target));
+    let (token, amount) = charge;
+    let mut fees = 0u128;
+    for step in steps {
+        if is(&step.call_to, table.fee_forwarder) {
+            if !is(&step.approve_to, table.fee_forwarder) {
+                return Some(unlisted("approves", &step.approve_to));
+            }
+            let Some(fee) = forwarded_fee(step, token).and_then(|fee| fees.checked_add(fee)) else {
+                return Some("the LI.FI fee step is not a forwardERC20Fees or forwardNativeFees of the token the swap deposits".into());
+            };
+            fees = fee;
+            continue;
+        }
+        if !listed(&step.call_to) {
+            return Some(unlisted("calls", &step.call_to));
+        }
+        if !listed(&step.approve_to) {
+            return Some(unlisted("approves", &step.approve_to));
+        }
+    }
+    if fees
+        .checked_mul(10_000 / MAX_LIFI_FEE_BPS)
+        .is_none_or(|scaled| scaled > amount)
+    {
+        return Some(format!(
+            "the LI.FI fee steps forward {fees}, above {MAX_LIFI_FEE_BPS} bps of the {amount} the swap deposits"
+        ));
+    }
+    None
 }

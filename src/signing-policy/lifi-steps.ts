@@ -52,39 +52,42 @@ export type LifiStep = { callTo: string; approveTo: string; sendingAssetId: stri
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-function forwardedFee(step: LifiStep): bigint | null {
+export type LifiCharge = { token: string; amount: bigint };
+
+export function lifiCharge(deposit: LifiCharge | null, value: bigint): LifiCharge {
+  return deposit ?? { token: NATIVE, amount: value };
+}
+
+function forwardedFee(step: LifiStep, charge: LifiCharge): bigint | null {
+  if (!same(step.sendingAssetId, charge.token)) return null;
   try {
     const call = decodeFunctionData({ abi: FEE_FORWARDER_ABI, data: step.callData });
-    const native = call.functionName === "forwardNativeFees";
-    if (native !== same(step.sendingAssetId, NATIVE)) return null;
-    if (call.functionName === "forwardERC20Fees" && !same(call.args[0], step.sendingAssetId)) return null;
-    const distributions = call.functionName === "forwardNativeFees" ? call.args[0] : call.args[1];
-    return distributions.reduce((sum, item) => sum + item.amount, 0n);
+    if (call.functionName === "forwardNativeFees") return same(charge.token, NATIVE) ? call.args[0].reduce((sum, item) => sum + item.amount, 0n) : null;
+    if (same(charge.token, NATIVE) || !same(call.args[0], charge.token)) return null;
+    return call.args[1].reduce((sum, item) => sum + item.amount, 0n);
   } catch {
     return null;
   }
 }
 
-function stepRefusal(table: LifiStepTable, step: LifiStep): string | null {
-  if (same(step.callTo, table.feeForwarder)) {
-    if (!same(step.approveTo, table.feeForwarder)) return `the LI.FI swap step approves 0x${step.approveTo.slice(2).toLowerCase()}, which is not a listed LI.FI step target`;
-    const fee = forwardedFee(step);
-    if (fee === null) return "the LI.FI fee step is not a forwardERC20Fees or forwardNativeFees of the token it sells";
-    if (fee * 10_000n > step.fromAmount * MAX_LIFI_FEE_BPS) return `the LI.FI fee step forwards ${fee}, above ${MAX_LIFI_FEE_BPS} bps of ${step.fromAmount}`;
-    return null;
-  }
-  const listed = (address: string) => table.targets.some((target) => same(target, address));
-  if (!listed(step.callTo)) return `the LI.FI swap step calls 0x${step.callTo.slice(2).toLowerCase()}, which is not a listed LI.FI step target`;
-  if (!listed(step.approveTo)) return `the LI.FI swap step approves 0x${step.approveTo.slice(2).toLowerCase()}, which is not a listed LI.FI step target`;
-  return null;
-}
+const unlisted = (what: string, address: string) => `the LI.FI swap step ${what} 0x${address.slice(2).toLowerCase()}, which is not a listed LI.FI step target`;
 
-export function lifiStepRefusal(chainId: number, steps: readonly LifiStep[]): string | null {
+export function lifiStepRefusal(chainId: number, steps: readonly LifiStep[], charge: LifiCharge): string | null {
   const table = LIFI_STEP_TARGETS[chainId];
   if (!table) return `chain ${chainId} lists no LI.FI swap step targets`;
+  const listed = (address: string) => table.targets.some((target) => same(target, address));
+  let fees = 0n;
   for (const step of steps) {
-    const refusal = stepRefusal(table, step);
-    if (refusal) return refusal;
+    if (same(step.callTo, table.feeForwarder)) {
+      if (!same(step.approveTo, table.feeForwarder)) return unlisted("approves", step.approveTo);
+      const fee = forwardedFee(step, charge);
+      if (fee === null) return "the LI.FI fee step is not a forwardERC20Fees or forwardNativeFees of the token the swap deposits";
+      fees += fee;
+      continue;
+    }
+    if (!listed(step.callTo)) return unlisted("calls", step.callTo);
+    if (!listed(step.approveTo)) return unlisted("approves", step.approveTo);
   }
+  if (fees * 10_000n > charge.amount * MAX_LIFI_FEE_BPS) return `the LI.FI fee steps forward ${fees}, above ${MAX_LIFI_FEE_BPS} bps of the ${charge.amount} the swap deposits`;
   return null;
 }

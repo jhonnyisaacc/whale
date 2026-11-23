@@ -2,7 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { isAllowanceHolderExec, swapTerms, type SwapTerms } from "./signing-policy/swap-terms.js";
 import { bridgeSpenders, checkBridge } from "./signing-policy/bridge-terms.js";
-import { lifiStepRefusal } from "./signing-policy/lifi-steps.js";
+import { lifiCharge, lifiStepRefusal } from "./signing-policy/lifi-steps.js";
 import { chainByEvmId, CHAINS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from "./chains.js";
 
 export * from "./signing-policy/swap-terms.js";
@@ -158,7 +158,7 @@ function checkEvmSigning(input: EvmSigningInput): void {
       assertSettler(terms, to, input.settlers);
     }
     if (terms.provider === "lifi") {
-      const refusal = lifiStepRefusal(input.chainId, terms.steps);
+      const refusal = lifiStepRefusal(input.chainId, terms.steps, lifiCharge(terms.deposit, input.value));
       if (refusal) throw new Error(refusal);
     }
     return;

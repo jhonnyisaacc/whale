@@ -372,9 +372,15 @@ impl Policy {
                             ));
                         }
                     }
-                    abi::Route::Lifi { steps } => decision
-                        .reasons
-                        .extend(crate::lifi::step_refusal(chain, steps)),
+                    abi::Route::Lifi { steps } => {
+                        let charge = match terms.sell {
+                            Some((token, amount)) if token != [0u8; 20] => (token, amount),
+                            _ => ([0u8; 20], tx.value),
+                        };
+                        decision
+                            .reasons
+                            .extend(crate::lifi::step_refusal(chain, steps, charge))
+                    }
                     abi::Route::Kyber { parties } => {
                         for party in parties {
                             if !listed(&self.kyber_executors, party) {
