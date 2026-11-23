@@ -27989,7 +27989,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Blast is quotes only; zkSync self-hosted",
+                          "content": "Blast is quotes only; zkSync is opt-in",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -28004,7 +28004,7 @@
                             "testId": "issue-chains-ts-guard-ts"
                           },
                           "fill": "$violet",
-                          "content": "chains.ts:307 · chains.ts:309",
+                          "content": "chains.ts:307 · support.ts:6",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -29059,10 +29059,10 @@
                           "id": "RQCOi",
                           "type": "ref",
                           "ref": "UM68F",
-                          "name": "Badge self-hosted live",
+                          "name": "Badge opt-in",
                           "descendants": {
                             "k7RLXp": {
-                              "content": "self-hosted live"
+                              "content": "opt-in"
                             }
                           }
                         }
@@ -58589,7 +58589,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Blast is quotes only; zkSync self-hosted",
+                          "content": "Blast is quotes only; zkSync is opt-in",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58603,7 +58603,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "chains.ts:307 · chains.ts:309",
+                          "content": "chains.ts:307 · support.ts:6",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -59832,10 +59832,10 @@
                   "id": "OS0C9",
                   "type": "ref",
                   "ref": "UM68F",
-                  "name": "Badge self-hosted live",
+                  "name": "Badge opt-in",
                   "descendants": {
                     "k7RLXp": {
-                      "content": "self-hosted live",
+                      "content": "opt-in",
                       "fontSize": 11
                     }
                   }
@@ -64826,7 +64826,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Blast is quotes only; zkSync self-hosted",
+                              "content": "Blast is quotes only; zkSync is opt-in",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64840,7 +64840,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "chains.ts:307 · chains.ts:309",
+                              "content": "chains.ts:307 · support.ts:6",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
