@@ -27804,7 +27804,7 @@
           "type": "frame",
           "id": "MipDs",
           "name": "KnownIssues",
-          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 18, 2026. Each ref links to the issue; re-check before publishing.",
+          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 23, 2026. Each ref links to the issue; re-check before publishing.",
           "metadata": {
             "type": "display"
           },
@@ -27838,7 +27838,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Open on public GitHub as of Nov 18, 2026 — ours included.",
+                  "content": "Open on public GitHub as of Nov 23, 2026 — ours included.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
@@ -27915,7 +27915,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Bridge is quotes only, no execute yet",
+                          "content": "Bridge execution has no MCP or CLI tool yet",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -27930,7 +27930,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:131",
+                          "content": "execute.ts:146 · commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -58406,7 +58406,7 @@
           "type": "frame",
           "id": "fz5p5",
           "name": "KnownIssues",
-          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 18, 2026. Each ref links to the issue; re-check before publishing.",
+          "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 23, 2026. Each ref links to the issue; re-check before publishing.",
           "metadata": {
             "type": "display"
           },
@@ -58440,7 +58440,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Open on public GitHub as of Nov 18, 2026 — ours included.",
+                  "content": "Open on public GitHub as of Nov 23, 2026 — ours included.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
@@ -58517,7 +58517,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Bridge is quotes only, no execute yet",
+                          "content": "Bridge execution has no MCP or CLI tool yet",
                           "lineHeight": 1.4,
                           "fontFamily": "$font-display",
                           "fontSize": 14,
@@ -58531,7 +58531,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "commands.ts:131",
+                          "content": "execute.ts:146 · commands.ts:131",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -64643,7 +64643,7 @@
               "type": "frame",
               "id": "rwopu",
               "name": "KnownIssues",
-              "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 18, 2026. Each ref links to the issue; re-check before publishing.",
+              "context": "Known open issues per product, from each vendor's public GitHub (and Whale's own repo) as of Nov 23, 2026. Each ref links to the issue; re-check before publishing.",
               "metadata": {
                 "type": "display"
               },
@@ -64677,7 +64677,7 @@
                       "fill": "$muted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Open on public GitHub as of Nov 18, 2026 — ours included.",
+                      "content": "Open on public GitHub as of Nov 23, 2026 — ours included.",
                       "lineHeight": 1.5,
                       "fontFamily": "$font-mono",
                       "fontSize": 12,
@@ -64754,7 +64754,7 @@
                               "fill": "$ink",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Bridge is quotes only, no execute yet",
+                              "content": "Bridge execution has no MCP or CLI tool yet",
                               "lineHeight": 1.4,
                               "fontFamily": "$font-display",
                               "fontSize": 14,
@@ -64768,7 +64768,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "commands.ts:131",
+                              "content": "execute.ts:146 · commands.ts:131",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
