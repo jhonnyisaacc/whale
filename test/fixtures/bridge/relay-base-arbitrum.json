@@ -1,0 +1,37 @@
+{
+  "captured": "2026-11-19",
+  "source": "https://api.relay.link/quote/v2",
+  "route": {
+    "fromChainId": 8453,
+    "toChainId": 42161,
+    "sell": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "buy": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "amount": "2000000",
+    "from": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "recipient": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A"
+  },
+  "steps": [
+    {
+      "id": "approve",
+      "requestId": "0x179511754250f964ca823c67af7342f1e0d5d8e27bcf7d4b34873b85cc81b1b2",
+      "txs": [
+        {
+          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          "data": "0x095ea7b30000000000000000000000004cd00e387622c35bddb9b4c962c136462338bc3100000000000000000000000000000000000000000000000000000000001e8480",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "id": "deposit",
+      "requestId": "0x179511754250f964ca823c67af7342f1e0d5d8e27bcf7d4b34873b85cc81b1b2",
+      "txs": [
+        {
+          "to": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+          "data": "0xe801795200000000000000000000000019e7e376e7c213b7e7e7e46cc70a5dd086daff2a000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda0291300000000000000000000000000000000000000000000000000000000001e84809f0bfa2c0c3d306baf2462d6d80cd7fc3a1a70272e1bdb7f1eaae48ed5e96924",
+          "value": "0"
+        }
+      ]
+    }
+  ]
+}

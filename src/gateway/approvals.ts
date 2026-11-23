@@ -157,13 +157,37 @@ export async function cancelRequest(pool: pg.Pool, agent: AgentContext, approval
   });
 }
 
-export async function listActivity(pool: pg.Pool, accountId: string, walletId: string | null, before: number | null) {
+export const ACTIVITY_STATUSES = ["planned", "refused", "requested", "approved", "denied"] as const;
+export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
+export type ActivityFilter = { walletId: string | null; agentId: string | null; status: ActivityStatus | null; before: number | null };
+
+const STATUS_ACTIONS: Record<ActivityStatus, string[]> = {
+  planned: ["mcp.swap_planned", "mcp.transfer_planned"],
+  refused: ["mcp.denied"],
+  requested: ["approval.requested"],
+  approved: ["approval.approved"],
+  denied: ["approval.denied"],
+};
+const ACTION_STATUS = new Map(ACTIVITY_STATUSES.flatMap((status) => STATUS_ACTIONS[status].map((action) => [action, status] as const)));
+
+export async function listActivity(pool: pg.Pool, accountId: string, filter: ActivityFilter) {
   const rows = await pool.query<{ id: string; wallet_id: string | null; agent_id: string | null; name: string | null; actor: string; action: string; detail: unknown; created_at: Date }>(
     `SELECT e.id::text, e.wallet_id, e.agent_id, g.name, e.actor, e.action, e.detail, e.created_at
      FROM audit_events e LEFT JOIN agents g ON g.id = e.agent_id
      WHERE e.account_id = $1 AND ($2::uuid IS NULL OR e.wallet_id = $2::uuid) AND ($3::bigint IS NULL OR e.id < $3::bigint)
+       AND ($4::uuid IS NULL OR e.agent_id = $4::uuid) AND ($5::text[] IS NULL OR e.action = ANY ($5::text[]))
      ORDER BY e.id DESC LIMIT 50`,
-    [accountId, walletId, before],
+    [accountId, filter.walletId, filter.before, filter.agentId, filter.status ? STATUS_ACTIONS[filter.status] : null],
   );
-  return rows.rows.map((row) => ({ id: Number(row.id), walletId: row.wallet_id, agentId: row.agent_id, agentName: row.name, actor: row.actor, action: row.action, detail: row.detail, at: row.created_at.toISOString() }));
+  return rows.rows.map((row) => ({
+    id: Number(row.id),
+    walletId: row.wallet_id,
+    agentId: row.agent_id,
+    agentName: row.name,
+    actor: row.actor,
+    action: row.action,
+    status: ACTION_STATUS.get(row.action) ?? null,
+    detail: row.detail,
+    at: row.created_at.toISOString(),
+  }));
 }

@@ -1,0 +1,13 @@
+{
+  "captured": "2026-11-19",
+  "source": "https://app.across.to/api/deposit/status?originChainId=8453&depositTxHash=0x710d905e22f6eb07d32fca1312719bdd111c6ffe4cf401bfacdbaaba2223f6ec",
+  "txHash": "0x710d905e22f6eb07d32fca1312719bdd111c6ffe4cf401bfacdbaaba2223f6ec",
+  "answer": {
+    "status": "filled",
+    "originChainId": 8453,
+    "destinationChainId": 1,
+    "depositTxHash": "0x710d905e22f6eb07d32fca1312719bdd111c6ffe4cf401bfacdbaaba2223f6ec",
+    "fillTx": "0x6e34dd1bc0ee7b8b616c728e9e889a2c3509bf501e52cc2d7171c3cfca67e1cf",
+    "depositRefundTxHash": null
+  }
+}

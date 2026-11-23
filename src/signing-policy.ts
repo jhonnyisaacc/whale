@@ -1,9 +1,12 @@
 import { PublicKey } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { isAllowanceHolderExec, swapTerms, type SwapTerms } from "./signing-policy/swap-terms.js";
+import { bridgeSpenders, checkBridge } from "./signing-policy/bridge-terms.js";
 import { chainByEvmId, CHAINS, L1_DATA_FEE_CHAIN_IDS, type EvmFeeLimit } from "./chains.js";
 
 export * from "./signing-policy/swap-terms.js";
+export * from "./signing-policy/bridge-terms.js";
+export * from "./signing-policy/bridge-tokens.js";
 export * from "./signing-policy/turnkey.js";
 export * from "./signing-policy/hypercore.js";
 
@@ -41,7 +44,7 @@ export function associatedTokenAddress(owner: string, mint: string, program: str
   )[0].toBase58();
 }
 
-export type EvmPurpose = "swap" | "approve" | "revoke" | "withdraw";
+export type EvmPurpose = "swap" | "approve" | "revoke" | "withdraw" | "bridge";
 export type EvmApproval = { token: string; amount: bigint };
 
 const EXACT_APPROVAL_LIMIT = 2n ** 255n;
@@ -70,6 +73,9 @@ type EvmSigningInput = {
   nativeSell?: boolean;
   recoveryTokens?: readonly string[];
   approval?: EvmApproval;
+  charge?: EvmApproval;
+  bridgeChainIds?: readonly number[];
+  maxBridgeFeeBps?: number;
 };
 
 function evmChain(chainId: number): string {
@@ -134,6 +140,10 @@ function checkEvmSigning(input: EvmSigningInput): void {
     assertApproval(input, to);
     return;
   }
+  if (input.purpose === "bridge") {
+    checkBridge({ ...input, allowlist: input.withdrawAllowlist, chainIds: input.bridgeChainIds ?? [], maxFeeBps: input.maxBridgeFeeBps });
+    return;
+  }
   if (input.nativeSell !== true && input.value !== 0n) throw new Error("token sell must not attach native value");
   const routers = new Set(input.routers.map((item) => item.toLowerCase()));
   if (routers.size === 0) throw new Error("router allowlist is empty");
@@ -178,7 +188,7 @@ function assertApproval(input: EvmSigningInput, to: string): void {
   }
   if (!input.allowHotApproval) throw new Error("approval is not cached");
   if (amount === 0n || amount >= EXACT_APPROVAL_LIMIT || amount !== input.approval.amount) throw new Error("approval amount is not the exact sell amount");
-  if (!input.routers.some((item) => item.toLowerCase() === spender)) throw new Error("approval spender is not an allowlisted router");
+  if (![...input.routers, ...bridgeSpenders(input.chainId)].some((item) => item.toLowerCase() === spender)) throw new Error("approval spender is not an allowlisted router");
 }
 
 export type SolanaInstruction = { program: string; accounts: readonly (string | null)[]; data: Uint8Array };

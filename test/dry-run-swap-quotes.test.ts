@@ -72,7 +72,7 @@ async function runCli(command: WalletCommand): Promise<WalletResult> {
   return run(command, commandDeps(process.env, command));
 }
 
-type DryRunSwap = { kind: string; status?: string; reason?: string; quote?: { provider?: string; buyAmount: string; signable?: boolean } | null };
+type DryRunSwap = { kind: string; status?: string; reason?: string; quote?: { provider?: string; buyAmount: string; signable?: boolean; priceImpactPct?: number | null } | null };
 
 const BASE_ASSET = { chain: { kind: "evm", chainId: 8453 }, chainKey: "base", symbol: "?", decimals: null } as const;
 const MCP_SWAP = { idempotencyKey: "i107-mcp", sell: { ...BASE_ASSET, address: NATIVE }, buy: { ...BASE_ASSET, address: DOLLAR }, sellAmount: "1000000000000000000", slippageBps: 50 };
@@ -83,6 +83,7 @@ test("a CLI dry-run swap on Base returns would_swap with the largest signable ro
   assert.equal(result.quote?.provider, "kyberswap");
   assert.equal(result.quote?.buyAmount, "3050000000");
   assert.equal(result.quote?.signable, true);
+  assert.equal(result.quote?.priceImpactPct, null);
   assert.match(result.reason ?? "", /a live swap quotes again with a price check, so it can take another route or refuse\. nothing was signed/);
 });
 
@@ -182,4 +183,17 @@ test("MCP arguments cannot turn any tool into a live swap, even with WHALE_BROAD
 test("a dry-run swap keeps the live execution reserve out of its slippage", async () => {
   const result = await withStubs({ jupiter: { outAmount: "5000", priceImpactPct: "0.004" } }, () => runCli(cliSwap("solana", SOL_SELL, "solana", SOL_BUY)));
   assert.deepEqual(result, { kind: "swap", status: "skipped", quote: null, reason: "no route inside the slippage cap" });
+});
+
+test("a dry-run swap whose quote has an unknown impact still refuses an unsignable or negative-fee route", async () => {
+  const swapLimits = { enabledChainKeys: new Set(["base"]), maxSlippageBps: 100, executionReserveBps: 0 };
+  const unknown = { planId: "p", kind: "aggregator" as const, hops: ["SELL->BUY"], priceImpactPct: null, feeUsd: 0, buyAmount: "5000" };
+  const command = cliSwap("base", NATIVE, "base", DOLLAR);
+  for (const quote of [{ ...unknown, signable: false }, { ...unknown, feeUsd: -1 }]) {
+    const result = await run(command, { swapLimits, quote: async () => quote });
+    assert.deepEqual(result, { kind: "swap", status: "skipped", quote: null, reason: "no signable route" });
+  }
+  const kept = (await run(command, { swapLimits, quote: async () => ({ ...unknown, signable: true }) })) as DryRunSwap;
+  assert.equal(kept.status, "would_swap", JSON.stringify(kept));
+  assert.equal(kept.quote?.priceImpactPct, null);
 });
