@@ -3,7 +3,8 @@ import { withTimeout } from "./timeout.js";
 import { readVendorText, vendorResponse } from "./vendor-fetch.js";
 
 const decimal = z.string().regex(/^-?\d+(\.\d+)?$/);
-const nonZero = decimal.refine((value) => /[1-9]/.test(value), "position size is zero");
+const isNonZero = (value: string) => /[1-9]/.test(value);
+const nonZero = decimal.refine(isNonZero, "position size is zero");
 const count = z.number().int().nonnegative();
 
 const marginSummary = z.object({ accountValue: decimal, totalNtlPos: decimal, totalRawUsd: decimal, totalMarginUsed: decimal });
@@ -116,7 +117,7 @@ export type PerpOrder = {
   attached: PerpOrder[];
 } & (
   | ({ kind: "limit"; timeInForce: string | null } & Sized)
-  | ({ kind: "trigger"; orderType: (typeof triggerOrderTypes)[number]; isMarket: boolean; triggerPx: string; triggerCondition: string } & (
+  | ({ kind: "trigger"; orderType: (typeof triggerOrderTypes)[number]; isMarket: boolean; triggerPx: string | null; triggerCondition: string } & (
       | { isPositionTpsl: true; size: "entire position" }
       | ({ isPositionTpsl: false } & Sized)
     ))
@@ -140,7 +141,7 @@ function perpOrder(order: FrontendOrder): PerpOrder {
     ...common,
     orderType: order.orderType,
     isMarket: order.orderType.endsWith(" Market"),
-    triggerPx: order.triggerPx,
+    triggerPx: isNonZero(order.triggerPx) ? order.triggerPx : null,
     triggerCondition: order.triggerCondition,
   };
   return order.isPositionTpsl ? { ...trigger, isPositionTpsl: true, size: "entire position" } : { ...trigger, isPositionTpsl: false, ...sized };

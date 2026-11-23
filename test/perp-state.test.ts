@@ -157,6 +157,18 @@ test("a resting trailing stop reads as a market trigger order with its current t
   ]);
 });
 
+test("a trailing stop that waits for activation has no trigger price yet instead of a zero one", async () => {
+  const { fetchImpl } = infoServer({ frontendOpenOrders: fixture("frontend-open-orders-trailing-waiting") });
+  const account = await read(fetchImpl);
+  assert.deepEqual(account.unreadableOrders, []);
+  const trailing = account.openOrders.filter((order) => order.kind === "trigger" && order.orderType === "Trailing Stop Market");
+  assert.deepEqual(
+    trailing.map((order) => (order.kind === "trigger" && !order.isPositionTpsl ? [order.coin, order.triggerPx, order.triggerCondition, order.size, order.isMarket] : [])),
+    [["LINK", null, "Activation above 13, retracement 5%, best waiting", "100.0", true]],
+  );
+  assert.ok(account.openOrders.filter((order) => order.kind === "trigger" && order.orderType === "Take Profit Market").every((order) => order.kind === "trigger" && order.triggerPx !== null));
+});
+
 test("a stop that has fired and still rests reads as a limit order, without the zero trigger price", async () => {
   const { fetchImpl } = infoServer({ frontendOpenOrders: [lifecycleRow("Stop Limit", "filled")] });
   const account = await read(fetchImpl);
