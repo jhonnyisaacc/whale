@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { p2wpkh, RawTx, Transaction } from "@scure/btc-signer";
+import pg from "pg";
 import { privateKeyToAccount } from "viem/accounts";
 import { BroadcastRefused, RAW_TX_OPTIONS, transactionId, type BitcoinIndexer, type Utxo } from "../src/bitcoin/esplora.js";
 import type { BitcoinPolicy } from "../src/bitcoin/send.js";
@@ -194,6 +196,25 @@ test("a broadcast the node refused releases the reservation, and one that may ha
     world.broadcastError = null;
     assert.equal((await send(btc("after", "6000"))).reason, "daily cap 10 USD");
   }));
+
+test("a broadcast that may have gone out is committed in Postgres, so reconciliation cannot release it", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await admin.connect();
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const databaseUrl = `${process.env.TEST_DATABASE_URL}?options=${encodeURIComponent(`-c search_path=${schema}`)}`;
+  try {
+    await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl }, [100_000n], async ({ send, world }) => {
+      world.broadcastError = new Error("esplora broadcast failed 502");
+      await assert.rejects(send(btc("lost", "6000")), /502/);
+      const row = await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["lost"]);
+      assert.equal(row.rows[0]?.status, "committed");
+    });
+  } finally {
+    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  }
+});
 
 test("BTC and other local sends share one daily USD cap", () =>
   withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send }) => {
