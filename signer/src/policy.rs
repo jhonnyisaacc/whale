@@ -7,6 +7,8 @@ use crate::solana::{self, Message};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 
+mod btc;
+
 pub struct Policy {
     evm_chains: HashSet<u64>,
     routers: BTreeMap<u64, HashSet<[u8; 20]>>,
@@ -23,6 +25,7 @@ pub struct Policy {
     token_account_destinations: HashSet<[u8; 32]>,
     max_priority_lamports: u128,
     hypercore: Option<(Network, u64)>,
+    bitcoin: Option<btc::BitcoinPolicy>,
     pub daily_limits: BTreeMap<String, u128>,
 }
 
@@ -131,12 +134,13 @@ impl Policy {
         let evm = file.get("evm").cloned().unwrap_or(Value::Null);
         let sol = file.get("solana").cloned().unwrap_or(Value::Null);
         let hyper = file.get("hypercore").cloned().unwrap_or(Value::Null);
+        let coin = file.get("bitcoin").cloned().unwrap_or(Value::Null);
         let routers = addresses_by_chain(evm.get("routers"), "router")?;
         let settlers = addresses_by_chain(evm.get("settlers"), "settler")?;
         let kyber_executors = addresses_by_chain(evm.get("kyberExecutors"), "kyber executor")?;
         let bridges = bridges_by_chain(evm.get("bridges"))?;
         let mut daily_limits = BTreeMap::new();
-        for section in [&evm, &sol, &hyper] {
+        for section in [&evm, &sol, &hyper, &coin] {
             if let Some(map) = section.get("dailyLimits").and_then(Value::as_object) {
                 for (key, limit) in map {
                     let normalized = if key.contains(":0x") {
@@ -221,6 +225,7 @@ impl Policy {
                     })?,
                 ))
             },
+            bitcoin: btc::BitcoinPolicy::parse(&coin)?,
             daily_limits,
         })
     }

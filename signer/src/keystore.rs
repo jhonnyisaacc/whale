@@ -65,6 +65,7 @@ pub fn seal(keys: &Keys, passphrase: &str) -> Result<Value, String> {
         "cipher": { "name": "chacha20poly1305", "nonce": hex::encode(nonce), "ciphertext": hex::encode(sealed?) },
         "evmAddress": evm_address(&keys.evm),
         "solanaAddress": solana_address(&keys.solana),
+        "bitcoinPublicKey": bitcoin_public_key(&keys.evm),
     }))
 }
 
@@ -112,7 +113,11 @@ pub fn open(file: &Value, passphrase: &str) -> Result<Keys, String> {
 }
 
 pub fn evm_address_bytes(key: &k256::ecdsa::SigningKey) -> [u8; 20] {
-    let point = key.verifying_key().to_sec1_point(false);
+    evm_address_of(key.verifying_key())
+}
+
+pub fn evm_address_of(key: &k256::ecdsa::VerifyingKey) -> [u8; 20] {
+    let point = key.to_sec1_point(false);
     let hash = Keccak256::digest(&point.as_bytes()[1..]);
     let mut out = [0u8; 20];
     out.copy_from_slice(&hash[12..]);
@@ -139,6 +144,10 @@ pub fn checksum(address: &[u8; 20]) -> String {
 
 pub fn evm_address(key: &k256::ecdsa::SigningKey) -> String {
     checksum(&evm_address_bytes(key))
+}
+
+pub fn bitcoin_public_key(key: &k256::ecdsa::SigningKey) -> String {
+    hex::encode(crate::btc::public_key(key).to_bytes())
 }
 
 pub fn solana_address(key: &ed25519_dalek::SigningKey) -> String {

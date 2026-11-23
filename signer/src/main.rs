@@ -2,13 +2,15 @@ use serde_json::Value;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use whale_signer::{evm, keystore, ledger, net, policy, run_job, solana};
+use whale_signer::{btc, evm, keystore, ledger, net, policy, run_job, solana};
 
-const USAGE: &str =
-    "whale-signer <init|address|sign> --keystore FILE [--policy FILE] [--ledger FILE]
+const USAGE: &str = "whale-signer <init|address|upgrade|sign|connect|serve> --keystore FILE [--network NAME] [--policy FILE] [--ledger FILE]
   init     create a new encrypted keystore (passphrase from WHALE_SIGNER_PASSPHRASE)
-  address  print the EVM and Solana addresses
-  sign     read one job as JSON on stdin, check it against the policy, and sign it or refuse";
+  address  print the EVM and Solana addresses and the bitcoin public key; with --network bitcoin|testnet|signet|regtest, also the bitcoin address
+  upgrade  add the bitcoin public key to a keystore made before bitcoin support (passphrase from WHALE_SIGNER_PASSPHRASE)
+  sign     read one job as JSON on stdin, check it against the policy, and sign it or refuse
+  connect  register with a hosted gateway (--gateway URL --wallet ID --code CODE)
+  serve    answer jobs from a gateway or the local MCP queue (--gateway URL --policy FILE --ledger FILE [--once])";
 
 #[cfg(not(unix))]
 const NON_UNIX_KEYSTORE_WARNING: &str = "warning: this platform has no Unix file modes, so the keystore inherits the permissions of its directory";
@@ -76,6 +78,34 @@ fn create_private(path: &PathBuf) -> Result<std::fs::File, String> {
     })
 }
 
+fn replace_private(path: &PathBuf, contents: &str) -> Result<(), String> {
+    let mut name = path
+        .file_name()
+        .ok_or("the keystore path has no file name")?
+        .to_os_string();
+    name.push(".tmp");
+    let temporary = path.with_file_name(name);
+    let mut file = create_private(&temporary)?;
+    let written = file
+        .write_all(contents.as_bytes())
+        .and_then(|()| file.sync_all())
+        .and_then(|()| std::fs::rename(&temporary, path));
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("cannot replace the keystore: {error}"));
+    }
+    #[cfg(unix)]
+    if let Some(directory) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::File::open(directory)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|error| format!("cannot sync {}: {error}", directory.display()))?;
+    }
+    Ok(())
+}
+
 fn run(args: &[String]) -> Result<ExitCode, String> {
     let command = args.get(1).map(String::as_str).ok_or(USAGE)?;
     let keystore_path = flag(args, "--keystore").ok_or(USAGE)?;
@@ -96,9 +126,42 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         "address" => {
             let file = read_json(&keystore_path)?;
+            let mut out = serde_json::json!({ "evmAddress": file["evmAddress"], "solanaAddress": file["solanaAddress"] });
+            let public = file.get("bitcoinPublicKey");
+            if let Some(public) = public {
+                out["bitcoinPublicKey"] = public.clone();
+            }
+            if let Some(name) = text_flag(args, "--network") {
+                let public = public
+                    .and_then(Value::as_str)
+                    .ok_or("the keystore has no bitcoinPublicKey; run upgrade first")?;
+                let evm_address = file["evmAddress"].as_str().unwrap_or_default();
+                out["bitcoinAddress"] = btc::address(
+                    &btc::bound_public_key(public, evm_address)?,
+                    btc::network(&name)?,
+                )
+                .into();
+            }
+            println!("{out}");
+            Ok(ExitCode::SUCCESS)
+        }
+        "upgrade" => {
+            let mut file = read_json(&keystore_path)?;
+            let keys = keystore::open(&file, &passphrase()?)?;
+            let public = keystore::bitcoin_public_key(&keys.evm);
+            match file.get("bitcoinPublicKey") {
+                Some(existing) if existing.as_str() == Some(public.as_str()) => {}
+                Some(_) => {
+                    return Err("bitcoinPublicKey does not match the sealed key; the keystore was not changed".into());
+                }
+                None => {
+                    file["bitcoinPublicKey"] = public.clone().into();
+                    replace_private(&keystore_path, &file.to_string())?;
+                }
+            }
             println!(
                 "{}",
-                serde_json::json!({ "evmAddress": file["evmAddress"], "solanaAddress": file["solanaAddress"] })
+                serde_json::json!({ "evmAddress": file["evmAddress"], "solanaAddress": file["solanaAddress"], "bitcoinPublicKey": public })
             );
             Ok(ExitCode::SUCCESS)
         }
