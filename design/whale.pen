@@ -41,7 +41,8 @@
               "fill": "$on-ink",
               "content": "Install Whale",
               "fontFamily": "$font-display",
-              "fontSize": 16
+              "fontSize": 16,
+              "fontWeight": "normal"
             },
             {
               "type": "icon",
@@ -93,7 +94,8 @@
               "fill": "$ink",
               "content": "View on GitHub",
               "fontFamily": "$font-display",
-              "fontSize": 16
+              "fontSize": 16,
+              "fontWeight": "normal"
             }
           ]
         },
@@ -452,7 +454,8 @@
               "fill": "$muted",
               "content": "Compare",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -465,7 +468,8 @@
               "fill": "$muted",
               "content": "Networks",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -478,7 +482,8 @@
               "fill": "$muted",
               "content": "Install",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -491,7 +496,8 @@
               "fill": "$muted",
               "content": "Hosts",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -504,7 +510,8 @@
               "fill": "$muted",
               "content": "Contribute",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             }
           ]
         },
@@ -26350,7 +26357,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -27541,7 +27549,8 @@
                       "lineHeight": 1.4,
                       "textAlign": "center",
                       "fontFamily": "$font-mono",
-                      "fontSize": 13
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -27695,7 +27704,8 @@
                       "lineHeight": 1.4,
                       "textAlign": "center",
                       "fontFamily": "$font-mono",
-                      "fontSize": 13
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -27875,7 +27885,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 20
+                          "fontSize": 20,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -28757,26 +28768,46 @@
                       }
                     },
                     {
-                      "id": "V5JTJI",
-                      "type": "ref",
-                      "ref": "RoI5s",
-                      "name": "Chip Base",
-                      "descendants": {
-                        "pgTvz": {
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "logos/c-base.webp",
-                            "mode": "cover"
+                      "type": "frame",
+                      "id": "v5HBa",
+                      "name": "BaseWithBadge",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "V5JTJI",
+                          "type": "ref",
+                          "ref": "RoI5s",
+                          "name": "Chip Base",
+                          "descendants": {
+                            "pgTvz": {
+                              "fill": {
+                                "type": "image",
+                                "enabled": true,
+                                "url": "logos/c-base.webp",
+                                "mode": "cover"
+                              }
+                            },
+                            "CvhT2": {
+                              "icon": "circle"
+                            },
+                            "as2Tg": {
+                              "content": "Base"
+                            }
                           }
                         },
-                        "CvhT2": {
-                          "icon": "circle"
-                        },
-                        "as2Tg": {
-                          "content": "Base"
+                        {
+                          "id": "o65qf",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "name": "Badge self-hosted live",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "self-hosted live"
+                            }
+                          }
                         }
-                      }
+                      ]
                     },
                     {
                       "id": "H2SZ4P",
@@ -28801,26 +28832,46 @@
                       }
                     },
                     {
-                      "id": "QvOBN",
-                      "type": "ref",
-                      "ref": "RoI5s",
-                      "name": "Chip Optimism",
-                      "descendants": {
-                        "pgTvz": {
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "logos/c-optimism.webp",
-                            "mode": "cover"
+                      "type": "frame",
+                      "id": "v6Dce",
+                      "name": "OptimismWithBadge",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "QvOBN",
+                          "type": "ref",
+                          "ref": "RoI5s",
+                          "name": "Chip Optimism",
+                          "descendants": {
+                            "pgTvz": {
+                              "fill": {
+                                "type": "image",
+                                "enabled": true,
+                                "url": "logos/c-optimism.webp",
+                                "mode": "cover"
+                              }
+                            },
+                            "CvhT2": {
+                              "icon": "square"
+                            },
+                            "as2Tg": {
+                              "content": "Optimism"
+                            }
                           }
                         },
-                        "CvhT2": {
-                          "icon": "square"
-                        },
-                        "as2Tg": {
-                          "content": "Optimism"
+                        {
+                          "id": "LRkK7",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "name": "Badge self-hosted live",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "self-hosted live"
+                            }
+                          }
                         }
-                      }
+                      ]
                     },
                     {
                       "id": "V8b9gV",
@@ -28898,26 +28949,46 @@
                       }
                     },
                     {
-                      "id": "J1B1JS",
-                      "type": "ref",
-                      "ref": "RoI5s",
-                      "name": "Chip Scroll",
-                      "descendants": {
-                        "pgTvz": {
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "logos/c-scroll.webp",
-                            "mode": "cover"
+                      "type": "frame",
+                      "id": "MqWTa",
+                      "name": "ScrollWithBadge",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "J1B1JS",
+                          "type": "ref",
+                          "ref": "RoI5s",
+                          "name": "Chip Scroll",
+                          "descendants": {
+                            "pgTvz": {
+                              "fill": {
+                                "type": "image",
+                                "enabled": true,
+                                "url": "logos/c-scroll.webp",
+                                "mode": "cover"
+                              }
+                            },
+                            "CvhT2": {
+                              "icon": "star-four"
+                            },
+                            "as2Tg": {
+                              "content": "Scroll"
+                            }
                           }
                         },
-                        "CvhT2": {
-                          "icon": "star-four"
-                        },
-                        "as2Tg": {
-                          "content": "Scroll"
+                        {
+                          "id": "U3CFfN",
+                          "type": "ref",
+                          "ref": "UM68F",
+                          "name": "Badge self-hosted live",
+                          "descendants": {
+                            "k7RLXp": {
+                              "content": "self-hosted live"
+                            }
+                          }
                         }
-                      }
+                      ]
                     },
                     {
                       "id": "JTaP9",
@@ -29333,7 +29404,8 @@
                   "fill": "$ink",
                   "content": "Claude Code",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29378,7 +29450,8 @@
                   "fill": "$muted",
                   "content": "Codex",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29423,7 +29496,8 @@
                   "fill": "$muted",
                   "content": "Grok",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29468,7 +29542,8 @@
                   "fill": "$muted",
                   "content": "Muse",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29513,7 +29588,8 @@
                   "fill": "$muted",
                   "content": "Hermes",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -29555,7 +29631,8 @@
                   "fill": "$muted",
                   "content": "Any MCP client",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -29645,7 +29722,8 @@
                               "fill": "$ink",
                               "content": "Prefer the terminal?",
                               "fontFamily": "$font-display",
-                              "fontSize": 18
+                              "fontSize": 18,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -29738,7 +29816,8 @@
                               "fill": "$ink",
                               "content": "Hosted gateway",
                               "fontFamily": "$font-display",
-                              "fontSize": 18
+                              "fontSize": 18,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -31203,7 +31282,8 @@
                   "fill": "$muted",
                   "content": "GitHub",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -56887,7 +56967,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -58406,7 +58487,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 20
+                          "fontSize": 20,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -59322,6 +59404,27 @@
                   }
                 },
                 {
+                  "id": "mn7Au",
+                  "type": "ref",
+                  "ref": "UM68F",
+                  "name": "Badge self-hosted live",
+                  "descendants": {
+                    "k7RLXp": {
+                      "content": "self-hosted live",
+                      "fontSize": 11
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cI0Z5",
+              "name": "ChipRow",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
                   "id": "oclyN",
                   "type": "ref",
                   "ref": "RoI5s",
@@ -59360,12 +59463,52 @@
                       "fontSize": 15
                     }
                   }
+                },
+                {
+                  "id": "a1VBqX",
+                  "type": "ref",
+                  "ref": "RoI5s",
+                  "name": "Chip Polygon",
+                  "height": 48,
+                  "padding": [
+                    10,
+                    16,
+                    10,
+                    10
+                  ],
+                  "descendants": {
+                    "me4NY": {
+                      "width": 26,
+                      "height": 26
+                    },
+                    "pgTvz": {
+                      "fill": {
+                        "type": "image",
+                        "enabled": true,
+                        "url": "logos/c-polygon.webp",
+                        "mode": "cover"
+                      },
+                      "x": 0,
+                      "y": 0,
+                      "width": 26,
+                      "height": 26
+                    },
+                    "CvhT2": {
+                      "icon": "diamond",
+                      "width": 24,
+                      "height": 24
+                    },
+                    "as2Tg": {
+                      "content": "Polygon",
+                      "fontSize": 15
+                    }
+                  }
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "cI0Z5",
+              "id": "DBPSw",
               "name": "ChipRow",
               "gap": 8,
               "alignItems": "center",
@@ -59411,42 +59554,14 @@
                   }
                 },
                 {
-                  "id": "a1VBqX",
+                  "id": "oeH9t",
                   "type": "ref",
-                  "ref": "RoI5s",
-                  "name": "Chip Polygon",
-                  "height": 48,
-                  "padding": [
-                    10,
-                    16,
-                    10,
-                    10
-                  ],
+                  "ref": "UM68F",
+                  "name": "Badge self-hosted live",
                   "descendants": {
-                    "me4NY": {
-                      "width": 26,
-                      "height": 26
-                    },
-                    "pgTvz": {
-                      "fill": {
-                        "type": "image",
-                        "enabled": true,
-                        "url": "logos/c-polygon.webp",
-                        "mode": "cover"
-                      },
-                      "x": 0,
-                      "y": 0,
-                      "width": 26,
-                      "height": 26
-                    },
-                    "CvhT2": {
-                      "icon": "diamond",
-                      "width": 24,
-                      "height": 24
-                    },
-                    "as2Tg": {
-                      "content": "Polygon",
-                      "fontSize": 15
+                    "k7RLXp": {
+                      "content": "self-hosted live",
+                      "fontSize": 11
                     }
                   }
                 }
@@ -59646,6 +59761,18 @@
                     "as2Tg": {
                       "content": "Scroll",
                       "fontSize": 15
+                    }
+                  }
+                },
+                {
+                  "id": "waDZl",
+                  "type": "ref",
+                  "ref": "UM68F",
+                  "name": "Badge self-hosted live",
+                  "descendants": {
+                    "k7RLXp": {
+                      "content": "self-hosted live",
+                      "fontSize": 11
                     }
                   }
                 }
@@ -60121,7 +60248,8 @@
                       "fill": "$ink",
                       "content": "Claude Code",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60163,7 +60291,8 @@
                       "fill": "$muted",
                       "content": "Codex",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60205,7 +60334,8 @@
                       "fill": "$muted",
                       "content": "Grok",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60247,7 +60377,8 @@
                       "fill": "$muted",
                       "content": "Muse",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60289,7 +60420,8 @@
                       "fill": "$muted",
                       "content": "Hermes",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -60328,7 +60460,8 @@
                       "fill": "$muted",
                       "content": "Any MCP client",
                       "fontFamily": "$font-display",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -61674,7 +61807,8 @@
                   "fill": "$muted",
                   "content": "GitHub",
                   "fontFamily": "$font-display",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -61793,7 +61927,8 @@
               "fill": "$muted",
               "content": "Compare",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61806,7 +61941,8 @@
               "fill": "$muted",
               "content": "Networks",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61819,7 +61955,8 @@
               "fill": "$muted",
               "content": "Install",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61832,7 +61969,8 @@
               "fill": "$muted",
               "content": "Hosts",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -61845,7 +61983,8 @@
               "fill": "$muted",
               "content": "Contribute",
               "fontFamily": "$font-display",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             }
           ]
         },
@@ -61962,7 +62101,8 @@
                       "fill": "$ink",
                       "content": "Install",
                       "fontFamily": "$font-display",
-                      "fontSize": 15
+                      "fontSize": 15,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -63056,7 +63196,8 @@
                           "fill": "$ink",
                           "content": "Whale",
                           "fontFamily": "$font-display",
-                          "fontSize": 16
+                          "fontSize": 16,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -64247,7 +64388,8 @@
                           "lineHeight": 1.4,
                           "textAlign": "center",
                           "fontFamily": "$font-mono",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -64401,7 +64543,8 @@
                           "lineHeight": 1.4,
                           "textAlign": "center",
                           "fontFamily": "$font-mono",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -64581,7 +64724,8 @@
                               "fill": "$ink",
                               "content": "Whale",
                               "fontFamily": "$font-display",
-                              "fontSize": 20
+                              "fontSize": 20,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -88560,7 +88704,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -88787,7 +88932,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -89384,7 +89530,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -89699,7 +89846,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -89753,7 +89901,8 @@
                           "fill": "$ink",
                           "content": "W",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89774,7 +89923,8 @@
                           "fill": "$ink",
                           "content": "D",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89795,7 +89945,8 @@
                           "fill": "$ink",
                           "content": "J",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89816,7 +89967,8 @@
                           "fill": "$ink",
                           "content": "B",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89846,7 +89998,8 @@
                           "fill": "$ink",
                           "content": "M",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89867,7 +90020,8 @@
                           "fill": "$ink",
                           "content": "J",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89888,7 +90042,8 @@
                           "fill": "$ink",
                           "content": "H",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -89909,7 +90064,8 @@
                           "fill": "$ink",
                           "content": "T",
                           "fontFamily": "$font-mono",
-                          "fontSize": 24
+                          "fontSize": 24,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -90748,7 +90904,8 @@
                   "fill": "$ink",
                   "content": "Copy this key now. Whale stores only its hash.",
                   "fontFamily": "$font-display",
-                  "fontSize": 16
+                  "fontSize": 16,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -90924,7 +91081,8 @@
                       "fill": "$ink",
                       "content": "Whale",
                       "fontFamily": "$font-display",
-                      "fontSize": 18
+                      "fontSize": 18,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -92152,7 +92310,8 @@
                           "fill": "$ink",
                           "content": "This computer only",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92273,7 +92432,8 @@
                           "fill": "$ink",
                           "content": "Claude Code · Codex · Cursor",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92383,7 +92543,8 @@
                           "fill": "$ink",
                           "content": "Grok",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92493,7 +92654,8 @@
                           "fill": "$ink",
                           "content": "VPS · SSH · Hermes",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -92614,7 +92776,8 @@
                           "fill": "$ink",
                           "content": "Your own bot",
                           "fontFamily": "$font-display",
-                          "fontSize": 17
+                          "fontSize": 17,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -93172,7 +93335,8 @@
                       "fill": "$ink",
                       "content": "W",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93193,7 +93357,8 @@
                       "fill": "$ink",
                       "content": "D",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93214,7 +93379,8 @@
                       "fill": "$ink",
                       "content": "J",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93235,7 +93401,8 @@
                       "fill": "$ink",
                       "content": "B",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93265,7 +93432,8 @@
                       "fill": "$ink",
                       "content": "M",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93286,7 +93454,8 @@
                       "fill": "$ink",
                       "content": "J",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93307,7 +93476,8 @@
                       "fill": "$ink",
                       "content": "H",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -93328,7 +93498,8 @@
                       "fill": "$ink",
                       "content": "T",
                       "fontFamily": "$font-mono",
-                      "fontSize": 20
+                      "fontSize": 20,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
