@@ -184,3 +184,16 @@ test("a dry-run swap keeps the live execution reserve out of its slippage", asyn
   const result = await withStubs({ jupiter: { outAmount: "5000", priceImpactPct: "0.004" } }, () => runCli(cliSwap("solana", SOL_SELL, "solana", SOL_BUY)));
   assert.deepEqual(result, { kind: "swap", status: "skipped", quote: null, reason: "no route inside the slippage cap" });
 });
+
+test("a dry-run swap whose quote has an unknown impact still refuses an unsignable or negative-fee route", async () => {
+  const swapLimits = { enabledChainKeys: new Set(["base"]), maxSlippageBps: 100, executionReserveBps: 0 };
+  const unknown = { planId: "p", kind: "aggregator" as const, hops: ["SELL->BUY"], priceImpactPct: null, feeUsd: 0, buyAmount: "5000" };
+  const command = cliSwap("base", NATIVE, "base", DOLLAR);
+  for (const quote of [{ ...unknown, signable: false }, { ...unknown, feeUsd: -1 }]) {
+    const result = await run(command, { swapLimits, quote: async () => quote });
+    assert.deepEqual(result, { kind: "swap", status: "skipped", quote: null, reason: "no signable route" });
+  }
+  const kept = (await run(command, { swapLimits, quote: async () => ({ ...unknown, signable: true }) })) as DryRunSwap;
+  assert.equal(kept.status, "would_swap", JSON.stringify(kept));
+  assert.equal(kept.quote?.priceImpactPct, null);
+});

@@ -106,9 +106,13 @@ export function hasKnownImpact(quote: RouteQuote): quote is PricedRoute {
   return quote.priceImpactPct !== null;
 }
 
+export function signableRoute(quote: RouteQuote): boolean {
+  return quote.feeUsd >= 0 && quote.signable !== false;
+}
+
 export function pickRoute(quotes: readonly PricedRoute[], slippageCapBps: number, executionReserveBps = 0): PricedRoute | { kind: "none"; reason: string } {
   const capPct = Math.max(0, slippageCapBps - executionReserveBps) / 100;
-  const ok = quotes.filter((quote) => quote.priceImpactPct <= capPct && quote.feeUsd >= 0 && quote.signable !== false);
+  const ok = quotes.filter((quote) => quote.priceImpactPct <= capPct && signableRoute(quote));
   if (ok.length === 0) return { kind: "none", reason: "no route inside the slippage cap" };
   ok.sort((a, b) => {
     if (a.netOutputUsd !== undefined && b.netOutputUsd !== undefined && a.netOutputUsd !== b.netOutputUsd) return b.netOutputUsd - a.netOutputUsd;

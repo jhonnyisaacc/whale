@@ -1,6 +1,6 @@
 import type { ChainRef, ExecutionReport, Holding, RouteQuote, SwapIntent } from "./domain.js";
 import { addressKey, chainByKey } from "./chains.js";
-import { hasKnownImpact, pickRoute } from "./routing.js";
+import { hasKnownImpact, pickRoute, signableRoute } from "./routing.js";
 import { bridgeRoute, planRebalance, type BridgePolicy, type BridgeQuote, type BridgeRequest, type BridgeRoute, type RebalancePlan } from "./rebalance.js";
 import { intentSchema } from "./schemas.js";
 
@@ -76,7 +76,10 @@ async function dryRunSwap(command: Extract<WalletCommand, { kind: "swap"; mode: 
     slippageBps: command.slippageBps,
   });
   if (!quote) return skip("no quote");
-  const route = hasKnownImpact(quote) ? pickRoute([quote], command.slippageBps, executionReserveBps) : quote;
+  if (!hasKnownImpact(quote)) {
+    return signableRoute(quote) ? { kind: "swap", status: "would_swap", quote, reason: DRY_RUN_SWAP_REASON } : skip("no signable route");
+  }
+  const route = pickRoute([quote], command.slippageBps, executionReserveBps);
   if (route.kind === "none") return skip(route.reason);
   return { kind: "swap", status: "would_swap", quote: route, reason: DRY_RUN_SWAP_REASON };
 }
