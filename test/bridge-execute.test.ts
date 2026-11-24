@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import pg from "pg";
 import { decodeFunctionData, encodeFunctionData, erc20Abi, keccak256, pad, parseTransaction, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { BridgeCall } from "../src/aggregators/bridge.js";
 import { RELAY_QUOTE_ONLY, executeBridge, type BridgeDeps, type BridgeReads, type BridgeSpend } from "../src/bridge/execute.js";
+import { bridgeSpend } from "../src/bridge/spend.js";
 import type { BridgeStatus } from "../src/bridge/status.js";
 import { evmContext, type EvmReceipt, type EvmRpc, type SendIo } from "../src/broadcast/shared.js";
 import { loadConfig } from "../src/config.js";
@@ -12,6 +15,7 @@ import { withPolicy, type TransactionSigner } from "../src/managed-signer.js";
 import { createNonceManager } from "../src/nonce.js";
 import type { BridgeProvider, BridgeRoute } from "../src/rebalance.js";
 import { ACROSS_SPOKE_POOL_ABI, LIFI_ACROSS_ABI, bridgeTerms } from "../src/signing-policy.js";
+import { closeSpendPools, reconcileReserved, spendJournal } from "../src/spend.js";
 
 type Fixture = { route: { amount: string; from: string; recipient: string; sell: string; buy: string }; tx: { to: Hex; data: Hex; value: string } };
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../test/fixtures/bridge/${name}.json`, import.meta.url), "utf8")) as Fixture;
@@ -52,7 +56,7 @@ function signer(raw: Hex[], policy = config): TransactionSigner {
   return withPolicy(inner, policy);
 }
 
-function chain(checkChain: EvmRpc["checkChain"] = async () => undefined) {
+function chain(checkChain: EvmRpc["checkChain"] = async () => undefined, mine = true) {
   const sent: Hex[] = [];
   const receipts = new Map<string, EvmReceipt>();
   const rpc: EvmRpc = {
@@ -63,7 +67,7 @@ function chain(checkChain: EvmRpc["checkChain"] = async () => undefined) {
     simulate: async () => undefined,
     sendRaw: async (signed) => {
       sent.push(signed);
-      receipts.set(keccak256(signed), { status: "success", gasUsed: 200_000n, effectiveGasPrice: 1n, l1Fee: 0n });
+      if (mine) receipts.set(keccak256(signed), { status: "success", gasUsed: 200_000n, effectiveGasPrice: 1n, l1Fee: 0n });
     },
     receipt: async (hash) => receipts.get(hash) ?? null,
     seen: async (hash) => receipts.has(hash),
@@ -89,11 +93,11 @@ function chain(checkChain: EvmRpc["checkChain"] = async () => undefined) {
 
 type Harness = { deps: BridgeDeps; raw: Hex[]; sent: Hex[]; spend: string[]; simulated: number[] };
 
-function harness(options: { config?: typeof config; call?: BridgeCall | null; allowance?: bigint; screen?: "allow" | "deny"; reserve?: "reserved" | "exists" | "cap"; simulate?: BridgeReads["simulate"]; broadcast?: boolean; statuses?: BridgeStatus["state"][]; checkChain?: EvmRpc["checkChain"] } = {}): Harness {
+function harness(options: { config?: typeof config; call?: BridgeCall | null; allowance?: bigint; screen?: "allow" | "deny"; reserve?: "reserved" | "exists" | "cap"; simulate?: BridgeReads["simulate"]; broadcast?: boolean; statuses?: BridgeStatus["state"][]; checkChain?: EvmRpc["checkChain"]; mine?: boolean } = {}): Harness {
   const raw: Hex[] = [];
   const spend: string[] = [];
   const simulated: number[] = [];
-  const { sent, io } = chain(options.checkChain);
+  const { sent, io } = chain(options.checkChain, options.mine);
   const evm = evmContext({ config: options.config ?? config, signer: signer(raw, options.config ?? config), io, onTx: async () => undefined, fetchImpl: fetch, secrets: [] }, "base", ["http://base.invalid"]);
   const ledger: BridgeSpend = {
     reserve: async (key, usd) => (spend.push(`reserve ${key} ${usd}`), options.reserve ?? "reserved"),
@@ -257,6 +261,41 @@ test("a bridge that landed keeps its reservation and reports sent when the spend
   assert.equal(run.sent.length, 2);
   assert.match(result.reason, /db connection reset/);
   assert.deepEqual(run.spend, ["reserve bridge:k1 2"]);
+});
+
+test("reconcile keeps a sent bridge reserved until its source tx lands, after a confirm timeout or a failed commit", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const databaseUrl = process.env.TEST_DATABASE_URL as string;
+  const day = `${2100 + Math.floor(Math.random() * 800)}-03-01`;
+  const client = new pg.Client({ connectionString: databaseUrl });
+  await client.connect();
+  const keys: string[] = [];
+  try {
+    for (const failure of ["confirm timeout", "commit failed"] as const) {
+      const run = harness({ broadcast: true, allowance: 2_000_000n, mine: failure === "commit failed" });
+      const spend = bridgeSpend(spendJournal(databaseUrl, 100, () => day), 10);
+      run.deps.spend = failure === "commit failed" ? { ...spend, commit: async () => Promise.reject(new Error("db connection reset")) } : spend;
+      const id = randomUUID();
+      const key = `bridge:${id}`;
+      keys.push(key);
+      const result = await executeBridge(run.deps, { idempotencyKey: id, route, provider: "lifi" });
+      assert.equal(result.status, failure === "commit failed" ? "sent" : "skipped", JSON.stringify(result));
+      const hashes = run.sent.map((signed) => keccak256(signed));
+      assert.ok(hashes.length > 0, failure);
+      await client.query("UPDATE spend_journal SET reserved_at = now() - interval '1 hour' WHERE idempotency_key = $1", [key]);
+      const settle = async (outcome: "pending" | "landed") => {
+        await reconcileReserved(databaseUrl, 10, async (aged) => (hashes.includes(aged.txHash as Hex) ? outcome : null), () => undefined);
+        return (await client.query<{ status: string }>("SELECT status FROM spend_journal WHERE idempotency_key = $1", [key])).rows[0]?.status;
+      };
+      assert.equal(await settle("pending"), "reserved", `${failure}: a bridge whose source tx is still pending keeps its reservation`);
+      assert.equal(await spend.reserve(`bridge:${randomUUID()}`, 9), "cap", `${failure}: the pending bridge still counts against the bridge cap`);
+      assert.equal(await settle("landed"), "committed", `${failure}: a landed source tx commits the bridge`);
+    }
+  } finally {
+    await client.query("DELETE FROM spend_journal WHERE spent_on = $1::date", [day]);
+    await client.query("DELETE FROM signed_tx WHERE idempotency_key = ANY($1)", [keys]);
+    await client.end();
+    await closeSpendPools();
+  }
 });
 
 test("a bridge that needs an approval waits for the root-quorum approval while ALLOW_HOT_APPROVAL is off", async () => {
