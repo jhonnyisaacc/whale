@@ -81,6 +81,7 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
   if (reserved === "cap") return skipped(`daily cap ${deps.caps.dailyUsdCap} USD`, plan);
   if (reserved === "exists") return skipped("duplicate spend", plan);
   const release = () => deps.spend.release(command.idempotencyKey).catch(() => undefined);
+  const keep = () => deps.spend.commit(command.idempotencyKey).catch(() => undefined);
   const jobs: SignerJobRecord[] = [];
   const signed = await signBitcoin(deps, unsigned, previous, spent, jobs).catch(async (error: unknown) => {
     await release();
@@ -88,19 +89,14 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
   });
   const txid = transactionId(signed);
   if (deps.hold) {
-    await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
+    await keep();
     return { kind: "send_bitcoin", status: "signed", reason: HELD, jobs, plan, txid, signedTransaction: hex(signed) };
   }
-  const keep = () => deps.spend.commit(command.idempotencyKey).catch(() => undefined);
   await indexer.simulate(signed).catch(async (error: unknown) => {
     await (error instanceof SimulationRefused ? release() : keep());
     throw error;
   });
-  await indexer.broadcast(signed).catch(async (error: unknown) => {
-    await keep();
-    throw error;
-  });
-  await keep();
+  await indexer.broadcast(signed).finally(keep);
   return { kind: "send_bitcoin", status: "sent", reason: `broadcast ${txid}`, jobs, plan, txid };
 }
 

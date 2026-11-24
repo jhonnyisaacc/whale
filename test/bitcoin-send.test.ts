@@ -214,25 +214,6 @@ test("a live send is simulated before broadcast, only a matching mempool refusal
     }),
   ));
 
-test("a broadcast that may have gone out is committed in Postgres, so reconciliation cannot release it", { skip: !process.env.TEST_DATABASE_URL }, async () => {
-  const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-  const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
-  await admin.connect();
-  await admin.query(`CREATE SCHEMA ${schema}`);
-  const databaseUrl = `${process.env.TEST_DATABASE_URL}?options=${encodeURIComponent(`-c search_path=${schema}`)}`;
-  try {
-    await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl }, [100_000n], async ({ send, world }) => {
-      world.broadcastError = new Error("esplora broadcast failed 502");
-      await assert.rejects(send(btc("lost", "6000")), /502/);
-      const row = await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["lost"]);
-      assert.equal(row.rows[0]?.status, "committed");
-    });
-  } finally {
-    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
-    await admin.end();
-  }
-});
-
 type Answer = { status?: number; body: string };
 
 function esploraAnswers(simulation: (txid: string) => Answer, broadcast: (txid: string) => Answer): Pick<BitcoinIndexer, "simulate" | "broadcast"> {
@@ -247,19 +228,20 @@ function esploraAnswers(simulation: (txid: string) => Answer, broadcast: (txid: 
 }
 
 const OTHER_TXID = "00".repeat(32);
+const echo = (txid: string): Answer => ({ body: txid });
 const allowed = (txid: string): Answer => ({ body: JSON.stringify([{ txid, allowed: true }]) });
 const refusedFor = (txid: string): Answer => ({ body: JSON.stringify([{ txid, allowed: false, "reject-reason": "missing-inputs" }]) });
 const outcomes: [string, (txid: string) => Answer, (txid: string) => Answer, string][] = [
-  ["sim-refused", refusedFor, (txid) => ({ body: txid }), "released"],
-  ["sim-refused-other-txid", () => refusedFor(OTHER_TXID), (txid) => ({ body: txid }), "committed"],
-  ["sim-allowed-other-txid", () => allowed(OTHER_TXID), (txid) => ({ body: txid }), "committed"],
-  ["sim-500", () => ({ status: 500, body: "boom" }), (txid) => ({ body: txid }), "committed"],
-  ["sim-404", () => ({ status: 404, body: "Not Found" }), (txid) => ({ body: txid }), "committed"],
-  ["sim-non-json", () => ({ body: "<html>ok</html>" }), (txid) => ({ body: txid }), "committed"],
+  ["sim-refused", refusedFor, echo, "released"],
+  ["sim-refused-other-txid", () => refusedFor(OTHER_TXID), echo, "committed"],
+  ["sim-allowed-other-txid", () => allowed(OTHER_TXID), echo, "committed"],
+  ["sim-500", () => ({ status: 500, body: "boom" }), echo, "committed"],
+  ["sim-404", () => ({ status: 404, body: "Not Found" }), echo, "committed"],
+  ["sim-non-json", () => ({ body: "<html>ok</html>" }), echo, "committed"],
   ["broadcast-400", allowed, () => ({ status: 400, body: "sendrawtransaction RPC error" }), "committed"],
   ["broadcast-500", allowed, () => ({ status: 500, body: "down" }), "committed"],
   ["broadcast-other-txid", allowed, () => ({ body: "11".repeat(32) }), "committed"],
-  ["broadcast-ok", allowed, (txid) => ({ body: txid }), "committed"],
+  ["broadcast-ok", allowed, echo, "committed"],
 ];
 
 test("once the indexer holds the signed transaction, only a mempool refusal of that txid releases the reservation in Postgres", { skip: !process.env.TEST_DATABASE_URL }, async () => {
