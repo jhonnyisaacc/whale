@@ -28687,7 +28687,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 520,
-              "content": "Same verbs everywhere: quote, swap and transfer, Hyperliquid perps, and native BTC send (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking. Tagged networks have limits today.",
+              "content": "Quote, swap and transfer on every network, Hyperliquid perps on HyperCore and native BTC send on Bitcoin (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking. Tagged networks have limits today.",
               "lineHeight": 1.5,
               "fontFamily": "$font-display",
               "fontSize": 17,
