@@ -24,6 +24,8 @@ Set these Turnkey variables on the executor.
 
 - `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PUBLIC_KEY`, `TURNKEY_API_PRIVATE_KEY`
 - `TURNKEY_EVM_ADDRESS`, `TURNKEY_SOLANA_ADDRESS`, `TURNKEY_HYPERLIQUID_ADDRESS`
+- `HYPERLIQUID_ACCOUNT_ADDRESS`, the Hyperliquid master account that `TURNKEY_HYPERLIQUID_ADDRESS` is an approved agent of. Without it, every perp signal is skipped as `hyperliquid position unreadable`, a sell included, and live mode with `TURNKEY_HYPERLIQUID_ADDRESS` set refuses to boot
+- `HYPERCORE_SELL_LIMITS`, the per-asset sell limits from [Hyperliquid perps](../README.md#hyperliquid-perps). A live sell with no limit for its asset is refused
 - `ROUTER_ALLOWLIST_JSON` as a map of chain id to router addresses (Monad 143 defaults to the 0x AllowanceHolder and the KyberSwap router from `DEFAULT_ROUTERS` when the map does not name it), and `APPROVAL_CACHE_JSON` after the router approval in the [runbook](runbook.md)
 
 Live mode refuses `KEYSTORE_PATH` and `KEYSTORE_PASSPHRASE`.

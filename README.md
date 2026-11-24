@@ -16,6 +16,7 @@ The public shape is `WalletCommand` in `src/commands.ts`. An `Asset` names a cha
 | `swap` | `would_swap` with the best signable route a dry run quotes, or `skipped` with the reason. Nothing is signed or broadcast. With whale-signer, `mode: "live"` and `notionalUsd` run the live path below. |
 | `bridge` | Routes fetched from LI.FI, Across, and Relay, ranked by fee, and a plan. `broadcast` stays false. |
 | `balance` | Holdings for one chain and address. |
+| `perp` | An immediate-or-cancel Hyperliquid perp order sized from `notionalUsd` at the mark price. It needs whale-signer. A dry run returns `would_send` with the planned actions and signs nothing. `mode: "live"` runs the path in [Hyperliquid perps](#hyperliquid-perps). |
 | `perp_positions` | The Hyperliquid perp account: margin, withdrawable, each position with entry, mark, liquidation price, PnL, leverage and funding, and the open orders. Each order is a limit or a trigger order (stop, take profit, or trailing stop) with its trigger price and condition. A trailing stop that waits for activation has no trigger price yet. A stop that has fired and still rests is a limit. A position take-profit or stop has size `entire position`. An order of a shape Whale does not know goes in `unreadableOrders` with its id and the reason, and the positions and margin still read. It reads `HYPERLIQUID_ACCOUNT_ADDRESS`, or whale-signer's EVM address, and moves no money. |
 | `transfer` | `would_send` in dry-run. With whale-signer, `mode: "live"` runs the live path below. Without it, live is `skipped`. |
 
@@ -61,6 +62,25 @@ Set `WHALE_SIGNER_KEYSTORE` to a whale-signer keystore and the stdio MCP server 
 4. With `WHALE_BROADCAST` unset, the result is `signed` with the job id and hash. The signed bytes are not returned and nothing is sent.
 
 The daily USD total for local sends lives in the MCP process and starts at zero when it restarts. whale-signer's own ledger is the limit that survives a restart.
+
+## Hyperliquid perps
+
+The `perp` tool trades a perp on the account that `HYPERLIQUID_ACCOUNT_ADDRESS` names, or on whale-signer's EVM address when it is unset. Before each order Whale reads that account's position in the coin:
+- With no position, Whale sends an isolated `updateLeverage` at 1x before the order, so neither a long nor a short opens at Hyperliquid's cross default.
+- With a position open, the order runs at the position's own margin mode and leverage, cross included. A buy grows a long or reduces a short. A sell reduces a long or grows a short.
+- When the position cannot be read, the order is skipped with `hyperliquid position unreadable`.
+
+The `perp` tool takes no leverage. A signal sent to the executor can set `leverage` on a buy, from 1 to `MAX_PERP_LEVERAGE` (default 3). It applies when the account has no position, or on an open isolated long. On an open cross long it is refused, and on an open short it is ignored. A signal that sets `leverage` on a sell is refused. [docs/threat-model.md](docs/threat-model.md) has the full rules.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `HYPERLIQUID_ACCOUNT_ADDRESS` | unset | The account Whale reads and trades. Locally, set it only when the keystore key is an approved agent of another master account. Without it, Whale reads the agent's own empty account, sees no position, and sends `updateLeverage` before every order, a close included. On the hosted executor it is required. Without it, every perp order is skipped as `hyperliquid position unreadable`, a sell included |
+| `HYPERCORE_SELL_LIMITS` | empty | A JSON object of sell limits, keyed `hypercore:perp:<asset>:sold` (or `hypercore:spot:<asset>:sold` for a spot sell) with a whole number of 1e-8 units of the sold asset, such as `{"hypercore:perp:1:sold":"1000000"}` for 0.01 ETH. A live sell, a close included, is refused with `no limit is set for hypercore:perp:<asset>:sold` when its key has no limit. This holds with `WHALE_BROADCAST` off. whale-signer keeps its own limit for the same key in its policy file |
+| `MAX_PERP_LEVERAGE` | `3` | The highest isolated leverage the app's signing policy signs, from 1 to 50 |
+
+A dry run plans the order and checks none of the signing limits, so a dry-run sell returns `would_send` with `HYPERCORE_SELL_LIMITS` unset.
+
+`SUPPORT_TIERS` can mark `hypercore` as `dry_run`. A dry run then still plans HyperCore for a HyperCore token, while live refuses HyperCore and trades the token's Solana alternate when it has one, or skips the trade when it has none. With that tier, a dry run does not predict the live venue. `zksync` defaults to `dry_run` and behaves the same way.
 
 ## Native Bitcoin
 
