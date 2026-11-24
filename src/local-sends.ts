@@ -15,6 +15,7 @@ import { coingeckoLoader, createPriceCache, pricedHoldings, type PriceOf } from 
 import { checkedDecimals } from "./token-decimals.js";
 import { withTimeout } from "./timeout.js";
 import { readVendorText, vendorResponse } from "./vendor-fetch.js";
+import { liveTierBlocked, sendBlock } from "./support.js";
 import { WSOL_MINT } from "./signing-policy.js";
 import type { SignerQueue } from "./signer-queue.js";
 import { SignerRefusal, whaleSigner, type SignerJobRecord, type WhaleSignerSetup } from "./whale-signer.js";
@@ -87,7 +88,10 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     secrets,
   });
   const hold = !config.live;
-  const sendBitcoin = configuredBitcoinSender(config, setup, queue, executor.spend, overrides);
+  const tierFor = executor.deps.supportTierFor;
+  const bitcoinSend = configuredBitcoinSender(config, setup, queue, executor.spend, overrides);
+  const sendBitcoin = async (command: SendBitcoin): Promise<BitcoinSendResult> =>
+    liveTierBlocked(command.mode, tierFor, "bitcoin") ? { kind: "send_bitcoin", status: "skipped", reason: "chain is not enabled for live sends", jobs: [] } : bitcoinSend(command);
   const perpAccount = config.hyperliquidAccount?.trim() || setup.evmAddress;
 
   async function swap(command: Extract<LocalSend, { kind: "swap" }>): Promise<LocalSendResult> {
@@ -113,7 +117,9 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     if (!/^[1-9]\d{0,77}$/.test(command.amount)) return skip("amount is a positive integer in the asset's smallest unit");
     const { asset } = command;
     const spec = chainByKey(asset.chainKey);
-    if (!spec || !config.enabledChainKeys.has(spec.key)) return skip(`chain ${asset.chainKey} is disabled`);
+    if (!spec) return skip(`chain ${asset.chainKey} is disabled`);
+    const blocked = sendBlock("live", tierFor, spec.key, config.enabledChainKeys, false);
+    if (blocked) return skip(blocked);
     if (!config.withdrawAllowlist.some((item) => item.toLowerCase() === command.to.toLowerCase())) return skip("destination is not in OWNER_WITHDRAW_ADDRESSES");
     const native = isNativeAsset(asset);
     const read = async () => (await executor.deps.readTokenDecimals?.({ chainKey: spec.key, chain: spec.chain, address: asset.address })) ?? null;
@@ -128,7 +134,11 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     if (reserved === "exists") return skip("duplicate spend");
     const jobs: SignerJobRecord[] = [];
     const txs: TxRecord[] = [];
-    const input = { config, signer: signerFor(jobs), chainKey: spec.key, to: command.to, amount: BigInt(command.amount), secrets, hold, onTx: async (tx: TxRecord) => void txs.push(tx) };
+    const onTx = async (tx: TxRecord) => {
+      txs.push(tx);
+      await executor.deps.recordTx?.(command.idempotencyKey, tx);
+    };
+    const input = { config, signer: signerFor(jobs), chainKey: spec.key, to: command.to, amount: BigInt(command.amount), secrets, hold, onTx };
     let done: TxRecord | null;
     try {
       done = await (native ? withdrawNative(input) : recoverToken({ ...input, mint: asset.address, decimals }));

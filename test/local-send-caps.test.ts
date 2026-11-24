@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { Keypair } from "@solana/web3.js";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
+import pg from "pg";
 import { privateKeyToAccount } from "viem/accounts";
 import { resetSendClients } from "../src/broadcast.js";
 import { loadConfig } from "../src/config.js";
@@ -11,6 +13,7 @@ import type { SwapIntent } from "../src/domain.js";
 import { execute, resetExecutorState, type ExecutorDeps } from "../src/executor.js";
 import { createExecutor } from "../src/executor-server.js";
 import { localSender } from "../src/local-sends.js";
+import { closeSpendPools, reconcileReserved } from "../src/spend.js";
 import { startSignerQueue, type SignerQueue } from "../src/signer-queue.js";
 import { resetTokenDecimals, resolveTokenDecimals } from "../src/token-decimals.js";
 
@@ -164,6 +167,53 @@ test("a transfer whose broadcast may have gone out keeps its reservation", () =>
     await assert.rejects(one("lost"));
     assert.equal((await one("next")).reason, "daily cap 5 USD");
   }, true));
+
+const onChain = (chainKey: string, chainId: number) => ({ chain: { kind: "evm" as const, chainId }, chainKey, address: ETH, symbol: "ETH", decimals: 18 });
+
+test("a live transfer on a chain whose support tier is not live is refused before any signer job", () =>
+  withLocalSender({ ENABLED_CHAINS: "base,zksync,monad", SUPPORT_TIERS: "base:dry_run", MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "25" }, async (send, chain, jobs) => {
+    for (const [key, asset] of [["tier-base", onChain("base", 8453)], ["tier-zksync", onChain("zksync", 324)], ["tier-monad", onChain("monad", 143)]] as const) {
+      const result = await send({ kind: "transfer", idempotencyKey: key, mode: "live", asset, to: DEST, amount: "1500000000000000" });
+      assert.deepEqual([result.status, result.reason], ["skipped", "chain is not enabled for live sends"], key);
+    }
+    assert.equal(jobs.length, 0);
+    assert.deepEqual(chain.sent, []);
+  }));
+
+test("a live swap on a chain whose support tier is not live is refused before any signer job", () =>
+  withLocalSender({ SUPPORT_TIERS: "base:dry_run", MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "25" }, async (send, chain, jobs) => {
+    const result = await send({ kind: "swap", idempotencyKey: "tier-swap", mode: "live", notionalUsd: 4, sell: onBase(ETH, "ETH", 18), buy: onBase(USDC, "USDC", 6), sellAmount: "1000000000000000", slippageBps: 50 });
+    assert.equal(result.status, "skipped", JSON.stringify(result));
+    assert.equal(jobs.length, 0);
+    assert.deepEqual(chain.sent, []);
+  }));
+
+test("a live transfer whose broadcast may have gone out keeps its tx hash in Postgres, so reconciliation keeps the reservation", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await admin.connect();
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const databaseUrl = `${process.env.TEST_DATABASE_URL}?options=${encodeURIComponent(`-c search_path=${schema}`)}`;
+  try {
+    await withLocalSender({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl, MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "5" }, async (send) => {
+      await assert.rejects(send({ kind: "transfer", idempotencyKey: "lost", mode: "live", asset: onBase(ETH, "ETH", 18), to: DEST, amount: "1500000000000000" }));
+      const row = await admin.query(`SELECT status, tx_hash, outcome FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["lost"]);
+      assert.equal(row.rows[0]?.status, "reserved");
+      assert.match(String(row.rows[0]?.tx_hash), /^0x[0-9a-f]{64}$/);
+      assert.equal(row.rows[0]?.outcome, "pending");
+      await admin.query(`UPDATE ${schema}.spend_journal SET reserved_at = now() - interval '1 hour'`);
+      const actions: string[] = [];
+      await reconcileReserved(databaseUrl, 10, async () => null, (entry) => actions.push(entry.action));
+      assert.deepEqual(actions, ["keep"]);
+      const after = await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["lost"]);
+      assert.equal(after.rows[0]?.status, "reserved");
+    }, true);
+  } finally {
+    await closeSpendPools();
+    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  }
+});
 
 function swapIntent(key: string, sellDecimals: number, buyDecimals: number | null): SwapIntent {
   const pairMap = { pools: [], top: { poolAddress: "", dex: "whale-price", chainKey: "base", baseSymbol: "TKN", baseAddress: TKN, quoteSymbol: "USD", quoteAddress: "", liquidityUsd: 0, priceUsd: 1, baseDecimals: buyDecimals } };
