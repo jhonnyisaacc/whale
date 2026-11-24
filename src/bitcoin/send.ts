@@ -5,7 +5,7 @@ import type { SignerQueue } from "../signer-queue.js";
 import { assertBitcoinSigning, type BitcoinSpend } from "../signing-policy/bitcoin.js";
 import type { SpendJournal } from "../spend.js";
 import { SignerRefusal, type KeystorePublic, type SignerJobRecord } from "../whale-signer.js";
-import { BroadcastRefused, esploraIndexer, transactionId, type BitcoinIndexer } from "./esplora.js";
+import { esploraIndexer, SimulationRefused, transactionId, type BitcoinIndexer } from "./esplora.js";
 import { selectCoins, unsignedTransaction } from "./plan.js";
 import { btcUsd, satsUsd } from "./read.js";
 import { verifiedBitcoinTransaction } from "./verify.js";
@@ -91,16 +91,16 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
     await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
     return { kind: "send_bitcoin", status: "signed", reason: HELD, jobs, plan, txid, signedTransaction: hex(signed) };
   }
+  const keep = () => deps.spend.commit(command.idempotencyKey).catch(() => undefined);
   await indexer.simulate(signed).catch(async (error: unknown) => {
-    await release();
+    await (error instanceof SimulationRefused ? release() : keep());
     throw error;
   });
   await indexer.broadcast(signed).catch(async (error: unknown) => {
-    if (error instanceof BroadcastRefused) await release();
-    else await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
+    await keep();
     throw error;
   });
-  await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
+  await keep();
   return { kind: "send_bitcoin", status: "sent", reason: `broadcast ${txid}`, jobs, plan, txid };
 }
 

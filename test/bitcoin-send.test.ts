@@ -7,7 +7,7 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { p2wpkh, RawTx, Transaction } from "@scure/btc-signer";
 import pg from "pg";
 import { privateKeyToAccount } from "viem/accounts";
-import { BroadcastRefused, RAW_TX_OPTIONS, transactionId, type BitcoinIndexer, type Utxo } from "../src/bitcoin/esplora.js";
+import { esploraIndexer, RAW_TX_OPTIONS, SimulationRefused, transactionId, type BitcoinIndexer, type Utxo } from "../src/bitcoin/esplora.js";
 import type { BitcoinPolicy } from "../src/bitcoin/send.js";
 import { BTC_PARAMS, sameScript } from "../src/bitcoin/wallet.js";
 import { localSender } from "../src/local-sends.js";
@@ -194,30 +194,25 @@ test("a held send keeps its USD reservation because its signed transaction can s
     }),
   ));
 
-test("a broadcast the node refused releases the reservation, and one that may have gone out keeps it", () =>
+test("a live send is simulated before broadcast, only a matching mempool refusal gives its reservation back, and any other simulation failure keeps it", () =>
   withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
-    world.broadcastError = new BroadcastRefused("esplora refused the transaction: bad-txns");
-    await assert.rejects(send(btc("refused", "6000")), /bad-txns/);
-    world.broadcastError = new Error("esplora broadcast failed 502");
-    await assert.rejects(send(btc("lost", "6000")), /502/);
-    world.broadcastError = null;
-    assert.equal((await send(btc("after", "6000"))).reason, "daily cap 10 USD");
-  }));
-
-test("a live send is simulated before broadcast, and one the mempool would refuse is never sent and gives its reservation back", () =>
-  withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
-    world.simulateError = new Error("simulation rejected the transaction: min relay fee not met");
+    world.simulateError = new SimulationRefused("simulation rejected the transaction: min relay fee not met");
     await assert.rejects(send(btc("unsimulated", "6000")), /min relay fee not met/);
     assert.equal(world.simulated.length, 1);
-    assert.deepEqual(world.broadcasts, []);
-    world.simulateError = new Error("esplora could not simulate the transaction: txs/test answered 404");
-    await assert.rejects(send(btc("no-route", "6000")), /txs\/test answered 404/);
     assert.deepEqual(world.broadcasts, []);
     world.simulateError = null;
     const sent = await send(btc("simulated", "6000"));
     assert.equal(sent.status, "sent", JSON.stringify(sent));
     assert.deepEqual(world.broadcasts, [world.simulated.at(-1)], "the broadcast bytes are the simulated bytes");
-  }));
+  }).then(() =>
+    withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
+      world.simulateError = new Error("esplora could not simulate the transaction: txs/test answered 404");
+      await assert.rejects(send(btc("no-route", "6000")), /txs\/test answered 404/);
+      assert.deepEqual(world.broadcasts, []);
+      world.simulateError = null;
+      assert.equal((await send(btc("after", "6000"))).reason, "daily cap 10 USD", "the indexer got the signed transaction, so the spend stays charged");
+    }),
+  ));
 
 test("a broadcast that may have gone out is committed in Postgres, so reconciliation cannot release it", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -231,6 +226,57 @@ test("a broadcast that may have gone out is committed in Postgres, so reconcilia
       await assert.rejects(send(btc("lost", "6000")), /502/);
       const row = await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["lost"]);
       assert.equal(row.rows[0]?.status, "committed");
+    });
+  } finally {
+    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  }
+});
+
+type Answer = { status?: number; body: string };
+
+function esploraAnswers(simulation: (txid: string) => Answer, broadcast: (txid: string) => Answer): Pick<BitcoinIndexer, "simulate" | "broadcast"> {
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    const raw = path === "/txs/test" ? (JSON.parse(String(init?.body)) as string[])[0] : String(init?.body);
+    const answer = (path === "/txs/test" ? simulation : broadcast)(transactionId(bytesOf(raw as string)));
+    return new Response(answer.body, { status: answer.status ?? 200 });
+  };
+  const real = esploraIndexer("http://esplora.test", fetchImpl);
+  return { simulate: real.simulate, broadcast: real.broadcast };
+}
+
+const OTHER_TXID = "00".repeat(32);
+const allowed = (txid: string): Answer => ({ body: JSON.stringify([{ txid, allowed: true }]) });
+const refusedFor = (txid: string): Answer => ({ body: JSON.stringify([{ txid, allowed: false, "reject-reason": "missing-inputs" }]) });
+const outcomes: [string, (txid: string) => Answer, (txid: string) => Answer, string][] = [
+  ["sim-refused", refusedFor, (txid) => ({ body: txid }), "released"],
+  ["sim-refused-other-txid", () => refusedFor(OTHER_TXID), (txid) => ({ body: txid }), "committed"],
+  ["sim-allowed-other-txid", () => allowed(OTHER_TXID), (txid) => ({ body: txid }), "committed"],
+  ["sim-500", () => ({ status: 500, body: "boom" }), (txid) => ({ body: txid }), "committed"],
+  ["sim-404", () => ({ status: 404, body: "Not Found" }), (txid) => ({ body: txid }), "committed"],
+  ["sim-non-json", () => ({ body: "<html>ok</html>" }), (txid) => ({ body: txid }), "committed"],
+  ["broadcast-400", allowed, () => ({ status: 400, body: "sendrawtransaction RPC error" }), "committed"],
+  ["broadcast-500", allowed, () => ({ status: 500, body: "down" }), "committed"],
+  ["broadcast-other-txid", allowed, () => ({ body: "11".repeat(32) }), "committed"],
+  ["broadcast-ok", allowed, (txid) => ({ body: txid }), "committed"],
+];
+
+test("once the indexer holds the signed transaction, only a mempool refusal of that txid releases the reservation in Postgres", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await admin.connect();
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const databaseUrl = `${process.env.TEST_DATABASE_URL}?options=${encodeURIComponent(`-c search_path=${schema}`)}`;
+  try {
+    await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl, DAILY_USD_CAP: "1000" }, [100_000n], async ({ send, world }) => {
+      const seen: Record<string, string | undefined> = {};
+      for (const [key, simulation, broadcast] of outcomes) {
+        Object.assign(world.indexer, esploraAnswers(simulation, broadcast));
+        await send(btc(key, "6000")).catch(() => undefined);
+        seen[key] = (await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, [key])).rows[0]?.status;
+      }
+      assert.deepEqual(seen, Object.fromEntries(outcomes.map(([key, , , status]) => [key, status])));
     });
   } finally {
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
