@@ -103,6 +103,7 @@ function harness(options: { config?: typeof config; call?: BridgeCall | null; al
     reserve: async (key, usd) => (spend.push(`reserve ${key} ${usd}`), options.reserve ?? "reserved"),
     release: async (key) => void spend.push(`release ${key}`),
     commit: async (key) => void spend.push(`commit ${key}`),
+    record: async (key, tx) => void spend.push(`record ${key} ${tx.outcome}`),
   };
   const statuses = [...(options.statuses ?? ["pending", "landed"])];
   const deps: BridgeDeps = {
@@ -248,7 +249,7 @@ test("with broadcast on, the bridge sends, commits its spend, and tracks the tra
   const result = await executeBridge(run.deps, order());
   assert.equal(result.status, "sent", JSON.stringify(result));
   assert.equal(run.sent.length, 2);
-  assert.deepEqual(run.spend, ["reserve bridge:k1 2", "commit bridge:k1"]);
+  assert.deepEqual(run.spend, ["reserve bridge:k1 2", "record bridge:k1 pending", "commit bridge:k1"]);
   assert.equal(result.status === "sent" && result.transfer?.state, "landed");
   assert.equal(result.status === "sent" && result.transfer?.sourceTx, keccak256(run.sent[1] ?? "0x"));
 });
@@ -260,7 +261,7 @@ test("a bridge that landed keeps its reservation and reports sent when the spend
   assert.equal(result.status, "sent", JSON.stringify(result));
   assert.equal(run.sent.length, 2);
   assert.match(result.reason, /db connection reset/);
-  assert.deepEqual(run.spend, ["reserve bridge:k1 2"]);
+  assert.deepEqual(run.spend, ["reserve bridge:k1 2", "record bridge:k1 pending"]);
 });
 
 test("reconcile keeps a sent bridge reserved until its source tx lands, after a confirm timeout or a failed commit", { skip: !process.env.TEST_DATABASE_URL }, async () => {

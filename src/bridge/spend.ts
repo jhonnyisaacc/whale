@@ -9,5 +9,6 @@ export function bridgeSpend(journal: SpendJournal, dailyBridgeUsdCap: number): B
     reserve: (key, usd) => journal.reserve(key, usd, scope),
     release: (key) => journal.release(key),
     commit: (key) => journal.commit(key),
+    record: (key, tx) => journal.record(key, tx),
   };
 }
