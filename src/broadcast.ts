@@ -6,13 +6,13 @@ import type { Fill, SendResult, TxOutcome, TxRecord } from "./domain.js";
 import { chainByEvmId, chainByKey, reorgDepth } from "./chains.js";
 import type { Hex } from "viem";
 import { landedStatus } from "./broadcast/solana.js";
-import { isHyperliquidMainnet, nextHyperliquidNonce, readExchangeResponse } from "./hyperliquid.js";
+import { isHyperliquidMainnet, nextHyperliquidNonce, readExchangeResponse, readHyperliquidJson } from "./hyperliquid.js";
 import { redactError } from "./redact.js";
 import type { AgedTx } from "./spend.js";
 import { defaultIo, evmContext, journal, onAnyRpc, rpcsFor, runLegs, solanaContext, type Ctx, type PreparedLeg, type SendHooks, type SendIo } from "./broadcast/shared.js";
 import { prepareEvmLeg } from "./broadcast/evm.js";
 import { prepareSolanaLeg } from "./broadcast/solana.js";
-import { readVendorText, vendorResponse } from "./vendor-fetch.js";
+import { vendorResponse } from "./vendor-fetch.js";
 export * from "./broadcast/shared.js";
 export * from "./broadcast/evm.js";
 export * from "./broadcast/solana.js";
@@ -53,7 +53,7 @@ async function sendHypercore(ctx: Ctx, request: SendRequest): Promise<SendResult
         false,
       );
       if (!response.ok) throw new Error(`hyperliquid exchange returned ${response.status}`);
-      body = JSON.parse(await readVendorText(response)) as unknown;
+      body = await readHyperliquidJson(response);
     } catch (error) {
       throw new BroadcastError(redactError(error, secrets), order);
     }

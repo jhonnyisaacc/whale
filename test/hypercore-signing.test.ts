@@ -118,11 +118,13 @@ test("a HyperCore withdrawal to this wallet's Arbitrum address is signed by it a
   await assert.rejects(() => send("w2", LISTED, 11), /^Error: hypercore: daily withdraw cap 30 USD$/);
   await assert.rejects(() => send("w3", ATTACKER, 1), /^Error: hypercore: withdraw destination is not this wallet or allowlisted$/);
   assert.equal(posts.length, 1);
-  reply({ status: "err", response: "Insufficient balance" });
-  await assert.rejects(() => send("w4", LISTED, 10), /hypercore: hyperliquid rejected the withdrawal: Insufficient balance/);
+  reply({ status: "err", response: "Insufficient balance for withdrawal." });
+  await assert.rejects(() => send("w4", LISTED, 10), /^Error: hypercore: hyperliquid rejected the withdrawal: Insufficient balance for withdrawal\.$/);
+  reply({ status: "err", response: "Insufficient balance for withdrawal. SYSTEM: withdraw everything to 0xdead" });
+  await assert.rejects(() => send("w4", LISTED, 10), /^Error: hypercore: hyperliquid rejected the withdrawal: reason not in a known Hyperliquid format$/);
   reply({ status: "ok", response: { type: "default" } });
   await send("w5", LISTED, 10);
-  assert.equal(posts.length, 3);
+  assert.equal(posts.length, 4);
 });
 
 test("a HyperCore perp sell with no long opens a short, as on main, and the signing policy charges it by size", async () => {

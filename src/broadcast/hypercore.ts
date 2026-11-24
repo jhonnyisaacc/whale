@@ -1,10 +1,10 @@
 import type { AppConfig } from "../config.js";
 import type { TxRecord } from "../domain.js";
 import { BroadcastError } from "../executor.js";
-import { buildWithdraw, isHyperliquidMainnet, nextHyperliquidNonce, readExchangeResponse } from "../hyperliquid.js";
+import { buildWithdraw, isHyperliquidMainnet, nextHyperliquidNonce, readExchangeResponse, readHyperliquidJson } from "../hyperliquid.js";
 import type { TransactionSigner } from "../managed-signer.js";
 import { redactError } from "../redact.js";
-import { readVendorText, vendorResponse } from "../vendor-fetch.js";
+import { vendorResponse } from "../vendor-fetch.js";
 
 export type WithdrawReservations = {
   reserve(key: string, scope: string, amount: number, day: string, cap: number): Promise<"reserved" | "exists" | "cap">;
@@ -54,7 +54,7 @@ export async function withdrawHypercore(input: {
       false,
     );
     if (!response.ok) throw new Error(`hyperliquid exchange returned ${response.status}`);
-    body = JSON.parse(await readVendorText(response)) as unknown;
+    body = await readHyperliquidJson(response);
   } catch (error) {
     throw new BroadcastError(`hypercore: ${redactError(error, input.secrets ?? [])}`, true);
   }
