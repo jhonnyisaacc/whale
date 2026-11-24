@@ -80,7 +80,7 @@ The `perp` tool takes no leverage. A signal sent to the executor can set `levera
 
 A dry run plans the order and checks none of the signing limits, so a dry-run sell returns `would_send` with `HYPERCORE_SELL_LIMITS` unset.
 
-`SUPPORT_TIERS` can mark `hypercore` as `dry_run`. A dry run then still plans HyperCore for a HyperCore token, while live refuses HyperCore and trades the token's Solana alternate when it has one, or skips the trade when it has none. With that tier, a dry run does not predict the live venue. `zksync` defaults to `dry_run` and behaves the same way.
+`SUPPORT_TIERS` can mark `hypercore` as `dry_run`. A dry run then still plans HyperCore for a HyperCore token, while live refuses HyperCore and trades a liquid alternate on another chain when the token has one, or skips the trade when it has none. With that tier, a dry run does not predict the live venue. `zksync` defaults to `dry_run` and behaves the same way.
 
 ## Native Bitcoin
 

@@ -166,5 +166,6 @@ test("a HyperCore token falls back to a liquid alternate when HyperCore cannot t
   }
   resetExecutorState();
   const dryRun = await execute({ ...intent(), token: hyper, alternates: [intent().token] }, { ...deps([]), mode: "dry_run", liquidityOf, supportTierFor: (chainKey) => (chainKey === "hypercore" ? "dry_run" : "live") });
-  assert.equal(dryRun.venue, "hypercore", "a dry_run tier still plans HyperCore in a dry run, unlike live");
+  assert.equal(dryRun.decision, "would_send", "a dry_run tier still plans HyperCore in a dry run, unlike live");
+  assert.equal(dryRun.venue, "hypercore");
 });
