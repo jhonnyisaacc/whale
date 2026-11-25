@@ -156,7 +156,12 @@ export async function main(): Promise<void> {
         process.stderr.write(`whale: cannot listen for whale-signer on 127.0.0.1:${setup.port}: ${error instanceof Error ? error.message : String(error)}\n`);
         process.exit(1);
       });
-      deps.localSend = localSender(process.env, queue, setup);
+      try {
+        deps.localSend = localSender(process.env, queue, setup);
+      } catch (error) {
+        process.stderr.write(`whale: config is not usable: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.exit(1);
+      }
       process.stdin.once("end", () => void queue.close());
       process.stderr.write(`whale: live sends go to whale-signer. run: whale-signer serve --gateway ${queue.url} --keystore <keystore> --policy <policy> --ledger <ledger>\n`);
     }

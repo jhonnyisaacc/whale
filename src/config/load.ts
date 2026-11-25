@@ -7,6 +7,7 @@ import { DEFAULT_KYBER_CLIENT_ID, type AppConfig, type ApprovalSeed } from "./ty
 import { manifestFeeLimits, manifestRouters, parseDeploymentManifest } from "../deployment-manifest.js";
 import { supportByChain } from "../support.js";
 import { bitcoinConfig } from "./bitcoin.js";
+import { BITCOIN_KEY } from "../bitcoin/wallet.js";
 export type { AppConfig, ApprovalSeed, StrategyCap } from "./types.js";
 
 function screeningEnabled(env: NodeJS.ProcessEnv, live: boolean): boolean {
@@ -198,7 +199,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     routerAllowlist: manifest ? manifestRouters(manifest) : legacyRouters,
     reorgDepthByChainId: reorgDepths(env.REORG_DEPTH_JSON),
     zeroExSettlers: env.ZEROX_SETTLER_ALLOWLIST_JSON ? chainAddressMap(env.ZEROX_SETTLER_ALLOWLIST_JSON, "ZEROX_SETTLER_ALLOWLIST_JSON", /^0x[0-9a-fA-F]{40}$/) : {},
-    supportByChain: supportByChain(CHAINS.map((chain) => chain.key), env.SUPPORT_TIERS),
+    supportByChain: supportByChain([...CHAINS.map((chain) => chain.key), BITCOIN_KEY], env.SUPPORT_TIERS),
     solanaProgramAllowlist: [...new Set([...SOLANA_BASE_PROGRAMS, ...splitList(env.SOLANA_PROGRAM_ALLOWLIST), ...(manifest?.solanaPrograms ?? [])])],
     maxValueWei: manifest ? BigInt(manifest.maxValueWei) : weiEnv(env.MAX_NATIVE_VALUE_WEI),
     evmFeeLimits: feeLimits,
