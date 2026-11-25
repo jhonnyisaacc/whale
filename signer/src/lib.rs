@@ -8,6 +8,7 @@ mod jupiter_swaps;
 pub mod keystore;
 pub mod ledger;
 pub mod lifi;
+mod lifi_targets;
 pub mod net;
 pub mod pda;
 pub mod policy;
