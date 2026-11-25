@@ -199,6 +199,7 @@ export type SpendJournal = {
   reserve: (idempotencyKey: string, usd: number, scope?: SpendScope) => Promise<"reserved" | "exists" | "cap">;
   commit: (idempotencyKey: string) => Promise<void>;
   release: (idempotencyKey: string) => Promise<void>;
+  record: (idempotencyKey: string, tx: TxRecord) => Promise<void>;
 };
 
 export function spendJournal(databaseUrl: string | null, dailyUsdCap: number, day: () => string): SpendJournal {
@@ -207,6 +208,7 @@ export function spendJournal(databaseUrl: string | null, dailyUsdCap: number, da
       reserve: (key, usd, scope) => recordSpend(databaseUrl, key, usd, day(), dailyUsdCap, scope),
       commit: (key) => commitSpend(databaseUrl, key),
       release: (key) => releaseSpend(databaseUrl, key),
+      record: (key, tx) => recordTx(databaseUrl, key, tx),
     };
   }
   const memory = createMemoryJournal();
@@ -214,6 +216,7 @@ export function spendJournal(databaseUrl: string | null, dailyUsdCap: number, da
     reserve: (key, usd, scope) => memory.reserve(key, usd, day(), dailyUsdCap, scope),
     commit: (key) => memory.settle(key, "committed"),
     release: (key) => memory.settle(key, "released"),
+    record: async () => undefined,
   };
 }
 

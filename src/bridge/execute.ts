@@ -9,8 +9,9 @@ import type { EvmSignInput } from "../managed-signer.js";
 import type { BridgeProvider, BridgeRoute } from "../rebalance.js";
 import { redactError } from "../redact.js";
 import { readTransport } from "../rpc.js";
-import { BRIDGE_CONTRACTS, LIFI_SWAP_AND_START_SELECTOR, bridgeTerms, openAcrossDeposit, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
+import { BRIDGE_CONTRACTS, bridgeTerms, openAcrossDeposit, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
 import { bridgePair, meetsBridgeFloor } from "../signing-policy/bridge-tokens.js";
+import { lifiStepRefusal } from "../signing-policy/lifi-steps.js";
 import { trackBridge, type BridgeLookup, type BridgeStatus } from "./status.js";
 
 export type BridgeReads = {
@@ -22,6 +23,7 @@ export type BridgeSpend = {
   reserve(key: string, usd: number): Promise<"reserved" | "exists" | "cap">;
   release(key: string): Promise<void>;
   commit(key: string): Promise<void>;
+  record(key: string, tx: TxRecord): Promise<void>;
 };
 
 export type BridgeDeps = {
@@ -43,9 +45,6 @@ export type BridgeExecution =
   | { status: "skipped"; reason: string }
   | { status: "signed"; provider: ExecutableBridge; reason: string; txs: SignedBridgeTx[] }
   | { status: "sent"; provider: ExecutableBridge; reason: string; txs: TxRecord[]; transfer: BridgeStatus | null };
-
-export const LIFI_SWAP_AND_START =
-  "LI.FI quoted swapAndStartBridgeTokensViaAcrossV4, which swaps before it bridges. Its swap step can pay any address, so the signing policy refuses it. Whale bridges a token only to the same token, through startBridgeTokensViaAcrossV4 or Across";
 
 export const RELAY_QUOTE_ONLY =
   "Relay is quote-only. Its deposit is depositErc20(depositor, token, amount, id), and the destination chain and recipient live off chain under a server-assigned id, so the signing policy cannot bind them";
@@ -80,17 +79,20 @@ async function plan(deps: BridgeDeps, order: BridgeOrder): Promise<Planned | str
   const contract = BRIDGE_CONTRACTS[source.chain.chainId]?.[provider];
   if (!contract || !same(call.to, contract)) return `${provider} sent the bridge to ${call.to}, not its verified contract on ${source.key}`;
   if (call.value !== 0n) return `${provider} attached native value to a token bridge`;
-  if (provider === "lifi" && call.data.slice(0, 10).toLowerCase() === LIFI_SWAP_AND_START_SELECTOR) return LIFI_SWAP_AND_START;
   const terms = bridgeTerms(call.data);
   if (!terms || terms.provider !== provider) return `${provider} calldata does not decode as a bridge the policy reads`;
   if (!same(terms.charge.token, route.sell.address) || terms.charge.amount !== BigInt(route.amount)) return `${provider} calldata pulls ${terms.charge.amount} of ${terms.charge.token}, not the route's amount`;
   if (terms.destinationChainId !== BigInt(destination.chain.chainId)) return `${provider} calldata lands on chain ${terms.destinationChainId}, not ${destination.key}`;
   if (addressKey(destination.key, terms.recipient) !== addressKey(destination.key, route.destination.address)) return `${provider} calldata pays ${terms.recipient}, not the route's destination`;
+  const stepRefusal = terms.steps.length > 0 ? lifiStepRefusal(source.chain.chainId, terms.steps, terms.charge) : null;
+  if (stepRefusal) return stepRefusal;
   if (!same(terms.outputToken, route.buy.address)) return `${provider} calldata delivers ${terms.outputToken}, not ${route.buy.symbol}`;
   const pair = bridgePair(source.chain.chainId, terms.inputToken, destination.chain.chainId, terms.outputToken);
   if (!pair) return `${provider} bridges ${route.sell.symbol} to ${route.buy.symbol}, a pair the bridge token table does not list`;
   const { maxBridgeFeeBps } = deps.evm.config;
-  if (!meetsBridgeFloor(pair, terms.charge.amount, terms.minOutput, maxBridgeFeeBps)) return `${provider} minimum output is under the ${maxBridgeFeeBps} bps bridge fee cap`;
+  const floor = meetsBridgeFloor(pair, terms.charge.amount, terms.minOutput, maxBridgeFeeBps);
+  if (floor === null) return `${provider} amounts overflow the bridge fee check`;
+  if (!floor) return `${provider} minimum output is under the ${maxBridgeFeeBps} bps bridge fee cap`;
   const approve = (await deps.reads.allowance(route.sell.address as Hex, deps.evm.owner, call.to)) < terms.charge.amount;
   if (approve && !deps.evm.config.allowHotApproval) return `${call.to} has no ${route.sell.symbol} allowance and ALLOW_HOT_APPROVAL is off. Approve the exact amount in the root-quorum ceremony first`;
   return { provider, call, spender: call.to, sell: route.sell.address as Hex, charge: terms.charge, approve };
@@ -132,13 +134,20 @@ async function landed(submitted: Awaited<ReturnType<typeof submitEvm>>): Promise
   return records;
 }
 
-async function sendLive(deps: BridgeDeps, planned: Planned): Promise<{ txs: TxRecord[]; transfer: BridgeStatus }> {
+async function sendLive(deps: BridgeDeps, planned: Planned, key: string): Promise<{ txs: TxRecord[]; transfer: BridgeStatus }> {
   const { evm } = deps;
   const txs: TxRecord[] = [];
   if (planned.approve) {
     txs.push(...(await landed(await submitEvm(evm, { to: planned.sell, data: approveCall(planned), value: 0n, gas: null, purpose: "approve", approval: planned.charge }, null))));
   }
-  const bridge = await submitEvm(evm, { to: planned.call.to, data: planned.call.data, value: 0n, gas: planned.call.gas, purpose: "bridge", charge: planned.charge }, null);
+  const keyed = {
+    ...evm,
+    onTx: async (tx: TxRecord) => {
+      await deps.spend.record(key, tx);
+      await evm.onTx(tx);
+    },
+  };
+  const bridge = await submitEvm(keyed, { to: planned.call.to, data: planned.call.data, value: 0n, gas: planned.call.gas, purpose: "bridge", charge: planned.charge }, null);
   txs.push(...(await landed(bridge)));
   const lookup = { provider: planned.provider, fromChainId: evm.chainId, txHash: bridge.record.txHash };
   return { txs, transfer: await trackBridge(lookup, deps.status, evm.io, evm.io.now() + deps.trackTimeoutMs) };
@@ -156,7 +165,7 @@ export async function executeBridge(deps: BridgeDeps, order: BridgeOrder): Promi
       await deps.spend.release(key);
       return { status: "signed", provider: planned.provider, reason: HELD, txs };
     }
-    const { txs, transfer } = await sendLive(deps, planned);
+    const { txs, transfer } = await sendLive(deps, planned, key);
     const committed = await deps.spend.commit(key).then(
       () => "",
       (error: unknown) => `, and its spend stays reserved because the commit failed: ${redactError(error, deps.evm.secrets)}`,
