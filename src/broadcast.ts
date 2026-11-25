@@ -5,6 +5,8 @@ import type { TransactionSigner } from "./managed-signer.js";
 import type { Fill, SendResult, TxOutcome, TxRecord } from "./domain.js";
 import { chainByEvmId, chainByKey, reorgDepth } from "./chains.js";
 import type { Hex } from "viem";
+import { esploraIndexer } from "./bitcoin/esplora.js";
+import { BITCOIN_KEY } from "./bitcoin/wallet.js";
 import { landedStatus } from "./broadcast/solana.js";
 import { isHyperliquidMainnet, nextHyperliquidNonce, readExchangeResponse } from "./hyperliquid.js";
 import { redactError } from "./redact.js";
@@ -119,6 +121,9 @@ export async function broadcastRoute(
 // the head, has passed its nonce: another transaction consumed it, so this one can never be included.
 // Without a recorded nonce it stays pending.
 export async function lookupAgedTx(config: AppConfig, tx: AgedTx, io: SendIo = defaultIo(config)): Promise<TxOutcome | null> {
+  // Bitcoin is not in the chain table. Esplora is the read: confirmed commits the reservation, and a tx that is
+  // still in the mempool or not visible yet stays reserved, because the signed bytes can still confirm.
+  if (tx.chainKey === BITCOIN_KEY) return config.bitcoin ? esploraIndexer(config.bitcoin.esploraUrl).transactionStatus(tx.txHash) : null;
   const spec = chainByKey(tx.chainKey);
   const rpcs = rpcsFor(config, tx.chainKey);
   if (!spec || rpcs.length === 0) return null;

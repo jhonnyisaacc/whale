@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { bitcoinBalance } from "../src/bitcoin/read.js";
-import { esploraIndexer, parseBalance, parseFeeRate, parseMempoolTest, parseUtxos, SimulationRefused, transactionId } from "../src/bitcoin/esplora.js";
+import { esploraIndexer, parseBalance, parseFeeRate, parseMempoolTest, parseTransactionStatus, parseUtxos, SimulationRefused, transactionId } from "../src/bitcoin/esplora.js";
 
 const fixture = (name: string) => readFileSync(new URL(`../../test/fixtures/bitcoin/${name}`, import.meta.url), "utf8");
 const TX_ID = "65c907744b0852012403a4096688d2d2ac7c063d4dca8d8e3ece4b8e8a9c8539";
@@ -84,6 +84,23 @@ test("simulate posts the hex to txs/test and passes only an allowed answer for t
   assert.throws(() => parseMempoolTest([], TX_ID));
   assert.throws(() => parseMempoolTest([{ txid: TX_ID, allowed: true }, { txid: TX_ID, allowed: true }], TX_ID));
   assert.throws(() => parseMempoolTest([{ txid: TX_ID, allowed: "true" }], TX_ID));
+});
+
+test("a transaction status is landed only when the indexer confirms it, and a miss is not a failure", async () => {
+  assert.equal(parseTransactionStatus({ status: { confirmed: true, block_height: 1 } }), "landed");
+  assert.equal(parseTransactionStatus({ status: { confirmed: false } }), "pending");
+  assert.throws(() => parseTransactionStatus({ status: {} }));
+  const down = "cd".repeat(32);
+  const indexer = esploraIndexer("https://esplora.test/api", fakeEsplora({
+    [`GET /api/tx/${TX_ID}`]: { body: JSON.stringify({ status: { confirmed: true } }) },
+    [`GET /api/tx/${PREV_ID}`]: { body: JSON.stringify({ status: { confirmed: false } }) },
+    [`GET /api/tx/${down}`]: { status: 500, body: "down" },
+  }));
+  assert.equal(await indexer.transactionStatus(TX_ID), "landed");
+  assert.equal(await indexer.transactionStatus(PREV_ID), "pending");
+  assert.equal(await indexer.transactionStatus("ab".repeat(32)), null);
+  await assert.rejects(indexer.transactionStatus(down), /tx status failed 500/);
+  await assert.rejects(indexer.transactionStatus("nope"));
 });
 
 test("a bitcoin balance reads confirmed sats as BTC and names pending sats, and refuses another network's address", async () => {
