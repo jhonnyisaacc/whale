@@ -114,7 +114,7 @@ export function cappedLimitPx(mark: number, isBuy: boolean, capBps: number): num
 }
 
 export async function assertApprovedAgent(url: string, master: string, agent: string, fetchImpl: typeof fetch, nowMs = Date.now()): Promise<void> {
-  const body: unknown = await withTimeout(1500, async (signal) => {
+  const body: unknown = await withTimeout(5000, async (signal) => {
     const response = await vendorResponse(fetchImpl, `${url.replace(/\/$/, "")}/info`, {
       method: "POST",
       headers: { "content-type": "application/json" },
