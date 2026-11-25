@@ -1,13 +1,15 @@
-import { decodeAbiParameters, parseAbiParameters, toFunctionSelector, type Hex } from "viem";
+import { decodeFunctionData, parseAbi, type Hex } from "viem";
+
+import { decodeAbiParameters, parseAbiParameters } from "viem";
 
 export const MAX_LIFI_FEE_BPS = 50n;
 export const MAX_U128 = 2n ** 128n - 1n;
 const NATIVE = "0x0000000000000000000000000000000000000000";
 
-const FORWARD_ERC20 = toFunctionSelector("function forwardERC20Fees(address _token, (address recipient, uint256 amount)[] _distributions)");
-const FORWARD_NATIVE = toFunctionSelector("function forwardNativeFees((address recipient, uint256 amount)[] _distributions) payable");
-const ERC20_FEE_WORDS = parseAbiParameters("bytes32 _token, (bytes32 recipient, uint256 amount)[] _distributions");
-const NATIVE_FEE_WORDS = parseAbiParameters("(bytes32 recipient, uint256 amount)[] _distributions");
+const FEE_FORWARDER_ABI = parseAbi([
+  "function forwardERC20Fees(address _token, (address recipient, uint256 amount)[] _distributions)",
+  "function forwardNativeFees((address recipient, uint256 amount)[] _distributions) payable",
+]);
 
 export type LifiStepTable = { feeForwarder: string; targets: readonly string[] };
 
@@ -51,16 +53,19 @@ export const LIFI_STEP_TARGETS: Readonly<Record<number, LifiStepTable>> = {
 
 export type LifiStep = { callTo: string; approveTo: string; sendingAssetId: string; fromAmount: bigint; callData: Hex };
 
-export function evmAddress(word: Hex): string | null {
-  return /^0x0{24}[0-9a-f]{40}$/i.test(word) ? `0x${word.slice(26)}` : null;
-}
-
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 export type LifiCharge = { token: string; amount: bigint };
 
 export function lifiCharge(deposit: LifiCharge | null, value: bigint): LifiCharge {
   return deposit ?? { token: NATIVE, amount: value };
+}
+
+const ERC20_FEE_WORDS = parseAbiParameters("bytes32 _token, (bytes32 recipient, uint256 amount)[] _distributions");
+const NATIVE_FEE_WORDS = parseAbiParameters("(bytes32 recipient, uint256 amount)[] _distributions");
+
+export function evmAddress(word: Hex): string | null {
+  return /^0x0{24}[0-9a-f]{40}$/i.test(word) ? `0x${word.slice(26)}` : null;
 }
 
 function distributed(items: readonly { recipient: Hex; amount: bigint }[]): bigint | null {
@@ -74,15 +79,13 @@ function distributed(items: readonly { recipient: Hex; amount: bigint }[]): bigi
 
 function forwardedFee(step: LifiStep, charge: LifiCharge): bigint | null {
   if (!same(step.sendingAssetId, charge.token)) return null;
-  const native = same(charge.token, NATIVE);
-  const selector = step.callData.slice(0, 10).toLowerCase();
-  const args: Hex = `0x${step.callData.slice(10)}`;
   try {
-    if (selector === FORWARD_NATIVE && native) return distributed(decodeAbiParameters(NATIVE_FEE_WORDS, args)[0]);
-    if (selector !== FORWARD_ERC20 || native) return null;
+    const call = decodeFunctionData({ abi: FEE_FORWARDER_ABI, data: step.callData });
+    const args: Hex = `0x${step.callData.slice(10)}`;
+    if (call.functionName === "forwardNativeFees") return same(charge.token, NATIVE) ? distributed(decodeAbiParameters(NATIVE_FEE_WORDS, args)[0]) : null;
     const [token, items] = decodeAbiParameters(ERC20_FEE_WORDS, args);
     const forwarded = evmAddress(token);
-    return forwarded && same(forwarded, charge.token) ? distributed(items) : null;
+    return !same(charge.token, NATIVE) && forwarded !== null && same(forwarded, charge.token) ? distributed(items) : null;
   } catch {
     return null;
   }

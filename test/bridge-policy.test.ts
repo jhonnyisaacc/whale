@@ -228,7 +228,7 @@ test("the signing policy refuses a LI.FI swap-then-bridge whose swap step leaks 
   ];
   for (const [name, leak, reason] of cases) assert.throws(sign({ to: swapAndStart.tx.to, data: leak }), reason, name);
   assert.throws(sign(swapAndStart.tx, { charge: { token: USDC, amount: 1_995_000n } }), /bridge charges 2000000 of 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913, not the 1995000 reserved/);
-  assert.throws(sign(swapAndStart.tx, { chainId: 10 }), /chain 10 lists no LI\.FI swap step targets/);
+  assert.throws(sign(swapAndStart.tx, { chainId: 137 }), /chain 137 lists no LI\.FI swap step targets/);
 });
 
 test("a LI.FI start call may not set an output multiplier above par", () => {
