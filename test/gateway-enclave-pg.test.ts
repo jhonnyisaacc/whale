@@ -84,11 +84,24 @@ function fakeTurnkey() {
 
 test("expected Turnkey policies follow the wallet's EVM chains and scope Whale's delegate", () => {
   const delegateUserId = randomUUID();
-  const policies = expectedPolicies({ delegateUserId, walletId: randomUUID(), solanaAddress: SOLANA, policy: DEFAULT_POLICY, config: DELEGATION });
+  const walletId = randomUUID();
+  const policies = expectedPolicies({ delegateUserId, walletId, solanaAddress: SOLANA, policy: DEFAULT_POLICY, config: DELEGATION });
   const evm = policies.find((policy) => policy.policyName.startsWith("EVM"));
   assert.match(evm?.condition ?? "", /eth\.tx\.chain_id == 42161/);
   assert.match(evm?.condition ?? "", /eth\.tx\.chain_id == 8453 && eth\.tx\.gas <= 1500000 && eth\.tx\.max_fee_per_gas <= 1000000000 /);
   assert.doesNotMatch(evm?.condition ?? "", /eth\.tx\.chain_id == 1 /);
+  const l1Chains = expectedPolicies({
+    delegateUserId,
+    walletId,
+    solanaAddress: SOLANA,
+    policy: { ...DEFAULT_POLICY, chains: ["optimism", "base", "scroll", "blast", "solana"] },
+    config: { ...DELEGATION, routers: { 10: [BASE_ROUTER], 8453: [BASE_ROUTER], 81457: [BASE_ROUTER], 534352: [BASE_ROUTER] } },
+  });
+  const l1Condition = l1Chains.find((policy) => policy.policyName.startsWith("EVM"))?.condition ?? "";
+  for (const id of [10, 8453, 534352]) {
+    assert.match(l1Condition, new RegExp(`eth\\.tx\\.chain_id == ${id} && eth\\.tx\\.gas <= 1500000 && eth\\.tx\\.max_fee_per_gas <= 1000000000 && eth\\.tx\\.gas_price <= 1000000000 `));
+  }
+  assert.doesNotMatch(l1Condition, /eth\.tx\.chain_id == 81457/);
   assert.ok(policies.every((policy) => policy.consensus === `approvers.any(user, user.id == '${delegateUserId}')`));
   assert.throws(() => delegationFromEnv({ TURNKEY_DELEGATE_API_PUBLIC_KEY: "nothex" }), /compressed P-256/);
   assert.equal(delegationFromEnv({}), null);
