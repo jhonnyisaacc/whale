@@ -291,7 +291,7 @@ const clearinghouseSchema = z.object({
 });
 
 export async function fetchPerpPosition(url: string, user: string, coin: string, fetchImpl: typeof fetch = fetch): Promise<PerpPosition> {
-  const body: unknown = await withTimeout(1500, async (signal) => {
+  const body: unknown = await withTimeout(5000, async (signal) => {
     const response = await vendorResponse(fetchImpl, `${url.replace(/\/$/, "")}/info`, {
       method: "POST",
       headers: { "content-type": "application/json" },
