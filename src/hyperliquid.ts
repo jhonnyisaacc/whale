@@ -329,13 +329,20 @@ const LITERAL_REJECTIONS = [
   "Order has zero size",
   "Order price cannot be more than 80% away from the reference price",
   "Insufficient balance for withdrawal",
+  "Invalid leverage value",
+  "Cross margin is not allowed for this asset",
+  "Cannot switch leverage type with open position",
+  "Cross position does not have sufficient margin available to decrease leverage. To decrease leverage, deposit more collateral",
+  "Isolated position does not have sufficient margin available to decrease leverage. To decrease leverage, add margin to the position",
 ].map(literal);
 
 const REJECTION_FORMS = [
   ...LITERAL_REJECTIONS,
   "Order must have minimum value of 10 [A-Z0-9]{1,12}",
   "Post only order would have immediately matched, bbo was [0-9.@]{1,40}",
+  "Max leverage at current position size is \\d{1,4}x\\. To increase leverage, reduce position size",
   "User or API Wallet 0x[0-9a-fA-F]{40} does not exist",
+  "Must deposit before performing actions\\. User: 0x[0-9a-fA-F]{40}",
   "Too many cumulative requests sent \\(\\d{1,12} > \\d{1,12}\\) for cumulative volume traded \\$\\d{1,15}(\\.\\d{1,8})?\\. Place taker orders to free up 1 request per USDC traded",
 ].map((form) => new RegExp(`^${form}\\.?( asset=\\d{1,7})?$`));
 
