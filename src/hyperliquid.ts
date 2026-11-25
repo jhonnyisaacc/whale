@@ -122,7 +122,7 @@ export async function assertApprovedAgent(url: string, master: string, agent: st
       signal,
     });
     if (!response.ok) throw new Error("hyperliquid agent check failed");
-    return JSON.parse(await readVendorText(response)) as unknown;
+    return readHyperliquidJson(response);
   });
   if (!Array.isArray(body)) throw new Error("hyperliquid agent is not approved");
   const agents = body.flatMap((row) => {
@@ -299,12 +299,66 @@ export async function fetchPerpPosition(url: string, user: string, coin: string,
       signal,
     });
     if (!response.ok) throw new Error("hyperliquid clearinghouseState failed");
-    return JSON.parse(await readVendorText(response)) as unknown;
+    return readHyperliquidJson(response);
   });
   const row = clearinghouseSchema.parse(body).assetPositions.find((item) => item.position.coin === coin)?.position;
   const size = row === undefined ? 0 : Number(row.szi);
   if (row === undefined || size === 0) return { side: "flat" };
   return { side: size > 0 ? "long" : "short", margin: row.leverage.type, leverage: row.leverage.value };
+}
+
+const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const LITERAL_REJECTIONS = [
+  "Price must be divisible by tick size",
+  "Order must have minimum value of $10",
+  "Insufficient margin to place order",
+  "Reduce only order would increase position",
+  "Order could not immediately match against any resting orders",
+  "Invalid TP/SL price",
+  "No liquidity available for market order",
+  "Order would increase open interest while open interest is capped",
+  "Order rejected due to price more aggressive than oracle while at open interest cap",
+  "Order would increase open interest too quickly",
+  "Order has insufficient spot balance to trade",
+  "Insufficient spot balance",
+  "Order price too far from oracle",
+  "Order would cause position to exceed margin tier limit at current leverage",
+  "Order was never placed, already canceled, or filled",
+  "Order has invalid size",
+  "Order has zero size",
+  "Order price cannot be more than 80% away from the reference price",
+  "Insufficient balance for withdrawal",
+  "Invalid leverage value",
+  "Cross margin is not allowed for this asset",
+  "Cannot switch leverage type with open position",
+  "Cross position does not have sufficient margin available to decrease leverage. To decrease leverage, deposit more collateral",
+  "Isolated position does not have sufficient margin available to decrease leverage. To decrease leverage, add margin to the position",
+].map(literal);
+
+const REJECTION_FORMS = [
+  ...LITERAL_REJECTIONS,
+  "Order must have minimum value of 10 [A-Z0-9]{1,12}",
+  "Post only order would have immediately matched, bbo was [0-9.@]{1,40}",
+  "Max leverage at current position size is \\d{1,4}x\\. To increase leverage, reduce position size",
+  "User or API Wallet 0x[0-9a-fA-F]{40} does not exist",
+  "Must deposit before performing actions\\. User: 0x[0-9a-fA-F]{40}",
+  "Too many cumulative requests sent \\(\\d{1,12} > \\d{1,12}\\) for cumulative volume traded \\$\\d{1,15}(\\.\\d{1,8})?\\. Place taker orders to free up 1 request per USDC traded",
+].map((form) => new RegExp(`^${form}\\.?( asset=\\d{1,7})?$`));
+
+export const UNKNOWN_REJECTION = "reason not in a known Hyperliquid format";
+
+export function hyperliquidReason(text: unknown): string {
+  return typeof text === "string" && REJECTION_FORMS.some((form) => form.test(text)) ? text : UNKNOWN_REJECTION;
+}
+
+export async function readHyperliquidJson(response: Response): Promise<unknown> {
+  const text = await readVendorText(response);
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error("hyperliquid returned a body that is not json");
+  }
 }
 
 export type ExchangeOutcome =
@@ -314,13 +368,13 @@ export type ExchangeOutcome =
 export function readExchangeResponse(body: unknown): ExchangeOutcome {
   if (typeof body !== "object" || body === null) return { status: "err", error: "hyperliquid response is not an object" };
   const row = body as { status?: unknown; response?: unknown };
-  if (row.status !== "ok") return { status: "err", error: typeof row.response === "string" ? row.response : "hyperliquid rejected the action" };
+  if (row.status !== "ok") return { status: "err", error: hyperliquidReason(row.response) };
   const data = (row.response as { data?: { statuses?: unknown } } | undefined)?.data;
   const raw = Array.isArray(data?.statuses) ? data.statuses : [];
   const statuses = raw.map((item: unknown) => {
     if (typeof item !== "object" || item === null) return { error: "unknown order status" };
     const entry = item as { filled?: { totalSz?: unknown; avgPx?: unknown }; error?: unknown; resting?: unknown };
-    if (typeof entry.error === "string") return { error: entry.error };
+    if (entry.error !== undefined) return { error: hyperliquidReason(entry.error) };
     if (entry.filled && typeof entry.filled.totalSz === "string" && typeof entry.filled.avgPx === "string") {
       return { filled: { totalSz: entry.filled.totalSz, avgPx: entry.filled.avgPx } };
     }

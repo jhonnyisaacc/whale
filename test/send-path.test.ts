@@ -586,11 +586,11 @@ test("hyperliquid replies decide commit or release", async () => {
     const report = await execute(hyperIntent(key), deps);
     return { report, spend: spend.get(key), seen };
   };
-  const err = await run("hl-err", { status: "err", response: "Insufficient margin" });
+  const err = await run("hl-err", { status: "err", response: "Insufficient margin to place order. asset=4" });
   assert.equal(err.report.decision, "skipped");
   assert.match(err.report.reason, /Insufficient margin/);
   assert.equal(err.spend, "released");
-  const rejected = await run("hl-rejected", { status: "ok", response: { type: "order", data: { statuses: [{ error: "Order could not immediately match" }] } } });
+  const rejected = await run("hl-rejected", { status: "ok", response: { type: "order", data: { statuses: [{ error: "Order could not immediately match against any resting orders. asset=4" }] } } });
   assert.equal(rejected.report.decision, "skipped");
   assert.equal(rejected.spend, "released");
   const filled = await run("hl-filled", { status: "ok", response: { type: "order", data: { statuses: [{ filled: { totalSz: "5", avgPx: "1.001", oid: 9 } }] } } });
