@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { decodeEventLog, decodeFunctionData, encodeAbiParameters, encodeFunctionData, erc20Abi, parseAbi, keccak256, maxUint256, pad, parseTransaction, recoverTransactionAddress, toHex } from "viem";
 import { firmBridgeCall } from "../dist/src/aggregators/bridge.js";
-import { LIFI_SWAP_AND_START, RELAY_QUOTE_ONLY, executeBridge } from "../dist/src/bridge/execute.js";
+import { RELAY_QUOTE_ONLY, executeBridge } from "../dist/src/bridge/execute.js";
 import { bridgeSpend } from "../dist/src/bridge/spend.js";
 import { bridgeStatus } from "../dist/src/bridge/status.js";
 import { defaultIo, evmContext } from "../dist/src/broadcast/shared.js";
@@ -13,7 +13,6 @@ import { withPolicy } from "../dist/src/managed-signer.js";
 import { screenToken } from "../dist/src/screening.js";
 import { spendDay, spendJournal } from "../dist/src/spend.js";
 import { BRIDGE_CONTRACTS, DEFAULT_MAX_VALUE_WEI, bridgeTerms } from "../dist/src/signing-policy.js";
-import { lifiStartCall } from "./lifi-start.mjs";
 
 const RPC = process.env.RPC_URL_8453 ?? "https://mainnet.base.org";
 const BASE = 8453;
@@ -125,10 +124,6 @@ try {
     amountInUsd: 2,
   };
   const firm = (provider, item) => firmBridgeCall(config, provider, item);
-  const firmLifiStart = async (provider, item) => {
-    const quoted = await firm(provider, item);
-    return quoted && { ...quoted, data: lifiStartCall(quoted.data, AMOUNT) };
-  };
   const deps = {
     evm,
     reads,
@@ -142,14 +137,13 @@ try {
   console.log(`signer ${owner} on Base, WHALE_BROADCAST unset, broadcast false`);
   let failed = 0;
   const runs = [
-    { name: "lifi quote", provider: "lifi", skip: LIFI_SWAP_AND_START },
-    { name: "lifi start built from the live quote", provider: "lifi", firm: firmLifiStart },
+    { name: "lifi quote", provider: "lifi" },
     { name: "across", provider: "across" },
     { name: "relay", provider: "relay", skip: RELAY_QUOTE_ONLY },
   ];
-  for (const { name, provider, skip, firm: firmOverride } of runs) {
+  for (const { name, provider, skip } of runs) {
     raw.length = 0;
-    const result = await executeBridge({ ...deps, firm: firmOverride ?? firm }, { idempotencyKey: `proof-${name}`, route, provider });
+    const result = await executeBridge(deps, { idempotencyKey: `proof-${name}`, route, provider });
     if (skip) {
       const ok = result.status === "skipped" && result.reason === skip;
       failed += ok ? 0 : 1;

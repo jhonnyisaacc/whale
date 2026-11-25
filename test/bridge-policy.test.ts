@@ -199,20 +199,36 @@ const LIFI_SWAP_AND_START_ABI = parseAbi([
   "function forwardERC20Fees(address token, (address recipient, uint256 amount)[] fees)",
 ]);
 
-test("the signing policy refuses every LI.FI swap-then-bridge call, the real quote and the fee forwarder leak alike", () => {
+test("the real LI.FI swap-then-bridge quote decodes to the whole deposit, its fee step, and the minimum the facet bridges", () => {
   const call = decodeFunctionData({ abi: LIFI_SWAP_AND_START_ABI, data: swapAndStart.tx.data });
   assert.equal(call.functionName, "swapAndStartBridgeTokensViaAcrossV4");
+  const [bridge, , data] = call.args as unknown as [{ minAmount: bigint }, unknown, { outputAmountMultiplier: bigint }];
+  const terms = bridgeTerms(swapAndStart.tx.data);
+  assert.ok(terms);
+  assert.equal(terms.charge.token.toLowerCase(), USDC.toLowerCase());
+  assert.equal(terms.charge.amount, 2_000_000n);
+  assert.equal(terms.steps.length, 1);
+  assert.equal(terms.steps[0]?.callTo.toLowerCase(), FEE_FORWARDER.toLowerCase());
+  assert.equal(terms.minOutput, (bridge.minAmount * data.outputAmountMultiplier) / 10n ** 18n);
+  assert.equal(terms.recipient.toLowerCase(), OWN.toLowerCase());
+  assert.equal(terms.destinationCall, false);
+  sign(swapAndStart.tx)();
+});
+
+test("the signing policy refuses a LI.FI swap-then-bridge whose swap step leaks the deposit or calls an unlisted contract", () => {
+  const call = decodeFunctionData({ abi: LIFI_SWAP_AND_START_ABI, data: swapAndStart.tx.data });
   const [bridge, swaps, data] = call.args as unknown as [Record<string, unknown>, Record<string, unknown>[], Record<string, unknown>];
+  const rebuild = (nextBridge: Record<string, unknown>, nextSwaps: Record<string, unknown>[], nextData: Record<string, unknown>) =>
+    encodeFunctionData({ abi: LIFI_SWAP_AND_START_ABI, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [nextBridge, nextSwaps, nextData] as never });
   const forward = encodeFunctionData({ abi: LIFI_SWAP_AND_START_ABI, functionName: "forwardERC20Fees", args: [USDC as Hex, [{ recipient: ATTACKER, amount: 1_999_999n }]] });
-  const leak = encodeFunctionData({
-    abi: LIFI_SWAP_AND_START_ABI,
-    functionName: "swapAndStartBridgeTokensViaAcrossV4",
-    args: [{ ...bridge, minAmount: 1n }, [{ ...swaps[0], callTo: FEE_FORWARDER, approveTo: FEE_FORWARDER, fromAmount: 2_000_000n, callData: forward }], { ...data, outputAmountMultiplier: 2_000_000n * 10n ** 18n }] as never,
-  });
-  for (const [name, tx] of [["real quote", swapAndStart.tx], ["fee forwarder leak", { to: swapAndStart.tx.to, data: leak }]] as const) {
-    assert.equal(bridgeTerms(tx.data), null, name);
-    assert.throws(sign(tx), /bridge calldata is not a call the signing policy decodes/, name);
-  }
+  const cases: [string, Hex, RegExp][] = [
+    ["fee forwarder leak", rebuild({ ...bridge, minAmount: 1n }, [{ ...swaps[0], callData: forward }], { ...data, outputAmountMultiplier: 2_000_000n * 10n ** 18n }), /the LI\.FI fee steps forward 1999999, above 50 bps of the 2000000 the swap deposits/],
+    ["attacker swap step", rebuild(bridge, [{ ...swaps[0], callTo: ATTACKER, approveTo: ATTACKER }], data), /the LI\.FI swap step calls 0x00000000000000000000000000000000000bad00, which is not a listed LI\.FI step target/],
+    ["swap ends in another token", rebuild(bridge, [{ ...swaps[0], receivingAssetId: "0x4200000000000000000000000000000000000006" }], data), /bridge calldata is not a call the signing policy decodes/],
+  ];
+  for (const [name, leak, reason] of cases) assert.throws(sign({ to: swapAndStart.tx.to, data: leak }), reason, name);
+  assert.throws(sign(swapAndStart.tx, { charge: { token: USDC, amount: 1_995_000n } }), /bridge charges 2000000 of 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913, not the 1995000 reserved/);
+  assert.throws(sign(swapAndStart.tx, { chainId: 137 }), /chain 137 lists no LI\.FI swap step targets/);
 });
 
 test("a LI.FI start call may not set an output multiplier above par", () => {

@@ -129,6 +129,7 @@ pub struct LifiStep {
 
 struct LifiSwap {
     step: LifiStep,
+    receiving: [u8; 20],
     deposit: bool,
 }
 
@@ -141,6 +142,7 @@ fn lifi_swap(args: &[u8], start: usize) -> Option<LifiSwap> {
             amount: uint(args, start + 4 * 32)?,
             call_data: bytes_at(args, offset(args, start + 5 * 32, start)?)?.to_vec(),
         },
+        receiving: address(args, start + 3 * 32)?,
         deposit: boolean(args, start + 6 * 32)?,
     })
 }
@@ -150,6 +152,10 @@ fn lifi_swaps(args: &[u8], single: bool) -> Option<Vec<LifiSwap>> {
     if single {
         return Some(vec![lifi_swap(args, at)?]);
     }
+    lifi_swap_list(args, at)
+}
+
+fn lifi_swap_list(args: &[u8], at: usize) -> Option<Vec<LifiSwap>> {
     let count = usize::try_from(uint(args, at)?).ok()?;
     if count == 0 || count > (args.len() - at) / 32 {
         return None;
@@ -157,6 +163,22 @@ fn lifi_swaps(args: &[u8], single: bool) -> Option<Vec<LifiSwap>> {
     (1..=count)
         .map(|index| lifi_swap(args, offset(args, at + index * 32, at + 32)?))
         .collect()
+}
+
+fn lifi_deposit(swaps: &[LifiSwap], single: bool) -> Option<([u8; 20], u128)> {
+    let pulled: Vec<&LifiStep> = swaps
+        .iter()
+        .filter(|swap| single || swap.deposit)
+        .map(|swap| &swap.step)
+        .collect();
+    let token = pulled.first()?.sending;
+    if token == [0u8; 20] || pulled.iter().any(|step| step.sending != token) {
+        return None;
+    }
+    let amount = pulled
+        .iter()
+        .try_fold(0u128, |sum, step| sum.checked_add(step.amount))?;
+    Some((token, amount))
 }
 
 // The ERC20 entry points pull every swap marked requiresDeposit from the caller, and the single ones pull their one swap.
@@ -177,19 +199,7 @@ fn lifi_terms(head: &[u8], args: &[u8]) -> Option<SwapTerms> {
     let sell = if kind == "NativeToERC20" {
         ([0u8; 20], 0)
     } else {
-        let pulled: Vec<&LifiStep> = swaps
-            .iter()
-            .filter(|swap| single || swap.deposit)
-            .map(|swap| &swap.step)
-            .collect();
-        let token = pulled.first()?.sending;
-        if token == [0u8; 20] || pulled.iter().any(|step| step.sending != token) {
-            return None;
-        }
-        let amount = pulled
-            .iter()
-            .try_fold(0u128, |sum, step| sum.checked_add(step.amount))?;
-        (token, amount)
+        lifi_deposit(&swaps, single)?
     };
     Some(SwapTerms {
         route: Route::Lifi {
@@ -212,6 +222,7 @@ pub struct BridgeTerms {
     pub output_multiplier: Option<u128>,
     pub exclusive: bool,
     pub destination_call: bool,
+    pub steps: Vec<LifiStep>,
 }
 
 fn exclusive(args: &[u8], relayer: usize, period: usize) -> Option<bool> {
@@ -229,35 +240,67 @@ fn has_bytes(data: &[u8], at: usize, base: usize) -> Option<bool> {
     Some(!bytes_at(data, offset(data, at, base)?)?.is_empty())
 }
 
+const PAR: u128 = 1_000_000_000_000_000_000;
+
+fn at_multiplier(amount: u128, multiplier: u128) -> Option<u128> {
+    let whole = (amount / PAR).checked_mul(multiplier)?;
+    whole.checked_add((amount % PAR).checked_mul(multiplier)? / PAR)
+}
+
 fn lifi_bridge(head: &[u8], args: &[u8]) -> Option<BridgeTerms> {
-    if head
-        != selector(&format!(
+    let start = head
+        == selector(&format!(
             "startBridgeTokensViaAcrossV4({BRIDGE_DATA},{ACROSS_V4_DATA})"
-        ))
-    {
+        ));
+    let swap_first = head
+        == selector(&format!(
+            "swapAndStartBridgeTokensViaAcrossV4({BRIDGE_DATA},{LIFI_SWAP}[],{ACROSS_V4_DATA})"
+        ));
+    if !start && !swap_first {
         return None;
     }
     let bridge = offset(args, 0, 0)?;
-    let across = offset(args, 32, 0)?;
+    let across = offset(args, if start { 32 } else { 64 }, 0)?;
     let sending = address(args, bridge + 4 * 32)?;
     let recipient = address(args, bridge + 5 * 32)?;
     let min_amount = uint(args, bridge + 6 * 32)?;
     if address(args, across)? != recipient || address(args, across + 2 * 32)? != sending {
         return None;
     }
+    let multiplier = uint(args, across + 5 * 32)?;
+    let (charge, min_output, steps) = if start {
+        (
+            (sending, min_amount),
+            uint(args, across + 4 * 32)?,
+            Vec::new(),
+        )
+    } else {
+        let swaps = lifi_swap_list(args, offset(args, 32, 0)?)?;
+        if swaps.last()?.receiving != sending {
+            return None;
+        }
+        let charge = lifi_deposit(&swaps, false)?;
+        let min_output = at_multiplier(min_amount, multiplier)?;
+        (
+            charge,
+            min_output,
+            swaps.into_iter().map(|swap| swap.step).collect(),
+        )
+    };
     Some(BridgeTerms {
         provider: "lifi",
         destination_chain: uint(args, bridge + 7 * 32)?,
         recipient,
         refund: address(args, across + 32)?,
-        charge: (sending, min_amount),
+        charge,
         input_token: sending,
         output_token: address(args, across + 3 * 32)?,
-        min_output: uint(args, across + 4 * 32)?,
-        output_multiplier: Some(uint(args, across + 5 * 32)?),
+        min_output,
+        output_multiplier: Some(multiplier),
         exclusive: exclusive(args, across + 6 * 32, across + 9 * 32)?,
         destination_call: boolean(args, bridge + 9 * 32)?
             || has_bytes(args, across + 10 * 32, across)?,
+        steps,
     })
 }
 
@@ -278,6 +321,7 @@ fn across_deposit(head: &[u8], args: &[u8]) -> Option<BridgeTerms> {
         output_multiplier: None,
         exclusive: exclusive(args, 7 * 32, 10 * 32)?,
         destination_call: has_bytes(args, 11 * 32, 0)?,
+        steps: Vec::new(),
     })
 }
 
