@@ -63,6 +63,14 @@ function bitcoindIndexer() {
       if (accepted?.allowed !== true) throw new Error(`simulation rejected the transaction: ${accepted?.["reject-reason"] ?? "no answer"}`);
     },
     broadcast: async (signed) => rpc("sendrawtransaction", [Buffer.from(signed).toString("hex")]),
+    async transactionStatus(txid) {
+      try {
+        const found = await rpc("getrawtransaction", [txid, true]);
+        return typeof found?.confirmations === "number" && found.confirmations > 0 ? "landed" : "pending";
+      } catch {
+        return null;
+      }
+    },
   };
 }
 
