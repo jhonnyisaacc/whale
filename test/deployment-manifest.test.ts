@@ -73,6 +73,8 @@ test("config exposes the support map", () => {
   const config = loadConfig({ EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456" });
   assert.equal(config.supportByChain.monad, "disabled");
   assert.equal(config.supportByChain.base, "live");
+  assert.equal(config.supportByChain.bitcoin, "live");
+  assert.equal(loadConfig({ SUPPORT_TIERS: "bitcoin:dry_run" }).supportByChain.bitcoin, "dry_run");
 });
 
 test("a manifest's EVM fee limits drive both the executor and its Turnkey policy, and EVM_FEE_LIMITS_JSON may not disagree", () => {

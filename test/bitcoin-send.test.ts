@@ -242,6 +242,15 @@ test("a broadcast that may have gone out is committed in Postgres, so reconcilia
   }
 });
 
+test("a live BTC send is refused before any signer job when SUPPORT_TIERS holds bitcoin below live", () =>
+  withBitcoin({ SUPPORT_TIERS: "bitcoin:dry_run" }, [100_000n], async ({ send, jobs }) => {
+    const live = await send(btc("tier-live", "6000"));
+    assert.deepEqual([live.status, live.reason], ["skipped", "chain is not enabled for live sends"]);
+    assert.equal(jobs.length, 0);
+    const planned = await send(btc("tier-dry", "6000", OWNER, "dry_run"));
+    assert.equal(planned.status, "planned", JSON.stringify(planned));
+  }));
+
 test("BTC and other local sends share one daily USD cap", () =>
   withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send }) => {
     assert.equal((await send(btc("btc-first", "6000"))).status, "sent");
