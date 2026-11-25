@@ -55,6 +55,7 @@ function world(coins: bigint[]): World {
         state.broadcasts.push(hex(signed));
         return transactionId(signed);
       },
+      transactionStatus: async () => null,
     },
   };
   return state;
@@ -256,6 +257,31 @@ test("the real app policy accepts the plan the sender builds, across several inp
     assert.equal(jobs[0]?.payload.previous.length, 3);
   }, true));
 
+test("an aged bitcoin tx is read from the configured indexer", async () => {
+  let confirmed = false;
+  const id = "ab".repeat(32);
+  const server = createServer((request, response) => {
+    if (request.url !== `/tx/${id}`) {
+      response.writeHead(404).end("missing");
+      return;
+    }
+    response.end(JSON.stringify({ status: { confirmed } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const config = loadConfig({ BITCOIN_NETWORK: "regtest", BITCOIN_ESPLORA_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
+  const aged = { chainKey: "bitcoin", txHash: id, from: null, nonce: null };
+  try {
+    assert.equal(await lookupAgedTx(config, aged), "pending");
+    confirmed = true;
+    assert.equal(await lookupAgedTx(config, aged), "landed");
+    assert.equal(await lookupAgedTx(config, { ...aged, txHash: "cd".repeat(32) }), null);
+    assert.equal(await lookupAgedTx(loadConfig({}), aged), null, "bitcoin stays unreadable until BITCOIN_NETWORK is set");
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 async function withJournalFault(fault: string, run: (input: { databaseUrl: string; row: (key: string) => Promise<Record<string, unknown> | undefined> }) => Promise<void>): Promise<void> {
   const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
@@ -273,20 +299,47 @@ async function withJournalFault(fault: string, run: (input: { databaseUrl: strin
   }
 }
 
-test("a live send whose journal commit fails keeps its txid on the row, so reconciliation keeps the spend", { skip: !process.env.TEST_DATABASE_URL }, () =>
-  withJournalFault("NEW.status = 'committed'", async ({ databaseUrl, row }) => {
-    const env = { WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl };
-    await withBitcoin(env, [100_000n], async ({ send, world }) => {
-      const sent = await send(btc("commit-lost", "6000"));
-      assert.equal(sent.status, "sent", JSON.stringify(sent));
-      assert.deepEqual(await row("commit-lost"), { status: "reserved", tx_hash: sent.txid, chain_key: "bitcoin" });
-      const actions: string[] = [];
-      await reconcileReserved(databaseUrl, 0, (tx) => lookupAgedTx(loadConfig(env), tx), (entry) => void actions.push(`${entry.idempotencyKey}:${entry.action}`));
-      assert.deepEqual(actions, ["commit-lost:keep"]);
-      assert.equal((await row("commit-lost"))?.status, "reserved");
-      assert.equal((await send(btc("second", "6000"))).reason, "daily cap 10 USD");
-      assert.equal(world.broadcasts.length, 1);
+test("a live send whose journal commit fails reports it, and reconciliation commits the row once the indexer confirms the tx", { skip: !process.env.TEST_DATABASE_URL }, () =>
+  withJournalFault("NEW.status = 'committed' AND nextval('fault_seq') = 1", async ({ databaseUrl, row }) => {
+    await (await poolFor(databaseUrl)).query("CREATE SEQUENCE fault_seq");
+    let confirmed = false;
+    let txid = "";
+    const server = createServer((request, response) => {
+      if (request.url !== `/tx/${txid}`) {
+        response.writeHead(404).end("missing");
+        return;
+      }
+      response.end(JSON.stringify({ status: { confirmed } }));
     });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const esplora = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const lookup = (tx: Parameters<typeof lookupAgedTx>[1]) => lookupAgedTx(loadConfig({ BITCOIN_NETWORK: "regtest", BITCOIN_ESPLORA_URL: esplora }), tx);
+    try {
+      await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl }, [100_000n], async ({ send, world }) => {
+        const sent = await send(btc("commit-lost", "6000"));
+        assert.equal(sent.status, "sent", JSON.stringify(sent));
+        assert.match(sent.reason, /broadcast [0-9a-f]{64}, but the spend journal did not commit/);
+        txid = sent.txid ?? "";
+        assert.deepEqual(await row("commit-lost"), { status: "reserved", tx_hash: sent.txid, chain_key: "bitcoin" });
+        const actions: string[] = [];
+        const settle = async () => {
+          actions.length = 0;
+          await reconcileReserved(databaseUrl, 0, lookup, (entry) => void actions.push(`${entry.idempotencyKey}:${entry.action}`));
+        };
+        await settle();
+        assert.deepEqual(actions, ["commit-lost:keep"], "an unconfirmed tx stays reserved and still counts");
+        assert.equal((await row("commit-lost"))?.status, "reserved");
+        confirmed = true;
+        await settle();
+        assert.deepEqual(actions, ["commit-lost:commit"]);
+        assert.equal((await row("commit-lost"))?.status, "committed");
+        assert.equal((await send(btc("second", "6000"))).reason, "daily cap 10 USD");
+        assert.equal(world.broadcasts.length, 1);
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
   }));
 
 test("a live send whose txid cannot be recorded is released and never reaches the indexer", { skip: !process.env.TEST_DATABASE_URL }, () =>

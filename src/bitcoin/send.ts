@@ -46,6 +46,20 @@ function skipped(reason: string, plan?: BitcoinPlanView): BitcoinSendResult {
   return { kind: "send_bitcoin", status: "skipped", reason, jobs: [], ...(plan ? { plan } : {}) };
 }
 
+// A failed commit stays in the result and leaves the row reserved with its txid, so reconciliation can finish it.
+async function noteCommit(deps: BitcoinSendDeps, key: string): Promise<string> {
+  try {
+    await deps.spend.commit(key);
+    return "";
+  } catch {
+    return "the spend journal did not commit";
+  }
+}
+
+function withCommit(reason: string, note: string): string {
+  return note ? `${reason}, but ${note}` : reason;
+}
+
 async function signBitcoin(deps: BitcoinSendDeps, unsigned: Uint8Array, previous: readonly Uint8Array[], spent: BitcoinSpend, jobs: SignerJobRecord[]): Promise<Uint8Array> {
   const { id, answer } = await deps.queue.submit({ kind: "bitcoin", payload: { transaction: hex(unsigned), previous: previous.map(hex) } });
   if (answer.decision === "refused") {
@@ -94,20 +108,25 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
     throw error;
   });
   if (deps.hold) {
-    await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
-    return { kind: "send_bitcoin", status: "signed", reason: HELD, jobs, plan, txid, signedTransaction: hex(signed) };
+    const note = await noteCommit(deps, command.idempotencyKey);
+    return { kind: "send_bitcoin", status: "signed", reason: withCommit(HELD, note), jobs, plan, txid, signedTransaction: hex(signed) };
   }
   await indexer.simulate(signed).catch(async (error: unknown) => {
     await release();
     throw error;
   });
   await indexer.broadcast(signed).catch(async (error: unknown) => {
-    if (error instanceof BroadcastRefused) await release();
-    else await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
-    throw error;
+    if (error instanceof BroadcastRefused) {
+      await release();
+      throw error;
+    }
+    const note = await noteCommit(deps, command.idempotencyKey);
+    if (!note) throw error;
+    const message = error instanceof Error ? error.message : "broadcast failed";
+    throw new Error(`${message}, but ${note}`);
   });
-  await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
-  return { kind: "send_bitcoin", status: "sent", reason: `broadcast ${txid}`, jobs, plan, txid };
+  const note = await noteCommit(deps, command.idempotencyKey);
+  return { kind: "send_bitcoin", status: "sent", reason: withCommit(`broadcast ${txid}`, note), jobs, plan, txid };
 }
 
 export function bitcoinSender(deps: BitcoinSendDeps): (command: SendBitcoin) => Promise<BitcoinSendResult> {
