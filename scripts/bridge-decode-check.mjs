@@ -20,9 +20,14 @@ const env = { ...process.env, WHALE_SIGNER_PASSPHRASE: "decode-check-only" };
 
 async function quote(route, owner) {
   const query = { fromChain: String(route.from), toChain: String(route.to), fromToken: usdc(route.from), toToken: usdc(route.to), fromAmount: String(AMOUNT), fromAddress: owner, toAddress: owner, allowBridges: "across" };
-  const response = await fetch(`https://li.quest/v1/quote?${new URLSearchParams(query)}`);
-  if (!response.ok) throw new Error(`li.quest answered ${response.status} for ${route.from} to ${route.to}`);
-  return (await response.json()).transactionRequest;
+  try {
+    const response = await fetch(`https://li.quest/v1/quote?${new URLSearchParams(query)}`);
+    if (!response.ok) return { unquotable: `li.quest answered ${response.status}` };
+    const tx = (await response.json()).transactionRequest;
+    return tx ? { tx } : { unquotable: "li.quest returned no transactionRequest" };
+  } catch (error) {
+    return { unquotable: `li.quest did not answer: ${error.message}` };
+  }
 }
 
 function appDecision(route, owner, tx) {
@@ -55,16 +60,23 @@ try {
   const bridges = Object.fromEntries(ROUTES.map((route) => [route.from, BRIDGE_CONTRACTS[route.from]]));
   writeFileSync(files.policy, JSON.stringify({ version: 1, evm: { chains, bridges, maxBridgeFeeBps: FEE_CAP_BPS, maxValueWei: DEFAULT_MAX_VALUE_WEI.toString(), maxFeeWei: "10000000000000000", dailyLimits } }));
   let failed = 0;
+  let quoted = 0;
   for (const route of ROUTES) {
-    const tx = await quote(route, owner);
+    const { tx, unquotable } = await quote(route, owner);
+    if (!tx) {
+      console.log(JSON.stringify({ route: `${route.from} to ${route.to}`, outcome: "unquotable", why: unquotable }));
+      continue;
+    }
+    quoted += 1;
     const app = appDecision(route, owner, tx);
     const signer = signerDecision(route, tx, files);
     const decoded = bridgeTerms(tx.data) !== null && !signer.reasons.some((reason) => reason.includes(UNREADABLE));
     const pass = decoded && app.decision === signer.decision && (route.expect === "decoded" || app.decision === "signed");
     failed += pass ? 0 : 1;
-    console.log(JSON.stringify({ route: `${route.from} to ${route.to}`, selector: tx.data.slice(0, 10), to: tx.to, expect: route.expect, decoded, app, signer, broadcast: false, pass }));
+    console.log(JSON.stringify({ route: `${route.from} to ${route.to}`, outcome: pass ? "pass" : "fail", selector: tx.data.slice(0, 10), to: tx.to, expect: route.expect, decoded, app, signer, broadcast: false, pass }));
   }
-  if (failed > 0) process.exit(1);
+  if (quoted === 0) console.log("no route could be quoted");
+  if (failed > 0 || quoted === 0) process.exit(1);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
