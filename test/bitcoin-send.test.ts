@@ -10,8 +10,11 @@ import { privateKeyToAccount } from "viem/accounts";
 import { BroadcastRefused, RAW_TX_OPTIONS, transactionId, type BitcoinIndexer, type Utxo } from "../src/bitcoin/esplora.js";
 import type { BitcoinPolicy } from "../src/bitcoin/send.js";
 import { BTC_PARAMS, sameScript } from "../src/bitcoin/wallet.js";
+import { lookupAgedTx } from "../src/broadcast.js";
+import { loadConfig } from "../src/config.js";
 import { localSender } from "../src/local-sends.js";
 import { startSignerQueue, type SignerQueue } from "../src/signer-queue.js";
+import { poolFor, reconcileReserved } from "../src/spend.js";
 
 const TOKEN = "t".repeat(40);
 const KEY = new Uint8Array(32).fill(0x11);
@@ -52,6 +55,7 @@ function world(coins: bigint[]): World {
         state.broadcasts.push(hex(signed));
         return transactionId(signed);
       },
+      transactionStatus: async () => null,
     },
   };
   return state;
@@ -261,3 +265,97 @@ test("the real app policy accepts the plan the sender builds, across several inp
     assert.equal(result.plan?.inputs, 3);
     assert.equal(jobs[0]?.payload.previous.length, 3);
   }, true));
+
+test("an aged bitcoin tx is read from the configured indexer", async () => {
+  let confirmed = false;
+  const id = "ab".repeat(32);
+  const server = createServer((request, response) => {
+    if (request.url !== `/tx/${id}`) {
+      response.writeHead(404).end("missing");
+      return;
+    }
+    response.end(JSON.stringify({ status: { confirmed } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const config = loadConfig({ BITCOIN_NETWORK: "regtest", BITCOIN_ESPLORA_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
+  const aged = { chainKey: "bitcoin", txHash: id, from: null, nonce: null };
+  try {
+    assert.equal(await lookupAgedTx(config, aged), "pending");
+    confirmed = true;
+    assert.equal(await lookupAgedTx(config, aged), "landed");
+    assert.equal(await lookupAgedTx(config, { ...aged, txHash: "cd".repeat(32) }), null);
+    assert.equal(await lookupAgedTx(loadConfig({}), aged), null, "bitcoin stays unreadable until BITCOIN_NETWORK is set");
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+async function withJournalFault(fault: string, run: (input: { databaseUrl: string; row: (key: string) => Promise<Record<string, unknown> | undefined> }) => Promise<void>): Promise<void> {
+  const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await admin.connect();
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const databaseUrl = `${process.env.TEST_DATABASE_URL}?options=${encodeURIComponent(`-c search_path=${schema}`)}`;
+  try {
+    await poolFor(databaseUrl);
+    await admin.query(`CREATE FUNCTION ${schema}.fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF ${fault} THEN RAISE EXCEPTION 'journal is down'; END IF; RETURN NEW; END $$`);
+    await admin.query(`CREATE TRIGGER fault BEFORE UPDATE ON ${schema}.spend_journal FOR EACH ROW EXECUTE FUNCTION ${schema}.fault()`);
+    await run({ databaseUrl, row: async (key) => (await admin.query(`SELECT status, tx_hash, chain_key FROM ${schema}.spend_journal WHERE idempotency_key = $1`, [key])).rows[0] });
+  } finally {
+    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  }
+}
+
+test("a live send whose journal commit fails reports it, and reconciliation commits the row once the indexer confirms the tx", { skip: !process.env.TEST_DATABASE_URL }, () =>
+  withJournalFault("NEW.status = 'committed' AND nextval('fault_seq') = 1", async ({ databaseUrl, row }) => {
+    await (await poolFor(databaseUrl)).query("CREATE SEQUENCE fault_seq");
+    let confirmed = false;
+    let txid = "";
+    const server = createServer((request, response) => {
+      if (request.url !== `/tx/${txid}`) {
+        response.writeHead(404).end("missing");
+        return;
+      }
+      response.end(JSON.stringify({ status: { confirmed } }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const esplora = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const lookup = (tx: Parameters<typeof lookupAgedTx>[1]) => lookupAgedTx(loadConfig({ BITCOIN_NETWORK: "regtest", BITCOIN_ESPLORA_URL: esplora }), tx);
+    try {
+      await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl }, [100_000n], async ({ send, world }) => {
+        const sent = await send(btc("commit-lost", "6000"));
+        assert.equal(sent.status, "sent", JSON.stringify(sent));
+        assert.match(sent.reason, /broadcast [0-9a-f]{64}, but the spend journal did not commit/);
+        txid = sent.txid ?? "";
+        assert.deepEqual(await row("commit-lost"), { status: "reserved", tx_hash: sent.txid, chain_key: "bitcoin" });
+        const actions: string[] = [];
+        const settle = async () => {
+          actions.length = 0;
+          await reconcileReserved(databaseUrl, 0, lookup, (entry) => void actions.push(`${entry.idempotencyKey}:${entry.action}`));
+        };
+        await settle();
+        assert.deepEqual(actions, ["commit-lost:keep"], "an unconfirmed tx stays reserved and still counts");
+        assert.equal((await row("commit-lost"))?.status, "reserved");
+        confirmed = true;
+        await settle();
+        assert.deepEqual(actions, ["commit-lost:commit"]);
+        assert.equal((await row("commit-lost"))?.status, "committed");
+        assert.equal((await send(btc("second", "6000"))).reason, "daily cap 10 USD");
+        assert.equal(world.broadcasts.length, 1);
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }));
+
+test("a live send whose txid cannot be recorded is released and never reaches the indexer", { skip: !process.env.TEST_DATABASE_URL }, () =>
+  withJournalFault("NEW.tx_hash IS NOT NULL", async ({ databaseUrl, row }) => {
+    await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl }, [100_000n], async ({ send, world }) => {
+      await assert.rejects(send(btc("unrecorded", "6000")), /journal is down/);
+      assert.deepEqual([world.simulated, world.broadcasts], [[], []]);
+      assert.deepEqual(await row("unrecorded"), { status: "released", tx_hash: null, chain_key: null });
+    });
+  }));

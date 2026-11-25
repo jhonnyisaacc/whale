@@ -55,6 +55,18 @@ test("support tiers default monad off and zksync to dry-run, with explicit overr
   const support = supportByChain(["base", "monad"], "base:dry_run");
   assert.equal(support.base, "dry_run");
   assert.throws(() => supportByChain(["base"], "base:yolo"), /SUPPORT_TIERS/);
+  assert.throws(() => supportByChain(["base"], "base:live:extra"), /SUPPORT_TIERS/);
+});
+
+test("SUPPORT_TIERS refuses a key that names no chain, so a typo cannot leave a chain live", () => {
+  const env = { EXECUTOR_AUTH_TOKEN: "executor-token-123456", RESOLVER_AUTH_TOKEN: "resolver-token-123456" };
+  assert.throws(() => loadConfig({ ...env, SUPPORT_TIERS: "bitcon:dry_run" }), /SUPPORT_TIERS names unknown chain bitcon/);
+  assert.throws(() => loadConfig({ ...env, SUPPORT_TIERS: "base:live,arbitrum1:disabled" }), /unknown chain arbitrum1/);
+  assert.throws(() => loadConfig({ ...env, SUPPORT_TIERS: "toString:disabled" }), /unknown chain toString/);
+  const config = loadConfig({ ...env, SUPPORT_TIERS: "bitcoin:dry_run,hypercore:disabled" });
+  assert.equal(config.supportByChain.bitcoin, "dry_run");
+  assert.equal(config.supportByChain.hypercore, "disabled");
+  assert.equal(loadConfig(env).supportByChain.bitcoin, "live");
 });
 
 test("config exposes the support map", () => {
