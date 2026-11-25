@@ -264,6 +264,15 @@ test("a bridge that landed keeps its reservation and reports sent when the spend
   assert.deepEqual(run.spend, ["reserve bridge:k1 2", "record bridge:k1 pending"]);
 });
 
+test("a bridge whose spend record fails sends no bridge transaction and releases its reservation", async () => {
+  const run = harness({ broadcast: true, allowance: 2_000_000n });
+  run.deps.spend = { ...run.deps.spend, record: async () => Promise.reject(new Error("db connection reset")) };
+  const result = await executeBridge(run.deps, order());
+  assert.equal(result.status, "skipped", JSON.stringify(result));
+  assert.deepEqual(run.sent, []);
+  assert.deepEqual(run.spend, ["reserve bridge:k1 2", "release bridge:k1"]);
+});
+
 test("reconcile keeps a sent bridge reserved until its source tx lands, after a confirm timeout or a failed commit", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const databaseUrl = process.env.TEST_DATABASE_URL as string;
   const day = `${2100 + Math.floor(Math.random() * 800)}-03-01`;
@@ -291,6 +300,15 @@ test("reconcile keeps a sent bridge reserved until its source tx lands, after a 
       assert.equal(await spend.reserve(`bridge:${randomUUID()}`, 9), "cap", `${failure}: the pending bridge still counts against the bridge cap`);
       assert.equal(await settle("landed"), "committed", `${failure}: a landed source tx commits the bridge`);
     }
+    const approvalOnly = harness({ broadcast: true, allowance: 0n, mine: false });
+    approvalOnly.deps.spend = bridgeSpend(spendJournal(databaseUrl, 100, () => day), 10);
+    const approvalId = randomUUID();
+    const approvalKey = `bridge:${approvalId}`;
+    keys.push(approvalKey);
+    assert.equal((await executeBridge(approvalOnly.deps, { idempotencyKey: approvalId, route, provider: "lifi" })).status, "skipped");
+    await client.query("UPDATE spend_journal SET reserved_at = now() - interval '1 hour' WHERE idempotency_key = $1", [approvalKey]);
+    await reconcileReserved(databaseUrl, 10, async () => "pending", () => undefined);
+    assert.equal((await client.query<{ status: string }>("SELECT status FROM spend_journal WHERE idempotency_key = $1", [approvalKey])).rows[0]?.status, "released");
   } finally {
     await client.query("DELETE FROM spend_journal WHERE spent_on = $1::date", [day]);
     await client.query("DELETE FROM signed_tx WHERE idempotency_key = ANY($1)", [keys]);
