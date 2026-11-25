@@ -7,6 +7,7 @@ import type { ChainRef, TxRecord } from "../domain.js";
 import { BroadcastError } from "../executor.js";
 import type { EvmSignInput } from "../managed-signer.js";
 import type { BridgeProvider, BridgeRoute } from "../rebalance.js";
+import { guardRpc } from "../rpc-reason.js";
 import { redactError } from "../redact.js";
 import { readTransport } from "../rpc.js";
 import { BRIDGE_CONTRACTS, bridgeTerms, openAcrossDeposit, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
@@ -180,12 +181,12 @@ export async function executeBridge(deps: BridgeDeps, order: BridgeOrder): Promi
 
 export function viemBridgeReads(chainId: number, rpcs: readonly string[]): BridgeReads {
   const client = createPublicClient({ chain: evmChain(chainId, rpcs), transport: readTransport(chainId, rpcs) });
-  return {
+  return guardRpc<BridgeReads>({
     allowance: (token, owner, spender) => client.readContract({ address: token, abi: erc20Abi, functionName: "allowance", args: [owner, spender] }),
     async simulate(from, calls) {
       const { results } = await client.simulateCalls({ account: from, calls: calls.map(({ to, data, value }) => ({ to, data, value })) });
       if (results.some((result) => result.status !== "success")) throw new Error("a simulated call reverted");
       return results.map((result) => result.gasUsed);
     },
-  };
+  });
 }

@@ -11,6 +11,7 @@ import type { EvmSignInput, TransactionSigner } from "../managed-signer.js";
 import { evmNonces, type NonceManager } from "../nonce.js";
 import { redactError } from "../redact.js";
 import { anyOk, assertChainId, firstOk, readTransport, solanaConnection } from "../rpc.js";
+import { guardRpc } from "../rpc-reason.js";
 import { WSOL_MINT } from "../signing-policy.js";
 
 export const NATIVE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
@@ -113,7 +114,7 @@ function unsupportedMethod(error: unknown): boolean {
 
 export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc {
   const client = createPublicClient({ chain: evmChain(chainId, rpcs), transport: readTransport(chainId, rpcs) });
-  return {
+  return guardRpc<EvmRpc>({
     async fees() {
       const fees = await client.estimateFeesPerGas();
       return { maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas };
@@ -165,7 +166,7 @@ export function createViemRpc(chainId: number, rpcs: readonly string[]): EvmRpc 
       return client.readContract({ address: token as Hex, abi: erc20Abi, functionName: "balanceOf", args: [owner] });
     },
     checkChain: () => assertChainId(chainId, rpcs),
-  };
+  });
 }
 
 export type TxMeta = {
@@ -199,7 +200,7 @@ function historyStatus(connections: readonly SolanaConnection[], signature: stri
 
 export function solanaRpcOver(connections: readonly SolanaConnection[]): SolanaRpc {
   const read = <T>(call: (connection: SolanaConnection) => Promise<T>) => firstOk(connections.map((connection) => () => call(connection)));
-  return {
+  return guardRpc<SolanaRpc>({
     simulate: (tx) => read(async (connection) => (await connection.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true })).value.err),
     async sendRaw(signed) {
       await anyOk(connections.map((connection) => async () => void (await connection.sendRawTransaction(signed))));
@@ -223,7 +224,7 @@ export function solanaRpcOver(connections: readonly SolanaConnection[]): SolanaR
         }
         return null;
       }),
-  };
+  });
 }
 
 export function defaultIo(config: AppConfig): SendIo {

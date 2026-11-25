@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -173,4 +174,10 @@ test("a Hermes stdio entry the Hermes loader would skip fails", () => {
 test("a Hermes server path under the Hermes plugin root variable passes", () => {
   accepts((dir) => editHermesServer(dir, (server) => { server.args = ["${PLUGIN_ROOT}/scripts/mcp-server.mjs"]; }));
   accepts((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).cwd = "./"; }));
+});
+
+test("no tracked file names a system password file, which the Hermes install scan blocks", () => {
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repo, encoding: "utf8" }).split("\0").filter(Boolean);
+  const named = tracked.filter((file) => existsSync(path.join(repo, file)) && /\/etc\/(?:passwd|shadow)/i.test(readFileSync(path.join(repo, file), "latin1")));
+  assert.deepEqual(named, []);
 });
