@@ -1,5 +1,5 @@
 {
-  "version": "2.22",
+  "version": "2.25",
   "children": [
     {
       "type": "frame",
@@ -865,7 +865,7 @@
                       "id": "eh9Rs",
                       "name": "Label",
                       "fill": "$ink",
-                      "content": "open source · MCP · 15 networks",
+                      "content": "open source · MCP · 16 networks",
                       "fontFamily": "$font-mono",
                       "fontSize": 13,
                       "fontWeight": "normal"
@@ -893,7 +893,7 @@
                   "fill": "$muted",
                   "textGrowth": "fixed-width",
                   "width": 560,
-                  "content": "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
+                  "content": "Quote, swap and transfer, trade Hyperliquid perps, and hold and send native BTC (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 16 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid, Bitcoin and more — through one command shape.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-display",
                   "fontSize": 20,
@@ -27354,7 +27354,7 @@
                       "id": "AWiYY",
                       "name": "Sub",
                       "fill": "$muted",
-                      "content": "For EVM and Solana",
+                      "content": "For EVM, Solana, HyperCore, BTC",
                       "fontFamily": "$font-mono",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -27545,7 +27545,7 @@
                       "fill": "$ink",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "15 (EVM + Solana + HyperCore)",
+                      "content": "16 (EVM + Solana + HyperCore + Bitcoin)",
                       "lineHeight": 1.4,
                       "textAlign": "center",
                       "fontFamily": "$font-mono",
@@ -27930,7 +27930,7 @@
                             "testId": "issue-mcp-server-ts"
                           },
                           "fill": "$violet",
-                          "content": "execute.ts:147 · commands.ts:131",
+                          "content": "execute.ts:147 · commands.ts:143",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -28671,7 +28671,7 @@
                   "id": "eR64I",
                   "name": "Headline",
                   "fill": "$ink",
-                  "content": "15 networks.\nOne command shape.",
+                  "content": "16 networks.\nOne command shape.",
                   "lineHeight": 0.95,
                   "fontFamily": "$font-display",
                   "fontSize": 96,
@@ -28687,7 +28687,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 520,
-              "content": "Same verbs everywhere: quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking. Tagged networks have limits today.",
+              "content": "Quote, swap and transfer on every network, Hyperliquid perps on HyperCore and native BTC send on Bitcoin (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking. Tagged networks have limits today.",
               "lineHeight": 1.5,
               "fontFamily": "$font-display",
               "fontSize": 17,
@@ -29173,7 +29173,7 @@
             {
               "type": "frame",
               "id": "wCwTE",
-              "name": "Non-EVM · 2Group",
+              "name": "Non-EVM · 3Group",
               "width": "fill_container",
               "layout": "vertical",
               "gap": 16,
@@ -29189,7 +29189,7 @@
                   "id": "yiw4E",
                   "name": "GroupLabel",
                   "fill": "$muted",
-                  "content": "Non-EVM · 2",
+                  "content": "Non-EVM · 3",
                   "fontFamily": "$font-mono",
                   "fontSize": 12,
                   "fontWeight": "normal"
@@ -29253,6 +29253,35 @@
                       "descendants": {
                         "k7RLXp": {
                           "content": "orders only"
+                        }
+                      }
+                    },
+                    {
+                      "id": "SKtiE",
+                      "type": "ref",
+                      "ref": "RoI5s",
+                      "name": "Chip Bitcoin",
+                      "descendants": {
+                        "pgTvz": {
+                          "fill": "$lavender"
+                        },
+                        "CvhT2": {
+                          "enabled": true,
+                          "icon": "currency-btc"
+                        },
+                        "as2Tg": {
+                          "content": "Bitcoin"
+                        }
+                      }
+                    },
+                    {
+                      "id": "fDevc",
+                      "type": "ref",
+                      "ref": "UM68F",
+                      "name": "Badge hold + send",
+                      "descendants": {
+                        "k7RLXp": {
+                          "content": "hold + send"
                         }
                       }
                     }
@@ -56795,7 +56824,7 @@
               "id": "Pf8pS",
               "name": "Label",
               "fill": "$ink",
-              "content": "open source · MCP · 15 networks",
+              "content": "open source · MCP · 16 networks",
               "fontFamily": "$font-mono",
               "fontSize": 12,
               "fontWeight": "normal"
@@ -56823,7 +56852,7 @@
           "fill": "$muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 15 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid and more — through one command shape.",
+          "content": "Quote, swap and transfer, trade Hyperliquid perps, and hold and send native BTC (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking, across 16 networks — Ethereum, Solana, Base, Arbitrum, Hyperliquid, Bitcoin and more — through one command shape.",
           "lineHeight": 1.5,
           "fontFamily": "$font-display",
           "fontSize": 17,
@@ -58140,7 +58169,7 @@
                           "id": "GOCLW",
                           "name": "Value",
                           "fill": "$ink",
-                          "content": "15",
+                          "content": "16",
                           "fontFamily": "$font-mono",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -58167,7 +58196,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "EVM+SOL+HL",
+                          "content": "EVM+SOL +HL+BTC",
                           "lineHeight": 1.4,
                           "textAlign": "center",
                           "fontFamily": "$font-mono",
@@ -58531,7 +58560,7 @@
                             "type": "interactive"
                           },
                           "fill": "$violet",
-                          "content": "execute.ts:147 · commands.ts:131",
+                          "content": "execute.ts:147 · commands.ts:143",
                           "fontFamily": "$font-mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -59270,7 +59299,7 @@
           "fill": "$ink",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "15 networks. One command shape.",
+          "content": "16 networks. One command shape.",
           "lineHeight": 0.95,
           "fontFamily": "$font-display",
           "fontSize": 52,
@@ -60000,7 +60029,7 @@
               "id": "Bf8Qy",
               "name": "GroupLabel",
               "fill": "$muted",
-              "content": "Non-EVM · 2",
+              "content": "Non-EVM · 3",
               "fontFamily": "$font-mono",
               "fontSize": 12,
               "fontWeight": "normal"
@@ -60109,6 +60138,63 @@
                   "descendants": {
                     "k7RLXp": {
                       "content": "orders only",
+                      "fontSize": 11
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "o520wp",
+              "name": "ChipRow",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "Dvbsw",
+                  "type": "ref",
+                  "ref": "RoI5s",
+                  "name": "Chip Bitcoin",
+                  "height": 48,
+                  "padding": [
+                    10,
+                    16,
+                    10,
+                    10
+                  ],
+                  "descendants": {
+                    "me4NY": {
+                      "width": 26,
+                      "height": 26
+                    },
+                    "pgTvz": {
+                      "fill": "$lavender",
+                      "x": 0,
+                      "y": 0,
+                      "width": 26,
+                      "height": 26
+                    },
+                    "CvhT2": {
+                      "enabled": true,
+                      "icon": "currency-btc",
+                      "width": 24,
+                      "height": 24
+                    },
+                    "as2Tg": {
+                      "content": "Bitcoin",
+                      "fontSize": 15
+                    }
+                  }
+                },
+                {
+                  "id": "Z9gnm",
+                  "type": "ref",
+                  "ref": "UM68F",
+                  "name": "Badge hold + send",
+                  "descendants": {
+                    "k7RLXp": {
+                      "content": "hold + send",
                       "fontSize": 11
                     }
                   }
@@ -64193,7 +64279,7 @@
                           "id": "wTwVM",
                           "name": "Sub",
                           "fill": "$muted",
-                          "content": "For EVM and Solana",
+                          "content": "For EVM, Solana, HyperCore, BTC",
                           "fontFamily": "$font-mono",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -64384,7 +64470,7 @@
                           "fill": "$ink",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "15 (EVM + Solana + HyperCore)",
+                          "content": "16 (EVM + Solana + HyperCore + Bitcoin)",
                           "lineHeight": 1.4,
                           "textAlign": "center",
                           "fontFamily": "$font-mono",
@@ -64768,7 +64854,7 @@
                                 "type": "interactive"
                               },
                               "fill": "$violet",
-                              "content": "execute.ts:147 · commands.ts:131",
+                              "content": "execute.ts:147 · commands.ts:143",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
