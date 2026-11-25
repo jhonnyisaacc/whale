@@ -14,9 +14,10 @@ export function supportByChain(chainKeys: Iterable<string>, raw: string | undefi
   for (const key of chainKeys) out[key] = defaultSupportTier(key);
   if (!raw) return out;
   for (const part of raw.split(",").map((item) => item.trim()).filter(Boolean)) {
-    const [key, tier] = part.split(":");
+    const [key, tier, ...rest] = part.split(":");
     const parsed = supportTierSchema.safeParse(tier);
-    if (!key || !parsed.success) throw new Error("SUPPORT_TIERS entries look like chain:live, chain:dry_run, or chain:disabled");
+    if (!key || !parsed.success || rest.length > 0) throw new Error("SUPPORT_TIERS entries look like chain:live, chain:dry_run, or chain:disabled");
+    if (!Object.hasOwn(out, key)) throw new Error(`SUPPORT_TIERS names unknown chain ${key}. Known: ${Object.keys(out).join(", ")}`);
     out[key] = parsed.data;
   }
   return out;
