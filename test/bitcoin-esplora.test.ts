@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { bitcoinBalance } from "../src/bitcoin/read.js";
-import { BroadcastRefused, esploraIndexer, parseBalance, parseFeeRate, parseMempoolTest, parseTransactionStatus, parseUtxos, transactionId } from "../src/bitcoin/esplora.js";
+import { esploraIndexer, parseBalance, parseFeeRate, parseMempoolTest, parseTransactionStatus, parseUtxos, SimulationRefused, transactionId } from "../src/bitcoin/esplora.js";
 
 const fixture = (name: string) => readFileSync(new URL(`../../test/fixtures/bitcoin/${name}`, import.meta.url), "utf8");
 const TX_ID = "65c907744b0852012403a4096688d2d2ac7c063d4dca8d8e3ece4b8e8a9c8539";
@@ -67,8 +67,8 @@ test("broadcast posts the hex and accepts only the transaction's own txid back",
   assert.equal(await esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { body: TX_ID } }, calls)).broadcast(signed), TX_ID);
   assert.deepEqual(calls, [`POST /api/tx ${fixture("tx.hex").trim()}`]);
   await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { body: PREV_ID } })).broadcast(signed), /answered txid 711b/);
-  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 400, body: "bad-txns-inputs-missingorspent" } })).broadcast(signed), (error: unknown) => error instanceof BroadcastRefused && /missingorspent/.test(error.message));
-  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 502, body: "" } })).broadcast(signed), (error: unknown) => !(error instanceof BroadcastRefused));
+  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 400, body: "bad-txns-inputs-missingorspent" } })).broadcast(signed), /esplora broadcast failed 400: bad-txns-inputs-missingorspent/);
+  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({ "POST /api/tx": { status: 502, body: "" } })).broadcast(signed), /esplora broadcast failed 502/);
 });
 
 test("simulate posts the hex to txs/test and passes only an allowed answer for the same txid", async () => {
@@ -77,8 +77,9 @@ test("simulate posts the hex to txs/test and passes only an allowed answer for t
   const calls: string[] = [];
   await esploraIndexer("https://esplora.test/api", fakeEsplora(answer({ allowed: true, vsize: 141, fees: { base: 0.00000282 } }), calls)).simulate(signed);
   assert.deepEqual(calls, [`POST /api/txs/test ${JSON.stringify([fixture("tx.hex").trim()])}`]);
-  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora(answer({ allowed: false, vsize: null, fees: null, "reject-reason": "missing-inputs" }))).simulate(signed), /simulation rejected the transaction: missing-inputs/);
-  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({})).simulate(signed), /txs\/test answered 404/, "an Esplora without testmempoolaccept stops the send");
+  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora(answer({ allowed: false, vsize: null, fees: null, "reject-reason": "missing-inputs" }))).simulate(signed), (error: unknown) => error instanceof SimulationRefused && /simulation rejected the transaction: missing-inputs/.test(error.message));
+  await assert.rejects(esploraIndexer("https://esplora.test/api", fakeEsplora({})).simulate(signed), (error: unknown) => !(error instanceof SimulationRefused) && /txs\/test answered 404/.test(String(error)), "an Esplora without testmempoolaccept stops the send");
+  assert.throws(() => parseMempoolTest([{ txid: PREV_ID, allowed: false }], TX_ID), (error: unknown) => !(error instanceof SimulationRefused) && /tested txid 711b/.test(String(error)), "a refusal of another txid is not a refusal of this one");
   assert.throws(() => parseMempoolTest([{ txid: PREV_ID, allowed: true }], TX_ID), /tested txid 711b/);
   assert.throws(() => parseMempoolTest([], TX_ID));
   assert.throws(() => parseMempoolTest([{ txid: TX_ID, allowed: true }, { txid: TX_ID, allowed: true }], TX_ID));

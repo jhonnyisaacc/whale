@@ -5,7 +5,7 @@ import type { SignerQueue } from "../signer-queue.js";
 import { assertBitcoinSigning, type BitcoinSpend } from "../signing-policy/bitcoin.js";
 import type { SpendJournal } from "../spend.js";
 import { SignerRefusal, type KeystorePublic, type SignerJobRecord } from "../whale-signer.js";
-import { BroadcastRefused, esploraIndexer, transactionId, type BitcoinIndexer } from "./esplora.js";
+import { esploraIndexer, SimulationRefused, transactionId, type BitcoinIndexer } from "./esplora.js";
 import { selectCoins, unsignedTransaction } from "./plan.js";
 import { btcUsd, satsUsd } from "./read.js";
 import { verifiedBitcoinTransaction } from "./verify.js";
@@ -112,14 +112,16 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
     return { kind: "send_bitcoin", status: "signed", reason: withCommit(HELD, note), jobs, plan, txid, signedTransaction: hex(signed) };
   }
   await indexer.simulate(signed).catch(async (error: unknown) => {
-    await release();
-    throw error;
-  });
-  await indexer.broadcast(signed).catch(async (error: unknown) => {
-    if (error instanceof BroadcastRefused) {
+    if (error instanceof SimulationRefused) {
       await release();
       throw error;
     }
+    const note = await noteCommit(deps, command.idempotencyKey);
+    if (!note) throw error;
+    const message = error instanceof Error ? error.message : "simulation failed";
+    throw new Error(`${message}, but ${note}`);
+  });
+  await indexer.broadcast(signed).catch(async (error: unknown) => {
     const note = await noteCommit(deps, command.idempotencyKey);
     if (!note) throw error;
     const message = error instanceof Error ? error.message : "broadcast failed";
