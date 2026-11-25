@@ -1,6 +1,5 @@
 const NONCE_REJECTIONS = ["nonce too low", "nonce has already been used", "replacement transaction underpriced", "transaction underpriced", "nonce_expired", "invalid nonce"];
 
-// Node rejections that happen before the mempool: the transaction was never accepted anywhere.
 const PRE_MEMPOOL_REJECTIONS = [
   "insufficient funds",
   "exceeds the balance of the account",
