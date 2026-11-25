@@ -8,7 +8,7 @@ Fast swaps and bridges across EVM and Solana are the product. Signing stays on t
 
 The public shape is `WalletCommand` in `src/commands.ts`. An `Asset` names a chain, a chain key, an address, a symbol, and decimals. Amounts at the boundary are smallest-unit strings.
 
-`run(command)` dispatches five commands.
+`run(command)` dispatches `WalletCommand`, and the MCP `perp` tool runs on the local signer path (`src/local-perps.ts`). Native BTC commands are in [Native Bitcoin](#native-bitcoin).
 
 | Command | Result |
 | --- | --- |
@@ -28,7 +28,7 @@ The layout follows the Binah rules at <https://github.com/jhonnyisaacc/binah> (r
 
 ## How an agent calls Whale
 
-MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp`, `perp_positions`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`. Each tool parses its arguments into a `WalletCommand`. Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, `.muse-plugin`, and the root `plugin.json` for Hermes. Each starts `scripts/mcp-server.mjs`, which builds a fresh clone on its first start, so an install straight from GitHub lists the tools. The skill is `skills/whale-wallet/SKILL.md`.
+MCP. `pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp`, `perp_positions`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`. Each tool parses its arguments into a `WalletCommand`, except `wallet_status` (`GET /status`) and `perp` (`PerpOrder`). Host manifests live in `.grok-plugin`, `.claude-plugin`, `.codex-plugin`, `.muse-plugin`, and the root `plugin.json` for Hermes. Each starts `scripts/mcp-server.mjs`, which builds a fresh clone on its first start, so an install straight from GitHub lists the tools. The skill is `skills/whale-wallet/SKILL.md`.
 
 CLI. After `pnpm run build`, `node dist/src/cli.js quote` takes `--sell-chain`, `--sell-address`, `--sell-symbol`, `--buy-chain`, `--buy-address`, `--buy-symbol`, `--sell-amount`, and `--slippage-bps`. `swap`, `bridge`, `balance`, `perp-positions`, and `transfer` are the other commands. `bridge` takes `--from-chain`, `--to-chain`, `--asset` (USDC or USDT), `--amount` in the smallest unit, and `--to`.
 
@@ -65,16 +65,16 @@ The daily USD total for local sends lives in the MCP process and starts at zero 
 
 ## Hyperliquid perps
 
-The `perp` tool trades a perp on the account that whale-signer's keystore key signs for. Whale reads positions from the account that `HYPERLIQUID_ACCOUNT_ADDRESS` names, or from the key's EVM address when it is unset. The local path does not check that the key is an approved agent of the named account. If the address names an account that has not approved this key, Whale reads that account's positions but the orders land on the key's own account. Before each order Whale reads the position in the coin:
+The `perp` tool trades a perp on the account that whale-signer's keystore key signs for. Whale reads positions from the account that `HYPERLIQUID_ACCOUNT_ADDRESS` names, or from the key's EVM address when it is unset. The local path does not check that the key is an approved agent of the named account. If the address names an account that has not approved this key, Whale reads that account's positions while the orders land on the account the key signs for. Before each order Whale reads the position in the coin:
 - With no position, Whale sends an isolated `updateLeverage` at 1x before the order, so neither a long nor a short opens at Hyperliquid's cross default.
-- With a position open, the order runs at the position's own margin mode and leverage, cross included. A buy grows a long or reduces a short. A sell reduces a long or grows a short.
+- With a position open, the order runs at the position's own margin mode and leverage, cross included. A buy grows a long, or reduces or flips a short. A sell reduces or flips a long, or grows a short.
 - When the position cannot be read, the order is skipped with `hyperliquid position unreadable`.
 
-The `perp` tool takes no leverage. A signal sent to the executor can set `leverage` on a buy, from 1 to `MAX_PERP_LEVERAGE` (default 3). It applies when the account has no position, or on an open isolated long. On an open cross long it is refused, and on an open short it is ignored. A signal that sets `leverage` on a sell is refused. [docs/threat-model.md](docs/threat-model.md) has the full rules.
+In `mode: "live"`, Whale checks `MAX_USD_PER_TRADE`, the daily USD cap, and its signing policy, then asks whale-signer; with `WHALE_BROADCAST` unset the result is `signed` and nothing is sent. The `perp` tool takes no leverage. A signal sent to the executor can set `leverage` on a buy, from 1 to `MAX_PERP_LEVERAGE` (default 3), capped by the coin's `maxLeverage` in Hyperliquid's `meta`. It applies when the account has no position, or on an open isolated long. On an open cross long it is refused, and on an open short it is ignored. A signal that sets `leverage` on a sell is refused. [docs/threat-model.md](docs/threat-model.md) has the full rules.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `HYPERLIQUID_ACCOUNT_ADDRESS` | unset | The account Whale reads positions from. Orders are signed by the keystore key and trade on the account that key signs for. Locally, set it only when the keystore key is an approved agent of another master account. Without it, Whale reads the agent's own empty account, sees no position, and sends `updateLeverage` before every order, a close included. On the hosted executor it is required. Without it, every perp order is skipped as `hyperliquid position unreadable`, a sell included |
+| `HYPERLIQUID_ACCOUNT_ADDRESS` | unset | The account Whale reads positions from. Orders are signed by the keystore key and trade on the account that key signs for. Locally, set it only when the keystore key is an approved agent of another master account. Without it, Whale reads the agent's own empty account, sees no position, and sends `updateLeverage` before every order, a close included. On the executor (`executor-server.ts`) there is no keystore fallback: without it, every perp order is skipped as `hyperliquid position unreadable`, a sell included, and live boot with `TURNKEY_HYPERLIQUID_ADDRESS` set refuses to start |
 | `HYPERCORE_SELL_LIMITS` | empty | A JSON object of sell limits, keyed `hypercore:perp:<asset>:sold` (or `hypercore:spot:<asset>:sold` for a spot sell) with a whole number of 1e-8 units of the sold asset, such as `{"hypercore:perp:1:sold":"1000000"}` for 0.01 ETH. A live sell, a close included, is refused with `no limit is set for hypercore:perp:<asset>:sold` when its key has no limit. This holds with `WHALE_BROADCAST` off. whale-signer keeps its own limit for the same key in its policy file |
 | `MAX_PERP_LEVERAGE` | `3` | The highest isolated leverage the app's signing policy signs, from 1 to 50 |
 
