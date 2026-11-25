@@ -483,6 +483,11 @@ impl Policy {
         if terms.exclusive {
             refuse(format!("the {provider} bridge names an exclusive relayer"));
         }
+        if !terms.steps.is_empty()
+            && let Some(reason) = crate::lifi::step_refusal(tx.chain_id, &terms.steps, terms.charge)
+        {
+            refuse(reason);
+        }
         let pair = u64::try_from(destination).ok().and_then(|id| {
             (terms.input_token == terms.charge.0)
                 .then(|| {
