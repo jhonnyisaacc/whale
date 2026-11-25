@@ -159,7 +159,9 @@ export async function main(): Promise<void> {
       try {
         deps.localSend = localSender(process.env, queue, setup);
       } catch (error) {
-        process.stderr.write(`whale: config is not usable: ${error instanceof Error ? error.message : String(error)}\n`);
+        await queue.close();
+        const { commandErrorText } = await import("./command-callers.js");
+        process.stderr.write(`whale: config is not usable: ${commandErrorText(process.env, error)}\n`);
         process.exit(1);
       }
       process.stdin.once("end", () => void queue.close());
