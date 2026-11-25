@@ -25,15 +25,18 @@ async function sendHypercore(ctx: Ctx, request: SendRequest): Promise<SendResult
   const txs: TxRecord[] = [];
   let fill: Fill | null = null;
   let note: string | undefined;
-  for (const action of request.hyperliquidActions) {
-    const order = action.type === "order";
-    const nonce = nextHyperliquidNonce();
-    let signature;
-    try {
-      signature = await signer.signHyperliquid(action, nonce, isHyperliquidMainnet(config.hyperliquidUrl));
-    } catch (error) {
-      throw new BroadcastError(redactError(error, secrets), false);
+  const signed = [];
+  try {
+    for (const action of request.hyperliquidActions) signer.checkHyperliquid?.(action);
+    for (const action of request.hyperliquidActions) {
+      const nonce = nextHyperliquidNonce();
+      signed.push({ action, nonce, signature: await signer.signHyperliquid(action, nonce, isHyperliquidMainnet(config.hyperliquidUrl)) });
     }
+  } catch (error) {
+    throw new BroadcastError(redactError(error, secrets), false);
+  }
+  for (const { action, nonce, signature } of signed) {
+    const order = action.type === "order";
     const record: TxRecord = { chainKey: "hypercore", txHash: `hl:${nonce}`, from: config.hyperliquidAccount ?? signer.evmAddress() ?? "", to: action.type, value: "0", outcome: "pending" };
     if (ctx.hold) {
       txs.push({ ...record, outcome: "signed" });
