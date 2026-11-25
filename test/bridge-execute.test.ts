@@ -146,6 +146,17 @@ test("a live bridge with WHALE_BROADCAST off ends at a signed approval and bridg
   assert.equal(terms?.destinationChainId, 42161n);
 });
 
+test("the real LI.FI swap-then-bridge quote signs its approval and bridge for the whole deposit, fee step included", async () => {
+  const run = harness({ call: { to: swapAndStart.tx.to, data: swapAndStart.tx.data, value: 0n, gas: null } });
+  const result = await executeBridge(run.deps, order());
+  assert.equal(result.status, "signed", JSON.stringify(result));
+  const [approval, bridge] = run.raw.map((signed) => parseTransaction(signed));
+  assert.ok(approval && bridge);
+  assert.deepEqual(decodeFunctionData({ abi: erc20Abi, data: approval.data ?? "0x" }).args, [swapAndStart.tx.to, 2_000_000n]);
+  assert.equal(bridge.data, swapAndStart.tx.data);
+  assert.deepEqual(run.spend, ["reserve bridge:k1 2", "release bridge:k1"]);
+});
+
 test("a relay that answers another chain refuses a held or live bridge before it signs and releases the spend", async () => {
   for (const broadcast of [false, true]) {
     const run = harness({
@@ -204,6 +215,8 @@ test("a bridge is refused before any reservation when screening denies a token o
   const acrossArgs = [...decodeFunctionData({ abi: ACROSS_SPOKE_POOL_ABI, data: across.tx.data }).args];
   acrossArgs[5] = 1_000_000n;
   const lowOutput = encodeFunctionData({ abi: ACROSS_SPOKE_POOL_ABI, functionName: "deposit", args: acrossArgs as never });
+  const [bridgeData, swaps, acrossData] = decodeFunctionData({ abi: LIFI_ACROSS_ABI, data: swapAndStart.tx.data }).args as unknown as [Record<string, unknown>, Record<string, unknown>[], Record<string, unknown>];
+  const swapToAttacker = encodeFunctionData({ abi: LIFI_ACROSS_ABI, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [bridgeData, swaps.map((swap) => ({ ...swap, callTo: ATTACKER, approveTo: ATTACKER })), acrossData] as never });
   const cases: [Parameters<typeof harness>[0], BridgeProvider, RegExp][] = [
     [{ screen: "deny" }, "lifi", /screening denied/],
     [{ call: null }, "lifi", /lifi returned no bridge transaction/],
@@ -211,7 +224,7 @@ test("a bridge is refused before any reservation when screening denies a token o
     [{ call: { to: lifi.tx.to, data: paysAttacker, value: 0n, gas: null } }, "lifi", /pays 0x00000000000000000000000000000000000bad00, not the route's destination/],
     [{ call: { to: across.tx.to, data: lowOutput, value: 0n, gas: null } }, "across", /minimum output is under the 100 bps bridge fee cap/],
     [{ call: { to: lifi.tx.to, data: lifi.tx.data, value: 1n, gas: null } }, "lifi", /attached native value/],
-    [{ call: { to: swapAndStart.tx.to, data: swapAndStart.tx.data, value: 0n, gas: null } }, "lifi", /LI\.FI quoted swapAndStartBridgeTokensViaAcrossV4, which swaps before it bridges/],
+    [{ call: { to: swapAndStart.tx.to, data: swapToAttacker, value: 0n, gas: null } }, "lifi", /the LI\.FI swap step calls 0x00000000000000000000000000000000000bad00, which is not a listed LI\.FI step target/],
   ];
   for (const [options, provider, reason] of cases) {
     const run = harness(options);
