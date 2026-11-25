@@ -214,13 +214,14 @@ test("a live send is simulated before broadcast, only a matching mempool refusal
     }),
   ));
 
-type Answer = { status?: number; body: string };
+type Answer = { status?: number; body: string } | { error: Error };
 
 function esploraAnswers(simulation: (txid: string) => Answer, broadcast: (txid: string) => Answer): Pick<BitcoinIndexer, "simulate" | "broadcast"> {
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(String(input)).pathname;
     const raw = path === "/txs/test" ? (JSON.parse(String(init?.body)) as string[])[0] : String(init?.body);
     const answer = (path === "/txs/test" ? simulation : broadcast)(transactionId(bytesOf(raw as string)));
+    if ("error" in answer) throw answer.error;
     return new Response(answer.body, { status: answer.status ?? 200 });
   };
   const real = esploraIndexer("http://esplora.test", fetchImpl);
@@ -231,18 +232,37 @@ const OTHER_TXID = "00".repeat(32);
 const echo = (txid: string): Answer => ({ body: txid });
 const allowed = (txid: string): Answer => ({ body: JSON.stringify([{ txid, allowed: true }]) });
 const refusedFor = (txid: string): Answer => ({ body: JSON.stringify([{ txid, allowed: false, "reject-reason": "missing-inputs" }]) });
-const outcomes: [string, (txid: string) => Answer, (txid: string) => Answer, string][] = [
+const dropped = (): Answer => ({ error: new TypeError("fetch failed") });
+const outcomes: [string, (txid: string) => Answer, (txid: string) => Answer, "released" | "committed"][] = [
   ["sim-refused", refusedFor, echo, "released"],
   ["sim-refused-other-txid", () => refusedFor(OTHER_TXID), echo, "committed"],
   ["sim-allowed-other-txid", () => allowed(OTHER_TXID), echo, "committed"],
   ["sim-500", () => ({ status: 500, body: "boom" }), echo, "committed"],
   ["sim-404", () => ({ status: 404, body: "Not Found" }), echo, "committed"],
   ["sim-non-json", () => ({ body: "<html>ok</html>" }), echo, "committed"],
+  ["sim-network", dropped, echo, "committed"],
   ["broadcast-400", allowed, () => ({ status: 400, body: "sendrawtransaction RPC error" }), "committed"],
   ["broadcast-500", allowed, () => ({ status: 500, body: "down" }), "committed"],
+  ["broadcast-network", allowed, dropped, "committed"],
   ["broadcast-other-txid", allowed, () => ({ body: "11".repeat(32) }), "committed"],
   ["broadcast-ok", allowed, echo, "committed"],
 ];
+
+test("every simulation and broadcast outcome after signing keeps the reservation except a mempool refusal of the same txid", async () => {
+  for (const [key, simulation, broadcast, status] of outcomes) {
+    await withBitcoin({ WHALE_BROADCAST: "true" }, [100_000n], async ({ send, world }) => {
+      Object.assign(world.indexer, esploraAnswers(simulation, broadcast));
+      await send(btc(key, "6000")).catch(() => undefined);
+      Object.assign(world.indexer, esploraAnswers(allowed, echo));
+      if (status === "released") {
+        assert.equal((await send(btc(key, "6000"))).status, "sent", `${key}: released key can retry and spend`);
+      } else {
+        if (key !== "broadcast-ok") assert.equal((await send(btc(key, "6000"))).reason, "duplicate spend", `${key}: committed key cannot send again`);
+        assert.equal((await send(btc(`${key}-next`, "6000"))).reason, "daily cap 10 USD", `${key}: committed spend counts against the daily cap`);
+      }
+    });
+  }
+});
 
 test("once the indexer holds the signed transaction, only a mempool refusal of that txid releases the reservation in Postgres", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -261,6 +281,7 @@ test("once the indexer holds the signed transaction, only a mempool refusal of t
       assert.deepEqual(seen, Object.fromEntries(outcomes.map(([key, , , status]) => [key, status])));
     });
   } finally {
+    await (await import("../src/spend.js")).closeSpendPools();
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
     await admin.end();
   }
