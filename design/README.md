@@ -47,7 +47,7 @@ The Known issues block lists Whale's own gaps first.
 
 ## Copy claims only what the code backs
 
-Each claim was checked against `origin/main` on 2026-11-24.
+Each claim was checked against `origin/main` on 2026-11-25.
 
 | Topic | Site copy | Why |
 | --- | --- | --- |
