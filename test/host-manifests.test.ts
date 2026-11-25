@@ -178,6 +178,6 @@ test("a Hermes server path under the Hermes plugin root variable passes", () => 
 
 test("no tracked file names a system password file, which the Hermes install scan blocks", () => {
   const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repo, encoding: "utf8" }).split("\0").filter(Boolean);
-  const named = tracked.filter((file) => existsSync(path.join(repo, file)) && /\/etc\/(?:passwd|shadow)/.test(readFileSync(path.join(repo, file), "latin1")));
+  const named = tracked.filter((file) => existsSync(path.join(repo, file)) && /\/etc\/(?:passwd|shadow)/i.test(readFileSync(path.join(repo, file), "latin1")));
   assert.deepEqual(named, []);
 });

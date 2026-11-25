@@ -30478,22 +30478,11 @@
                       "fill": "$muted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "MCP + skills",
+                      "content": "Plugin + MCP + skills",
                       "lineHeight": 1.4,
                       "fontFamily": "$font-mono",
                       "fontSize": 12,
                       "fontWeight": "normal"
-                    },
-                    {
-                      "id": "F0K53Z",
-                      "type": "ref",
-                      "ref": "UM68F",
-                      "name": "Badge planned",
-                      "descendants": {
-                        "k7RLXp": {
-                          "content": "planned"
-                        }
-                      }
                     }
                   ]
                 }
@@ -61139,7 +61128,7 @@
                       "id": "vop8e",
                       "name": "Meta",
                       "fill": "$muted",
-                      "content": "MCP + skills · planned",
+                      "content": "Plugin + MCP + skills",
                       "fontFamily": "$font-mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -61940,7 +61929,7 @@
       "name": "Note Placeholders to fill",
       "width": 420,
       "height": 300,
-      "content": "Still to verify\n\n• Compare cells come from public docs as of Nov 18, 2026 (metamask.com/agent-wallet, docs.phantom.com, paybox.sh/llms.txt). Phantom docs were unreachable; Phantom cells rely on search summaries + npm readme mentions.\n• Hermes has a manifest (plugin.json, mcp.json) since #108, but hermes plugins install blocks the package on its scan; still marked 'planned'.\n• Logos: hosts from @lobehub/icons-static-svg 1.71.0, chains from DefiLlama icons + cryptocurrency-icons 0.18.1, saved in ./logos. Check each brand's usage guidelines before launch.\n• Contributor avatars are placeholder circles."
+      "content": "Still to verify\n\n• Compare cells come from public docs as of Nov 18, 2026 (metamask.com/agent-wallet, docs.phantom.com, paybox.sh/llms.txt). Phantom docs were unreachable; Phantom cells rely on search summaries + npm readme mentions.\n• Logos: hosts from @lobehub/icons-static-svg 1.71.0, chains from DefiLlama icons + cryptocurrency-icons 0.18.1, saved in ./logos. Check each brand's usage guidelines before launch.\n• Contributor avatars are placeholder circles."
     },
     {
       "type": "note",
@@ -63045,8 +63034,8 @@
                           "type": "text",
                           "id": "cqmpY",
                           "name": "Manifest",
-                          "fill": "$muted",
-                          "content": "planned",
+                          "fill": "$ink",
+                          "content": "plugin.json",
                           "fontFamily": "$font-mono",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -63068,7 +63057,7 @@
                           "id": "I80gb",
                           "name": "Loads",
                           "fill": "$muted",
-                          "content": "plugin.json + mcp.json + skills/",
+                          "content": "mcp.json + skills/",
                           "fontFamily": "$font-mono",
                           "fontSize": 13,
                           "fontWeight": "normal"
