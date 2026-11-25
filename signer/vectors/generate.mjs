@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import { encode } from "@msgpack/msgpack";
-import { decodeFunctionData, encodeFunctionData, keccak256, maxUint256, pad, parseAbi } from "viem";
+import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, keccak256, maxUint256, pad, parseAbi, parseAbiParameters } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DEFAULT_EVM_FEE_LIMITS, signerChainTable } from "../../src/chains.ts";
 import { LIFI_STEP_TARGETS } from "../../src/signing-policy/lifi-steps.ts";
@@ -86,6 +86,17 @@ const swapAndStartWith = (edit) => {
   return encodeFunctionData({ abi: lifiSwapAndStartAbi, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [next.bridge, next.swaps, next.data] });
 };
 const feeStep = (amount) => encodeFunctionData({ abi: lifiSwapAndStartAbi, functionName: "forwardERC20Fees", args: [USDC, [{ recipient: ATTACKER, amount }]] });
+const BRIDGE_WORDS = "(bytes32 transactionId, string bridge, string integrator, address referrer, bytes32 sendingAssetId, bytes32 receiver, uint256 minAmount, uint256 destinationChainId, bool hasSourceSwaps, bool hasDestinationCall)";
+const LIFI_SWAP_WORDS = "(bytes32 callTo, bytes32 approveTo, bytes32 sendingAssetId, bytes32 receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
+const dirty = (word) => `0xff${word.slice(4)}`;
+const inWords = (params, data, edit) => {
+  const args = decodeAbiParameters(params, `0x${data.slice(10)}`);
+  edit(args);
+  return `${data.slice(0, 10)}${encodeAbiParameters(params, args).slice(2)}`;
+};
+const startInWords = (edit) => inWords(parseAbiParameters(`${BRIDGE_WORDS}, ${ACROSS_V4_DATA}`), lifiBridge.tx.data, edit);
+const swapFirstInWords = (edit) => onBase(LIFI_DIAMOND, inWords(parseAbiParameters(`${BRIDGE_WORDS}, ${LIFI_SWAP_WORDS}[], ${ACROSS_V4_DATA}`), lifiSwapAndStart.tx.data, edit));
+const feeStepInWords = (edit) => inWords(parseAbiParameters("bytes32, (bytes32 recipient, uint256 amount)[]"), feeStep(10_000n), edit);
 const spokePoolAbi = parseAbi(["function deposit(bytes32 depositor, bytes32 recipient, bytes32 inputToken, bytes32 outputToken, uint256 inputAmount, uint256 outputAmount, uint256 destinationChainId, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message) payable"]);
 const word = (address) => pad(address.toLowerCase(), { size: 32 });
 const lifiBridgeWith = (edit) => {
@@ -156,6 +167,19 @@ const bridgeCases = [
   ["a LI.FI swap then bridge with a destination call", swapFirst(({ bridge, data }) => ((bridge.hasDestinationCall = true), (data.message = "0x1234"))), "refused", "runs a destination call"],
   ["a LI.FI swap then bridge that also sends native value", onBase(LIFI_DIAMOND, lifiSwapAndStart.tx.data, 1n), "refused", "must send no native value"],
   ["a LI.FI swap then bridge sent to the SpokePool", onBase(BASE_SPOKE_POOL, lifiSwapAndStart.tx.data), "refused", "not the listed lifi bridge contract"],
+  ["a LI.FI swap then bridge whose minimum is 2^120", swapFirst(({ bridge }) => (bridge.minAmount = 2n ** 120n)), "refused", "amounts overflow the bridge fee check"],
+  ["a LI.FI swap then bridge whose minimum is 2^127", swapFirst(({ bridge }) => (bridge.minAmount = 2n ** 127n)), "refused", "amounts overflow the bridge fee check"],
+  ["a LI.FI swap then bridge whose minimum is 2^200", swapFirst(({ bridge }) => (bridge.minAmount = 2n ** 200n)), "refused", "not one the signer can read"],
+  ["a LI.FI swap then bridge with a second fee step of 2^200 that pulls nothing", swapFirst(({ swaps }) => swaps.push({ ...swaps[0], fromAmount: 2n ** 200n, requiresDeposit: false })), "refused", "not one the signer can read"],
+  ["a LI.FI swap then bridge whose fee step forwards 2^200", swapFirst(({ swaps }) => (swaps[0].callData = feeStep(2n ** 200n))), "refused", "is not a forwardERC20Fees or forwardNativeFees"],
+  ["a LI.FI swap then bridge whose fee step pays a dirty recipient word", swapFirst(({ swaps }) => (swaps[0].callData = feeStepInWords(([, fees]) => (fees[0].recipient = dirty(fees[0].recipient))))), "refused", "is not a forwardERC20Fees or forwardNativeFees"],
+  ["a LI.FI swap then bridge whose fee step names a dirty token word", swapFirst(({ swaps }) => (swaps[0].callData = feeStepInWords((args) => (args[0] = dirty(args[0]))))), "refused", "is not a forwardERC20Fees or forwardNativeFees"],
+  ...["callTo", "approveTo", "sendingAssetId", "receivingAssetId"].map((field) => [`a LI.FI swap then bridge whose swap step ${field} has dirty high bits`, swapFirstInWords(([, swaps]) => (swaps[0][field] = dirty(swaps[0][field]))), "refused", "not one the signer can read"]),
+  ...["receiver", "sendingAssetId"].map((field) => [`a LI.FI swap then bridge whose bridge ${field} has dirty high bits`, swapFirstInWords(([bridge]) => (bridge[field] = dirty(bridge[field]))), "refused", "not one the signer can read"]),
+  ["a LI.FI bridge whose bridge receiver has dirty high bits", onBase(LIFI_DIAMOND, startInWords(([bridge]) => (bridge.receiver = dirty(bridge.receiver)))), "refused", "not one the signer can read"],
+  ["a LI.FI bridge whose amounts are 2^200", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge, data) => ((bridge.minAmount = 2n ** 200n), (data.outputAmount = 2n ** 200n)))), "refused", "not one the signer can read"],
+  ["an Across deposit whose amounts are 2^200", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => ((args[4] = 2n ** 200n), (args[5] = 2n ** 200n)))), "refused", "not one the signer can read"],
+  ["an Across deposit whose amounts are 2^127", onBase(BASE_SPOKE_POOL, acrossBridgeWith((args) => ((args[4] = 2n ** 127n), (args[5] = 2n ** 127n)))), "refused", "amounts overflow the bridge fee check"],
   ["a LI.FI bridge delivering an attacker token", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.receivingAssetId = word(ATTACKER)))), "refused", "a pair the bridge token table does not list"],
   ["a LI.FI bridge naming an exclusive relayer", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.exclusiveRelayer = word(ATTACKER)))), "refused", "names an exclusive relayer"],
   ["a LI.FI bridge paying an attacker", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge, data) => ((bridge.receiver = ATTACKER), (data.receiverAddress = word(ATTACKER))))), "refused", "not this wallet or a listed destination"],

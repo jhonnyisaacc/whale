@@ -89,7 +89,9 @@ async function plan(deps: BridgeDeps, order: BridgeOrder): Promise<Planned | str
   const pair = bridgePair(source.chain.chainId, terms.inputToken, destination.chain.chainId, terms.outputToken);
   if (!pair) return `${provider} bridges ${route.sell.symbol} to ${route.buy.symbol}, a pair the bridge token table does not list`;
   const { maxBridgeFeeBps } = deps.evm.config;
-  if (!meetsBridgeFloor(pair, terms.charge.amount, terms.minOutput, maxBridgeFeeBps)) return `${provider} minimum output is under the ${maxBridgeFeeBps} bps bridge fee cap`;
+  const floor = meetsBridgeFloor(pair, terms.charge.amount, terms.minOutput, maxBridgeFeeBps);
+  if (floor === null) return `${provider} amounts overflow the bridge fee check`;
+  if (!floor) return `${provider} minimum output is under the ${maxBridgeFeeBps} bps bridge fee cap`;
   const approve = (await deps.reads.allowance(route.sell.address as Hex, deps.evm.owner, call.to)) < terms.charge.amount;
   if (approve && !deps.evm.config.allowHotApproval) return `${call.to} has no ${route.sell.symbol} allowance and ALLOW_HOT_APPROVAL is off. Approve the exact amount in the root-quorum ceremony first`;
   return { provider, call, spender: call.to, sell: route.sell.address as Hex, charge: terms.charge, approve };
