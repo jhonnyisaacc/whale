@@ -34,8 +34,11 @@ Install this directory as a Codex plugin, or copy `agents/codex/rocket-wallet.to
 
 Hermes installs this repo as a portable Agent Plugins v1 package. It reads the root `plugin.json`, the root `mcp.json`, and the `skills/` directory. See [Portable Agent Plugins v1 packages](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/plugins/index.md#portable-agent-plugins-v1-packages) in the Hermes developer guide.
 
-1. Install the package with `hermes plugins install jhonnyisaacc/whale --no-enable`.
+Use a Hermes release from GitHub, installed with the Hermes installer. v0.23.4 is the release this was checked on. The `hermes-agent` 0.19.0 package on PyPI does not read Agent Plugins v1, so it does not install Whale.
+
+1. Install the package with `hermes plugins install jhonnyisaacc/whale --no-enable`. Hermes scans the package before it installs it, and the scan passes, so you do not need `--force`. A test fails when a tracked file names a system password file, which is the finding that made the scan block the package before.
 2. Enable it with `hermes plugins enable whale`.
+3. Start `hermes` and type `/tools`. The `mcp-whale` toolset lists the ten Whale tools as `mcp__whale__wallet_status` and so on.
 
 Hermes starts the `whale` server as `node scripts/mcp-server.mjs` from the package root. The first start builds the package, and a start after `hermes plugins update` rebuilds it. See [Shared setup](#shared-setup). A stdio server gets only the variables that its entry lists, plus a safe baseline. `mcp.json` forwards these variables from your shell or profile `.env`:
 

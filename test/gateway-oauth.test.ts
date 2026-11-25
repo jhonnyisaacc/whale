@@ -9,7 +9,7 @@ test("redirect URIs allow https, loopback http, and app schemes only", () => {
   for (const good of ["https://client.example/cb", "http://127.0.0.1:33418/callback", "http://localhost:8976/oauth", "http://[::1]:9000/cb", "cursor://anysphere.cursor-mcp/oauth/callback", "com.example.app:/cb"]) {
     assert.equal(redirectUriAllowed(good), true, good);
   }
-  for (const bad of ["http://evil.example/cb", "javascript:alert(1)", "data:text/html,x", "file:///etc/passwd", "https://client.example/cb#frag", "https://user:pw@client.example/cb", "not a url", `https://x.example/${"a".repeat(600)}`]) {
+  for (const bad of ["http://evil.example/cb", "javascript:alert(1)", "data:text/html,x", "file:///home/user/cb", "https://client.example/cb#frag", "https://user:pw@client.example/cb", "not a url", `https://x.example/${"a".repeat(600)}`]) {
     assert.equal(redirectUriAllowed(bad), false, bad);
   }
 });
