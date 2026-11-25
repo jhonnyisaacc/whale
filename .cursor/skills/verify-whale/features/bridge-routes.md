@@ -44,7 +44,7 @@ Preconditions:
 - Fees and routes are live. Assert order and shape, not numbers.
 - A provider slower than `BRIDGE_QUOTE_TIMEOUT_MS` (3000) is dropped without an error, so `quotes` can hold fewer than three. Name the missing provider in the report. With no quotes at all, `plan.kind` is `skip`.
 - The plan keeps only quotes within `MAX_BRIDGE_FEE_BPS` (50) of the amount. Below about 2 USD every route can exceed it, which gives `skip` with `no bridge quote inside the fee cap and allowlist`. Use 10 USDC.
-- LI.FI appears in the ranking even though live bridging skips LI.FI routes, as the repository README explains under "Still open". Ranking is quote-only.
+- Relay appears in the ranking even though live bridging skips Relay routes, as the repository README explains under "Still open". Ranking is quote-only.
 - `amount` is the smallest unit. USDC and USDT have 6 decimals, so `10000000` is 10 USD.
 - A refusal that shows any `network` entry is a bug. Whale must refuse before it asks a provider.
 - Addresses are checked per chain. A Solana destination needs a Solana address, and a Solana source needs `TURNKEY_SOLANA_ADDRESS`.
