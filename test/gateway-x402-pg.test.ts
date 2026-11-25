@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createAgent } from "../src/gateway/agents.js";
 import { buildGateway } from "../src/gateway/app.js";
+import { today } from "../src/gateway/mcp-sends.js";
 import { createWallet } from "../src/gateway/wallets.js";
 import { gatewayConfig, signedInAccount } from "./gateway-fixtures.js";
 import { migratedSchema, TEST_DATABASE_URL } from "./pg-schema.js";
@@ -33,7 +34,7 @@ async function harness(options: { approvalAboveUsd: number | null; actions: ("sw
     return JSON.parse(response.json().result.content[0].text) as Plan;
   };
   const spent = (dollars: number) =>
-    pool.query("INSERT INTO agent_spends (agent_id, idempotency_key, binding, account_id, wallet_id, usd, day) VALUES ($1, 'earlier', 'b', $2, $3, $4, CURRENT_DATE)", [agent.agentId, user.accountId, walletId, dollars]);
+    pool.query("INSERT INTO agent_spends (agent_id, idempotency_key, binding, account_id, wallet_id, usd, day) VALUES ($1, 'earlier', 'b', $2, $3, $4, $5::date)", [agent.agentId, user.accountId, walletId, dollars, today()]);
   return { quote, spent, drop: async () => (await app.close(), await drop()) };
 }
 
