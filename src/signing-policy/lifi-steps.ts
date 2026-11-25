@@ -1,6 +1,8 @@
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { LIFI_STEP_TARGETS } from "./lifi-targets.js";
 
+export * from "./lifi-targets.js";
+
 export const MAX_LIFI_FEE_BPS = 50n;
 const NATIVE = "0x0000000000000000000000000000000000000000";
 

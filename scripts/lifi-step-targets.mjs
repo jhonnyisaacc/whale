@@ -7,12 +7,12 @@ export const TS_FILE = new URL("src/signing-policy/lifi-targets.ts", root);
 export const RUST_FILE = new URL("signer/src/lifi_targets.rs", root);
 
 const DIAMOND = "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE";
-const CHAINS = [
-  { chainId: 1, diamond: DIAMOND, rpc: "https://ethereum-rpc.publicnode.com" },
-  { chainId: 10, diamond: DIAMOND, rpc: "https://mainnet.optimism.io" },
-  { chainId: 324, diamond: "0x341e94069f53234fe6dabef707ad424830525715", rpc: "https://mainnet.era.zksync.io" },
-  { chainId: 8453, diamond: DIAMOND, rpc: "https://mainnet.base.org" },
-  { chainId: 42161, diamond: DIAMOND, rpc: "https://arb1.arbitrum.io/rpc" },
+export const CHAINS = [
+  { chainId: 1, diamond: DIAMOND, rpcs: ["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"] },
+  { chainId: 10, diamond: DIAMOND, rpcs: ["https://mainnet.optimism.io", "https://optimism-rpc.publicnode.com"] },
+  { chainId: 324, diamond: "0x341e94069f53234fe6dabef707ad424830525715", rpcs: ["https://mainnet.era.zksync.io", "https://zksync.drpc.org"] },
+  { chainId: 8453, diamond: DIAMOND, rpcs: ["https://mainnet.base.org", "https://base-rpc.publicnode.com"] },
+  { chainId: 42161, diamond: DIAMOND, rpcs: ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"] },
 ];
 
 const APPROVE_ONLY = "0xffffffff";
@@ -30,7 +30,7 @@ const PARASWAP_ORDER = "(address,address,uint256,uint256,uint256,bytes32,address
 const PARASWAP_POOL = "(address,address,uint256,uint256,uint256,bytes32,address,bytes)";
 const KYBER_DESC = "(address,address,address[],uint256[],address[],uint256[],address,uint256,uint256,uint256,bytes)";
 
-const FAMILIES = [
+export const FAMILIES = [
   { family: "LI.FI FeeForwarder", role: "feeForwarder", variants: [["forwardERC20Fees(address,(address,uint256)[])", "forwardNativeFees((address,uint256)[])", "forwardERC20FeesShares(address,(address,uint64)[])"]] },
   { family: "approve-only spender", role: "spender", variants: [[APPROVE_ONLY]] },
   {
@@ -70,18 +70,52 @@ const selector = (item) => (item.startsWith("0x") ? item : toFunctionSelector(it
 const key = (selectors) => [...new Set(selectors.map((item) => item.toLowerCase()))].sort().join(",");
 const FAMILY_BY_SELECTORS = new Map(FAMILIES.flatMap((family) => family.variants.map((variant) => [key(variant.map(selector)), family])));
 
-async function allowlist({ chainId, diamond, rpc }) {
-  const url = process.env[`RPC_URL_${chainId}`] ?? rpc;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function rpcUrls({ chainId, rpcs }, env = process.env) {
+  const configured = [env[`RPC_URL_${chainId}`], env[`RPC_URLS_${chainId}`]]
+    .flatMap((value) => (value ?? "").split(","))
+    .map((url) => url.trim())
+    .filter(Boolean);
+  return configured.length > 0 ? [...new Set(configured)] : rpcs;
+}
+
+async function allowlistFrom(chainId, diamond, url) {
   const call = async (method, params) => {
-    const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error(`chain ${chainId}: ${method} failed with HTTP ${response.status}`);
     const body = await response.json();
     if (body.error || typeof body.result !== "string") throw new Error(`chain ${chainId}: ${method} failed: ${JSON.stringify(body.error ?? body)}`);
     return body.result;
   };
+  const reported = Number(BigInt(await call("eth_chainId", [])));
+  if (reported !== chainId) throw new Error(`chain ${chainId}: RPC answered eth_chainId with ${reported}`);
   const block = BigInt(await call("eth_blockNumber", []));
   const result = await call("eth_call", [{ to: diamond, data: toFunctionSelector("getAllContractSelectorPairs()") }, `0x${block.toString(16)}`]);
   const [contracts, selectors] = decodeAbiParameters([{ type: "address[]" }, { type: "bytes4[][]" }], result);
+  if (contracts.length !== selectors.length) throw new Error(`chain ${chainId}: contract count ${contracts.length} does not match selector count ${selectors.length}`);
   return { block, pairs: contracts.map((address, index) => ({ address: getAddress(address), selectors: selectors[index] })) };
+}
+
+async function allowlist(chain) {
+  let lastError;
+  for (const url of rpcUrls(chain)) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await allowlistFrom(chain.chainId, chain.diamond, url);
+      } catch (error) {
+        lastError = error;
+        if (error instanceof Error && error.message.includes("eth_chainId with")) break;
+        if (attempt === 0) await pause(500);
+      }
+    }
+  }
+  throw lastError;
 }
 
 export function classify(chainId, pairs) {
@@ -120,7 +154,7 @@ export function renderRust(tables) {
   return ["use crate::lifi::StepTable;", "", "pub const STEP_TARGETS: &[StepTable] = &[", ...body, "];", ""].join("\n");
 }
 
-function changes(committed, fresh) {
+export function changes(committed, fresh) {
   const out = [];
   for (const chainId of new Set([...Object.keys(committed), ...Object.keys(fresh)])) {
     const before = committed[chainId] ?? { feeForwarder: null, targets: [], spenders: [] };
