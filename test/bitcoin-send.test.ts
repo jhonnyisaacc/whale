@@ -10,8 +10,11 @@ import { privateKeyToAccount } from "viem/accounts";
 import { BroadcastRefused, RAW_TX_OPTIONS, transactionId, type BitcoinIndexer, type Utxo } from "../src/bitcoin/esplora.js";
 import type { BitcoinPolicy } from "../src/bitcoin/send.js";
 import { BTC_PARAMS, sameScript } from "../src/bitcoin/wallet.js";
+import { lookupAgedTx } from "../src/broadcast.js";
+import { loadConfig } from "../src/config.js";
 import { localSender } from "../src/local-sends.js";
 import { startSignerQueue, type SignerQueue } from "../src/signer-queue.js";
+import { poolFor, reconcileReserved } from "../src/spend.js";
 
 const TOKEN = "t".repeat(40);
 const KEY = new Uint8Array(32).fill(0x11);
@@ -252,3 +255,45 @@ test("the real app policy accepts the plan the sender builds, across several inp
     assert.equal(result.plan?.inputs, 3);
     assert.equal(jobs[0]?.payload.previous.length, 3);
   }, true));
+
+async function withJournalFault(fault: string, run: (input: { databaseUrl: string; row: (key: string) => Promise<Record<string, unknown> | undefined> }) => Promise<void>): Promise<void> {
+  const schema = `t_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const admin = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await admin.connect();
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const databaseUrl = `${process.env.TEST_DATABASE_URL}?options=${encodeURIComponent(`-c search_path=${schema}`)}`;
+  try {
+    await poolFor(databaseUrl);
+    await admin.query(`CREATE FUNCTION ${schema}.fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF ${fault} THEN RAISE EXCEPTION 'journal is down'; END IF; RETURN NEW; END $$`);
+    await admin.query(`CREATE TRIGGER fault BEFORE UPDATE ON ${schema}.spend_journal FOR EACH ROW EXECUTE FUNCTION ${schema}.fault()`);
+    await run({ databaseUrl, row: async (key) => (await admin.query(`SELECT status, tx_hash, chain_key FROM ${schema}.spend_journal WHERE idempotency_key = $1`, [key])).rows[0] });
+  } finally {
+    await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  }
+}
+
+test("a live send whose journal commit fails keeps its txid on the row, so reconciliation keeps the spend", { skip: !process.env.TEST_DATABASE_URL }, () =>
+  withJournalFault("NEW.status = 'committed'", async ({ databaseUrl, row }) => {
+    const env = { WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl };
+    await withBitcoin(env, [100_000n], async ({ send, world }) => {
+      const sent = await send(btc("commit-lost", "6000"));
+      assert.equal(sent.status, "sent", JSON.stringify(sent));
+      assert.deepEqual(await row("commit-lost"), { status: "reserved", tx_hash: sent.txid, chain_key: "bitcoin" });
+      const actions: string[] = [];
+      await reconcileReserved(databaseUrl, 0, (tx) => lookupAgedTx(loadConfig(env), tx), (entry) => void actions.push(`${entry.idempotencyKey}:${entry.action}`));
+      assert.deepEqual(actions, ["commit-lost:keep"]);
+      assert.equal((await row("commit-lost"))?.status, "reserved");
+      assert.equal((await send(btc("second", "6000"))).reason, "daily cap 10 USD");
+      assert.equal(world.broadcasts.length, 1);
+    });
+  }));
+
+test("a live send whose txid cannot be recorded is released and never reaches the indexer", { skip: !process.env.TEST_DATABASE_URL }, () =>
+  withJournalFault("NEW.tx_hash IS NOT NULL", async ({ databaseUrl, row }) => {
+    await withBitcoin({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl }, [100_000n], async ({ send, world }) => {
+      await assert.rejects(send(btc("unrecorded", "6000")), /journal is down/);
+      assert.deepEqual([world.simulated, world.broadcasts], [[], []]);
+      assert.deepEqual(await row("unrecorded"), { status: "released", tx_hash: null, chain_key: null });
+    });
+  }));
