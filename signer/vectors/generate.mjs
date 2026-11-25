@@ -79,6 +79,13 @@ const feeForwarderLeak = (() => {
   const step = { ...swaps[0], callTo: FEE_FORWARDER, approveTo: FEE_FORWARDER, fromAmount: 2_000_000n, callData: forward };
   return encodeFunctionData({ abi: lifiSwapAndStartAbi, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [{ ...bridge, minAmount: 1n }, [step], { ...data, outputAmountMultiplier: 2_000_000n * 10n ** 18n }] });
 })();
+const swapAndStartWith = (edit) => {
+  const [bridge, swaps, data] = decodeFunctionData({ abi: lifiSwapAndStartAbi, data: lifiSwapAndStart.tx.data }).args;
+  const next = { bridge: { ...bridge }, swaps: swaps.map((swap) => ({ ...swap })), data: { ...data } };
+  edit(next);
+  return encodeFunctionData({ abi: lifiSwapAndStartAbi, functionName: "swapAndStartBridgeTokensViaAcrossV4", args: [next.bridge, next.swaps, next.data] });
+};
+const feeStep = (amount) => encodeFunctionData({ abi: lifiSwapAndStartAbi, functionName: "forwardERC20Fees", args: [USDC, [{ recipient: ATTACKER, amount }]] });
 const spokePoolAbi = parseAbi(["function deposit(bytes32 depositor, bytes32 recipient, bytes32 inputToken, bytes32 outputToken, uint256 inputAmount, uint256 outputAmount, uint256 destinationChainId, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message) payable"]);
 const word = (address) => pad(address.toLowerCase(), { size: 32 });
 const lifiBridgeWith = (edit) => {
@@ -104,6 +111,8 @@ const onBase = (to, data, value = 0n) => tx(to, data, value, BASE);
 const bridgeSpent = (transaction) => ({ [`${BASE}:native`]: String(transaction.gas * transaction.maxFeePerGas + DEFAULT_EVM_FEE_LIMITS[BASE].l1.maxFeeWei), [`${BASE}:${USDC.toLowerCase()}`]: "2000000" });
 const realLifiBridge = onBase(LIFI_DIAMOND, lifiBridge.tx.data);
 const realAcrossBridge = onBase(BASE_SPOKE_POOL, acrossBridgeWith(() => undefined));
+const realSwapAndStart = onBase(LIFI_DIAMOND, lifiSwapAndStart.tx.data);
+const swapFirst = (edit) => onBase(LIFI_DIAMOND, swapAndStartWith(edit));
 const bridgeCases = [
   ["a real LI.FI AcrossV4 bridge from Base to this wallet on Arbitrum", realLifiBridge, "signed", null, null, bridgeSpent(realLifiBridge)],
   ["a real Across SpokePool deposit from Base to this wallet on Arbitrum", realAcrossBridge, "signed", null, null, bridgeSpent(realAcrossBridge)],
@@ -122,8 +131,31 @@ const bridgeCases = [
   ["a LI.FI bridge with its output multiplier at par", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 10n ** 18n))), "signed"],
   ["a LI.FI bridge with its output multiplier 1 above par", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 10n ** 18n + 1n))), "refused", "output multiplier 1000000000000000001 is above par for USDC"],
   ["a LI.FI bridge with an inflated output multiplier", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.outputAmountMultiplier = 2_000_000n * 10n ** 18n))), "refused", "output multiplier 2000000000000000000000000 is above par for USDC"],
-  ["a real LI.FI swap then bridge quote", onBase(LIFI_DIAMOND, lifiSwapAndStart.tx.data), "refused", "not one the signer can read"],
-  ["a LI.FI swap then bridge that forwards the charge to an attacker", onBase(LIFI_DIAMOND, feeForwarderLeak), "refused", "not one the signer can read"],
+  ["a real LI.FI swap then bridge quote whose fee step forwards 25 bps", realSwapAndStart, "signed", null, null, bridgeSpent(realSwapAndStart)],
+  ["a LI.FI swap then bridge that forwards the charge to an attacker", onBase(LIFI_DIAMOND, feeForwarderLeak), "refused", "the LI.FI fee steps forward 1999999, above 50 bps of the 2000000 the swap deposits"],
+  ["a LI.FI swap then bridge whose fee step forwards one unit over 50 bps", swapFirst(({ swaps }) => (swaps[0].callData = feeStep(10_001n))), "refused", "the LI.FI fee steps forward 10001, above 50 bps of the 2000000 the swap deposits"],
+  ["a LI.FI swap then bridge whose fee step forwards exactly 50 bps", swapFirst(({ swaps }) => (swaps[0].callData = feeStep(10_000n))), "signed"],
+  ["a LI.FI swap then bridge whose swap step calls an attacker", swapFirst(({ swaps }) => (swaps[0].callTo = ATTACKER)), "refused", `the LI.FI swap step calls 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`],
+  ["a LI.FI swap then bridge whose swap step approves an attacker", swapFirst(({ swaps }) => (swaps[0].approveTo = ATTACKER)), "refused", `the LI.FI swap step approves 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`],
+  ["a LI.FI swap then bridge with a second swap step to an attacker", swapFirst(({ swaps }) => swaps.push({ ...swaps[0], callTo: ATTACKER, approveTo: ATTACKER, fromAmount: 1_995_000n, callData: "0xabcdef", requiresDeposit: false })), "refused", `the LI.FI swap step calls 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`],
+  ["a LI.FI swap then bridge whose swap ends in another token", swapFirst(({ swaps }) => (swaps[0].receivingAssetId = WETH)), "refused", "not one the signer can read"],
+  ["a LI.FI swap then bridge that pulls WETH and bridges USDC", swapFirst(({ swaps }) => (swaps[0].sendingAssetId = WETH)), "refused", "a pair the bridge token table does not list"],
+  ["a LI.FI swap then bridge whose swap pulls nothing from the wallet", swapFirst(({ swaps }) => (swaps[0].requiresDeposit = false)), "refused", "not one the signer can read"],
+  ["a LI.FI swap then bridge that pulls more than the daily token limit", swapFirst(({ swaps }) => (swaps[0].fromAmount = 20_000_000n)), "refused", "above its whole 10000000 daily limit"],
+  ["a LI.FI swap then bridge whose minimum is 1 unit", swapFirst(({ bridge }) => (bridge.minAmount = 1n)), "refused", "delivers at least 0 USDC for 2000000, under the 100 bps bridge fee cap"],
+  ["a LI.FI swap then bridge whose minimum is 2% under the deposit", swapFirst(({ bridge }) => (bridge.minAmount = 1_960_000n)), "refused", "under the 100 bps bridge fee cap"],
+  ["a LI.FI swap then bridge with its output multiplier 1 above par", swapFirst(({ data }) => (data.outputAmountMultiplier = 10n ** 18n + 1n)), "refused", "output multiplier 1000000000000000001 is above par for USDC"],
+  ["a LI.FI swap then bridge paying an attacker", swapFirst(({ bridge, data }) => ((bridge.receiver = ATTACKER), (data.receiverAddress = word(ATTACKER)))), "refused", "not this wallet or a listed destination"],
+  ["a LI.FI swap then bridge whose two receivers disagree", swapFirst(({ data }) => (data.receiverAddress = word(ATTACKER))), "refused", "not one the signer can read"],
+  ["a LI.FI swap then bridge whose two sending tokens disagree", swapFirst(({ data }) => (data.sendingAssetId = word(WETH))), "refused", "not one the signer can read"],
+  ["a LI.FI swap then bridge refunding an attacker", swapFirst(({ data }) => (data.refundAddress = word(ATTACKER))), "refused", "refunds 0x00000000000000000000000000000000000bad00"],
+  ["a LI.FI swap then bridge to a chain outside the policy", swapFirst(({ bridge }) => (bridge.destinationChainId = 31337n)), "refused", "lands on chain 31337, which is not another chain in the policy"],
+  ["a LI.FI swap then bridge back to its own chain", swapFirst(({ bridge }) => (bridge.destinationChainId = BigInt(BASE))), "refused", "lands on chain 8453, which is not another chain in the policy"],
+  ["a LI.FI swap then bridge delivering an attacker token", swapFirst(({ data }) => (data.receivingAssetId = word(ATTACKER))), "refused", "a pair the bridge token table does not list"],
+  ["a LI.FI swap then bridge naming an exclusive relayer", swapFirst(({ data }) => (data.exclusiveRelayer = word(ATTACKER))), "refused", "names an exclusive relayer"],
+  ["a LI.FI swap then bridge with a destination call", swapFirst(({ bridge, data }) => ((bridge.hasDestinationCall = true), (data.message = "0x1234"))), "refused", "runs a destination call"],
+  ["a LI.FI swap then bridge that also sends native value", onBase(LIFI_DIAMOND, lifiSwapAndStart.tx.data, 1n), "refused", "must send no native value"],
+  ["a LI.FI swap then bridge sent to the SpokePool", onBase(BASE_SPOKE_POOL, lifiSwapAndStart.tx.data), "refused", "not the listed lifi bridge contract"],
   ["a LI.FI bridge delivering an attacker token", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.receivingAssetId = word(ATTACKER)))), "refused", "a pair the bridge token table does not list"],
   ["a LI.FI bridge naming an exclusive relayer", onBase(LIFI_DIAMOND, lifiBridgeWith((_, data) => (data.exclusiveRelayer = word(ATTACKER)))), "refused", "names an exclusive relayer"],
   ["a LI.FI bridge paying an attacker", onBase(LIFI_DIAMOND, lifiBridgeWith((bridge, data) => ((bridge.receiver = ATTACKER), (data.receiverAddress = word(ATTACKER))))), "refused", "not this wallet or a listed destination"],

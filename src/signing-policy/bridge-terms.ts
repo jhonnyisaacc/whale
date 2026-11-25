@@ -1,6 +1,7 @@
 import { decodeFunctionData, encodeFunctionData, pad, parseAbi, type Hex } from "viem";
 import { chainByEvmId } from "../chains.js";
 import { bridgePair, meetsBridgeFloor, withinPar } from "./bridge-tokens.js";
+import { lifiStepRefusal, type LifiStep } from "./lifi-steps.js";
 
 export type ExecutableBridge = "lifi" | "across";
 
@@ -15,14 +16,14 @@ export const BRIDGE_CONTRACTS: Readonly<Record<number, Readonly<Record<Executabl
 
 const BRIDGE_DATA =
   "(bytes32 transactionId, string bridge, string integrator, address referrer, address sendingAssetId, address receiver, uint256 minAmount, uint256 destinationChainId, bool hasSourceSwaps, bool hasDestinationCall)";
+const LIFI_SWAP_DATA = "(address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)";
 const ACROSS_V4_DATA =
   "(bytes32 receiverAddress, bytes32 refundAddress, bytes32 sendingAssetId, bytes32 receivingAssetId, uint256 outputAmount, uint128 outputAmountMultiplier, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message)";
 
 export const LIFI_ACROSS_ABI = parseAbi([
   `function startBridgeTokensViaAcrossV4(${BRIDGE_DATA} _bridgeData, ${ACROSS_V4_DATA} _acrossData) payable`,
+  `function swapAndStartBridgeTokensViaAcrossV4(${BRIDGE_DATA} _bridgeData, ${LIFI_SWAP_DATA}[] _swapData, ${ACROSS_V4_DATA} _acrossData) payable`,
 ] as const);
-
-export const LIFI_SWAP_AND_START_SELECTOR = "0x1794958f";
 
 export const ACROSS_SPOKE_POOL_ABI = parseAbi([
   "function deposit(bytes32 depositor, bytes32 recipient, bytes32 inputToken, bytes32 outputToken, uint256 inputAmount, uint256 outputAmount, uint256 destinationChainId, bytes32 exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityParameter, bytes message) payable",
@@ -41,6 +42,7 @@ export type BridgeTerms = {
   exclusiveRelayer: Hex;
   exclusivity: number;
   destinationCall: boolean;
+  steps: readonly LifiStep[];
 };
 
 function evmAddress(word: Hex): string | null {
@@ -55,20 +57,36 @@ function decoded<T>(read: () => T): T | null {
   }
 }
 
+const PAR = 10n ** 18n;
+
+type LifiSwap = LifiStep & { receivingAssetId: string; requiresDeposit: boolean };
+
+function swapCharge(swaps: readonly LifiSwap[], sending: string): { token: string; amount: bigint } | null {
+  const same = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+  const last = swaps.at(-1);
+  const pulled = swaps.filter((swap) => swap.requiresDeposit);
+  const token = pulled[0]?.sendingAssetId;
+  if (!last || !same(last.receivingAssetId, sending) || !token || BigInt(token) === 0n || pulled.some((swap) => !same(swap.sendingAssetId, token))) return null;
+  return { token, amount: pulled.reduce((sum, swap) => sum + swap.fromAmount, 0n) };
+}
+
 function lifiTerms(data: Hex): BridgeTerms | null {
   const call = decoded(() => decodeFunctionData({ abi: LIFI_ACROSS_ABI, data }));
   if (!call) return null;
-  const [bridge, across] = call.args;
+  const start = call.functionName === "startBridgeTokensViaAcrossV4";
+  const [bridge, swaps, across] = start ? [call.args[0], [], call.args[1]] : call.args;
   const recipient = evmAddress(across.receiverAddress);
   const refund = evmAddress(across.refundAddress);
   const sending = evmAddress(across.sendingAssetId);
   const outputToken = evmAddress(across.receivingAssetId);
   if (!recipient || !refund || !sending || !outputToken) return null;
   if (recipient.toLowerCase() !== bridge.receiver.toLowerCase() || sending.toLowerCase() !== bridge.sendingAssetId.toLowerCase()) return null;
-  const charge = { token: bridge.sendingAssetId, amount: bridge.minAmount };
+  const charge = start ? { token: bridge.sendingAssetId, amount: bridge.minAmount } : swapCharge(swaps, sending);
+  if (!charge) return null;
+  const minOutput = start ? across.outputAmount : (bridge.minAmount * across.outputAmountMultiplier) / PAR;
   const destinationCall = bridge.hasDestinationCall || across.message !== "0x";
   const exclusive = { exclusiveRelayer: across.exclusiveRelayer, exclusivity: across.exclusivityParameter };
-  return { provider: "lifi", destinationChainId: bridge.destinationChainId, recipient, refund, charge, inputToken: sending, outputToken, minOutput: across.outputAmount, outputMultiplier: across.outputAmountMultiplier, ...exclusive, destinationCall };
+  return { provider: "lifi", destinationChainId: bridge.destinationChainId, recipient, refund, charge, inputToken: sending, outputToken, minOutput, outputMultiplier: across.outputAmountMultiplier, ...exclusive, destinationCall, steps: swaps };
 }
 
 function acrossTerms(data: Hex): BridgeTerms | null {
@@ -81,7 +99,7 @@ function acrossTerms(data: Hex): BridgeTerms | null {
   const outputToken = evmAddress(outputWord);
   if (!recipient || !refund || !token || !outputToken) return null;
   const charge = { token, amount: inputAmount };
-  return { provider: "across", destinationChainId, recipient, refund, charge, inputToken: token, outputToken, minOutput: outputAmount, outputMultiplier: null, exclusiveRelayer, exclusivity, destinationCall: message !== "0x" };
+  return { provider: "across", destinationChainId, recipient, refund, charge, inputToken: token, outputToken, minOutput: outputAmount, outputMultiplier: null, exclusiveRelayer, exclusivity, destinationCall: message !== "0x", steps: [] };
 }
 
 export function openAcrossDeposit(data: Hex): Hex | null {
@@ -137,6 +155,8 @@ export function checkBridge(input: BridgeCheck): void {
     throw new Error(`bridge charges ${terms.charge.amount} of ${terms.charge.token.toLowerCase()}, not the ${input.charge.amount} reserved`);
   }
   if (BigInt(terms.exclusiveRelayer) !== 0n || terms.exclusivity !== 0) throw new Error("bridge names an exclusive relayer");
+  const stepRefusal = terms.steps.length > 0 ? lifiStepRefusal(input.chainId, terms.steps, terms.charge) : null;
+  if (stepRefusal) throw new Error(stepRefusal);
   const pair = same(terms.inputToken, terms.charge.token) ? bridgePair(input.chainId, terms.inputToken, Number(destination), terms.outputToken) : null;
   if (!pair) throw new Error(`bridge sends ${terms.inputToken.toLowerCase()} and delivers ${terms.outputToken.toLowerCase()} on ${chainLabel(destination)}, a pair the bridge token table does not list`);
   if (terms.outputMultiplier !== null && !withinPar(pair, terms.outputMultiplier)) throw new Error(`bridge output multiplier ${terms.outputMultiplier} is above par for ${pair.symbol}`);
