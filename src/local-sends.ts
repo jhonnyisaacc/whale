@@ -95,6 +95,12 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
   const perpAccount = config.hyperliquidAccount?.trim() || setup.evmAddress;
 
   async function swap(command: Extract<LocalSend, { kind: "swap" }>): Promise<LocalSendResult> {
+    for (const chainKey of [command.sell.chainKey, command.buy.chainKey]) {
+      const spec = chainByKey(chainKey);
+      if (!spec) return { kind: "swap", status: "skipped", reason: `chain ${chainKey} is disabled`, broadcast: false, jobs: [], txs: [] };
+      const blocked = sendBlock("live", tierFor, spec.key, config.enabledChainKeys, false);
+      if (blocked) return { kind: "swap", status: "skipped", reason: blocked, broadcast: false, jobs: [], txs: [] };
+    }
     const priceOf = await usdPrices(config, [command.sell, command.buy]);
     if (priceOf(holdingOf(command.sell)) === null) return { kind: "swap", status: "skipped", reason: `no USD price for ${command.sell.symbol}, so the caps cannot be checked`, broadcast: false, jobs: [], txs: [] };
     const buyPriceUsd = priceOf(holdingOf(command.buy));
@@ -135,8 +141,8 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     const jobs: SignerJobRecord[] = [];
     const txs: TxRecord[] = [];
     const onTx = async (tx: TxRecord) => {
-      txs.push(tx);
       await executor.deps.recordTx?.(command.idempotencyKey, tx);
+      txs.push(tx);
     };
     const input = { config, signer: signerFor(jobs), chainKey: spec.key, to: command.to, amount: BigInt(command.amount), secrets, hold, onTx };
     let done: TxRecord | null;
@@ -154,6 +160,8 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
   }
 
   async function perp(command: PerpOrder): Promise<LocalSendResult> {
+    const blocked = sendBlock(command.mode, tierFor, "hypercore", config.enabledChainKeys, false);
+    if (blocked) return { kind: "perp", status: "skipped", reason: blocked, broadcast: false, jobs: [], txs: [] };
     const market = await perpMarket(config.hyperliquidUrl, command.coin);
     if (!market) return { kind: "perp", status: "skipped", reason: `${command.coin} is not a listed Hyperliquid perp`, broadcast: false, jobs: [], txs: [] };
     const jobs: SignerJobRecord[] = [];

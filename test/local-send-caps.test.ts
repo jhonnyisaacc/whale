@@ -181,11 +181,22 @@ test("a live transfer on a chain whose support tier is not live is refused befor
   }));
 
 test("a live swap on a chain whose support tier is not live is refused before any signer job", () =>
-  withLocalSender({ SUPPORT_TIERS: "base:dry_run", MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "25" }, async (send, chain, jobs) => {
-    const result = await send({ kind: "swap", idempotencyKey: "tier-swap", mode: "live", notionalUsd: 4, sell: onBase(ETH, "ETH", 18), buy: onBase(USDC, "USDC", 6), sellAmount: "1000000000000000", slippageBps: 50 });
-    assert.equal(result.status, "skipped", JSON.stringify(result));
+  withLocalSender({ ENABLED_CHAINS: "base,zksync,monad", SUPPORT_TIERS: "base:dry_run", MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "25" }, async (send, chain, jobs) => {
+    for (const [key, chainKey, chainId] of [["tier-swap-base", "base", 8453], ["tier-swap-zksync", "zksync", 324], ["tier-swap-monad", "monad", 143]] as const) {
+      const sell = onChain(chainKey, chainId);
+      const buy = { chain: { kind: "evm" as const, chainId }, chainKey, address: USDC, symbol: "USDC", decimals: 6 };
+      const result = await send({ kind: "swap", idempotencyKey: key, mode: "live", notionalUsd: 4, sell, buy, sellAmount: "1000000000000000", slippageBps: 50 });
+      assert.deepEqual([result.status, result.reason], ["skipped", "chain is not enabled for live sends"], key);
+    }
     assert.equal(jobs.length, 0);
     assert.deepEqual(chain.sent, []);
+    const config = loadConfig({ SUPPORT_TIERS: "base:dry_run", ENABLED_CHAINS: "base", TOKEN_SCREENING: "false" });
+    const executor = createExecutor(config, null, null);
+    const sends: string[] = [];
+    const { supportTierFor: _ignored, ...deps } = liveSwapDeps(sends);
+    const report = await executor.execute(swapIntent("executor-tier", 6, 6), { ...deps, config });
+    assert.deepEqual([report.decision, report.reason], ["skipped", "chain is not enabled for live sends"]);
+    assert.deepEqual(sends, []);
   }));
 
 test("a live transfer whose broadcast may have gone out keeps its tx hash in Postgres, so reconciliation keeps the reservation", { skip: !process.env.TEST_DATABASE_URL }, async () => {
@@ -201,6 +212,8 @@ test("a live transfer whose broadcast may have gone out keeps its tx hash in Pos
       assert.equal(row.rows[0]?.status, "reserved");
       assert.match(String(row.rows[0]?.tx_hash), /^0x[0-9a-f]{64}$/);
       assert.equal(row.rows[0]?.outcome, "pending");
+      const signed = await admin.query(`SELECT tx_hash, outcome, nonce::text AS nonce FROM ${schema}.signed_tx WHERE idempotency_key = $1`, ["lost"]);
+      assert.deepEqual([signed.rows[0]?.tx_hash, signed.rows[0]?.outcome, signed.rows[0]?.nonce], [row.rows[0]?.tx_hash, "pending", "7"]);
       await admin.query(`UPDATE ${schema}.spend_journal SET reserved_at = now() - interval '1 hour'`);
       const actions: string[] = [];
       await reconcileReserved(databaseUrl, 10, async () => null, (entry) => actions.push(entry.action));
@@ -208,6 +221,13 @@ test("a live transfer whose broadcast may have gone out keeps its tx hash in Pos
       const after = await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["lost"]);
       assert.equal(after.rows[0]?.status, "reserved");
     }, true);
+    await withLocalSender({ WHALE_BROADCAST: "true", DATABASE_URL: databaseUrl, MAX_USD_PER_TRADE: "5", DAILY_USD_CAP: "10" }, async (send, chain) => {
+      await admin.query(`DROP TABLE ${schema}.signed_tx`);
+      await assert.rejects(send({ kind: "transfer", idempotencyKey: "journal-fail", mode: "live", asset: onBase(ETH, "ETH", 18), to: DEST, amount: "1500000000000000" }), /tx journal failed/);
+      assert.deepEqual(chain.sent, []);
+      const released = await admin.query(`SELECT status FROM ${schema}.spend_journal WHERE idempotency_key = $1`, ["journal-fail"]);
+      assert.equal(released.rows[0]?.status, "released");
+    });
   } finally {
     await closeSpendPools();
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
