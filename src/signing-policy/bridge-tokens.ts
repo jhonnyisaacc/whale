@@ -36,11 +36,17 @@ export function bridgePair(sourceChainId: number, inputToken: string, destinatio
   return null;
 }
 
-export function meetsBridgeFloor(pair: BridgePair, charged: bigint, minOutput: bigint, maxFeeBps: number): boolean {
+const MAX_U128 = 2n ** 128n - 1n;
+
+export function meetsBridgeFloor(pair: BridgePair, charged: bigint, minOutput: bigint, maxFeeBps: number): boolean | null {
   const common = Math.max(pair.input.decimals, pair.output.decimals);
-  const received = minOutput * 10n ** BigInt(common - pair.output.decimals) * 10_000n;
-  const floor = charged * 10n ** BigInt(common - pair.input.decimals) * BigInt(10_000 - maxFeeBps);
-  return received >= floor;
+  const scaled = (amount: bigint, decimals: number, factor: bigint) => {
+    const widened = amount * 10n ** BigInt(common - decimals);
+    return widened <= MAX_U128 && widened * factor <= MAX_U128 ? widened * factor : null;
+  };
+  const received = scaled(minOutput, pair.output.decimals, 10_000n);
+  const floor = scaled(charged, pair.input.decimals, BigInt(10_000 - maxFeeBps));
+  return received === null || floor === null ? null : received >= floor;
 }
 
 const PAR = 10n ** 18n;

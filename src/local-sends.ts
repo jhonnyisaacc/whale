@@ -9,7 +9,7 @@ import { createBalanceCache } from "./balances.js";
 import { chainReader } from "./executor-server/chain-reader.js";
 import { createExecutor } from "./executor-server.js";
 import { BroadcastError } from "./executor.js";
-import { fetchPerpPosition } from "./hyperliquid.js";
+import { assertApprovedAgent, fetchPerpPosition } from "./hyperliquid.js";
 import { withPolicy, type TransactionSigner } from "./managed-signer.js";
 import { coingeckoLoader, createPriceCache, pricedHoldings, type PriceOf } from "./prices.js";
 import { checkedDecimals } from "./token-decimals.js";
@@ -164,6 +164,7 @@ export function localSender(env: NodeJS.ProcessEnv, queue: SignerQueue, setup: W
     if (blocked) return { kind: "perp", status: "skipped", reason: blocked, broadcast: false, jobs: [], txs: [] };
     const market = await perpMarket(config.hyperliquidUrl, command.coin);
     if (!market) return { kind: "perp", status: "skipped", reason: `${command.coin} is not a listed Hyperliquid perp`, broadcast: false, jobs: [], txs: [] };
+    if (perpAccount.toLowerCase() !== setup.evmAddress.toLowerCase()) await assertApprovedAgent(config.hyperliquidUrl, perpAccount, setup.evmAddress, fetch);
     const jobs: SignerJobRecord[] = [];
     const signer = signerFor(jobs);
     const report = await executor.execute(perpIntent(command, market, Date.now()), {

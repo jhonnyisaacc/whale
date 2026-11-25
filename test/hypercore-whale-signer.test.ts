@@ -96,21 +96,23 @@ test("an mcp perp order reaches the local sender, and without whale-signer it is
   await assert.rejects(callTool(deps, "perp", { ...args, vaultAddress: "0x1" }), /vaultAddress/);
 });
 
-async function hyperliquidInfo(): Promise<{ url: string; close: () => Promise<void>; positionReads: string[] }> {
+async function hyperliquidInfo(agents: unknown[] = []): Promise<{ url: string; close: () => Promise<void>; positionReads: string[]; agentReads: string[] }> {
   const positionReads: string[] = [];
+  const agentReads: string[] = [];
   const server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
       const { type, user } = JSON.parse(body) as { type: string; user?: string };
       if (type === "clearinghouseState") positionReads.push(user ?? "");
-      const reply = type === "meta" ? { universe: [{ name: "BTC", szDecimals: 5, maxLeverage: 40 }, { name: "ETH", szDecimals: 4, maxLeverage: 25 }] } : type === "allMids" ? { BTC: "91000", ETH: "1725.3" } : type === "clearinghouseState" ? { assetPositions: [] } : null;
+      if (type === "extraAgents") agentReads.push(user ?? "");
+      const reply = type === "extraAgents" ? agents : type === "meta" ? { universe: [{ name: "BTC", szDecimals: 5, maxLeverage: 40 }, { name: "ETH", szDecimals: 4, maxLeverage: 25 }] } : type === "allMids" ? { BTC: "91000", ETH: "1725.3" } : type === "clearinghouseState" ? { assetPositions: [] } : null;
       response.writeHead(reply ? 200 : 404, { "content-type": "application/json" });
       response.end(JSON.stringify(reply));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((resolve) => server.close(() => resolve())), positionReads };
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((resolve) => server.close(() => resolve())), positionReads, agentReads };
 }
 
 test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the order through whale-signer and sends neither", async () => {
@@ -122,6 +124,7 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
       assert.equal(dry.status, "would_send");
       assert.match(dry.reason, /hypercore ETH (asset 1 )?leverage 1 isolated limit .* actions updateLeverage,order/);
       assert.deepEqual(info.positionReads, [evm.address]);
+      assert.deepEqual(info.agentReads, [], "the key's own account needs no agent check");
 
       const live = send({ kind: "perp", idempotencyKey: "live", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "live" });
       const leverage = await lease(queue);
@@ -148,6 +151,36 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
       const blockedLive = await gated({ kind: "perp", idempotencyKey: "tier-live", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "live" });
       assert.deepEqual([blockedLive.status, blockedLive.reason, blockedLive.jobs.length], ["skipped", "chain is not enabled for live sends", 0]);
       assert.equal((await gated({ kind: "perp", idempotencyKey: "tier-dry", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "dry_run" })).status, "would_send");
+    });
+  } finally {
+    await info.close();
+  }
+});
+
+test("a local perp trade on another HYPERLIQUID_ACCOUNT_ADDRESS needs that account to have approved the whale-signer key", async () => {
+  const master = "0x3333333333333333333333333333333333333333";
+  const setup = { evmAddress: evm.address, solanaAddress: solana, token: TOKEN, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null };
+  const dry = { kind: "perp", idempotencyKey: "dry", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "dry_run" } as const;
+  for (const [agents, approved] of [[[], false], [[{ address: "0x4444444444444444444444444444444444444444", validUntil: null }], false], [[{ address: evm.address.toLowerCase(), validUntil: Date.now() - 1 }], false], [[{ address: evm.address.toLowerCase(), validUntil: Date.now() + 60_000 }], true]] as const) {
+    const info = await hyperliquidInfo([...agents]);
+    try {
+      await withQueue(async (queue) => {
+        const send = localSender({ HYPERLIQUID_API_URL: info.url, HYPERLIQUID_ACCOUNT_ADDRESS: master }, queue, setup);
+        if (approved) assert.equal((await send(dry)).status, "would_send");
+        else await assert.rejects(send(dry), /^Error: hyperliquid agent is not approved$/);
+        assert.deepEqual(info.agentReads, [master]);
+        assert.deepEqual(info.positionReads, approved ? [master] : [], "no position is read for an account the key cannot trade");
+      });
+    } finally {
+      await info.close();
+    }
+  }
+  const info = await hyperliquidInfo();
+  try {
+    await withQueue(async (queue) => {
+      const send = localSender({ HYPERLIQUID_API_URL: info.url, HYPERLIQUID_ACCOUNT_ADDRESS: evm.address.toLowerCase() }, queue, setup);
+      assert.equal((await send(dry)).status, "would_send");
+      assert.deepEqual(info.agentReads, [], "the key's own address in any case needs no agent check");
     });
   } finally {
     await info.close();
