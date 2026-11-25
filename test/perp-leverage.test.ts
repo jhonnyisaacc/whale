@@ -189,6 +189,27 @@ test("captured clearinghouseState responses parse to the position Whale plans ag
   await assert.rejects(() => fetchPerpPosition(MAINNET, ACCOUNT, "ETH", down), /clearinghouseState failed/);
 });
 
+test("a position read waits out a slow large account, and a read that never answers still fails closed", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const answerAfter = (delayMs: number) =>
+    ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => resolve(new Response(JSON.stringify(accounts.cross), { status: 200 })), delayMs);
+        init?.signal?.addEventListener("abort", () => (clearTimeout(timer), reject(init.signal?.reason)), { once: true });
+      })) as unknown as typeof fetch;
+  const slow = fetchPerpPosition(MAINNET, ACCOUNT, "ETH", answerAfter(4_000));
+  t.mock.timers.tick(4_000);
+  assert.deepEqual(await slow, { side: "long", margin: "cross", leverage: 10 });
+
+  let settled = false;
+  const silent = fetchPerpPosition(MAINNET, ACCOUNT, "ETH", answerAfter(60_000)).finally(() => (settled = true));
+  t.mock.timers.tick(4_999);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "the read is still waiting just under 5 s");
+  t.mock.timers.tick(1);
+  await assert.rejects(silent, /timeout after 5000ms/);
+});
+
 test("a fresh sell opens its short at isolated 1x, and the buy that closes it sends no updateLeverage", async () => {
   resetExecutorState();
   resetHyperMeta();
