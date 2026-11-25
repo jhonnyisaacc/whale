@@ -65,7 +65,7 @@ The daily USD total for local sends lives in the MCP process and starts at zero 
 
 ## Hyperliquid perps
 
-The `perp` tool trades a perp on the account that `HYPERLIQUID_ACCOUNT_ADDRESS` names, or on whale-signer's EVM address when it is unset. Before each order Whale reads that account's position in the coin:
+The `perp` tool trades a perp on the account that whale-signer's keystore key signs for. Whale reads positions from the account that `HYPERLIQUID_ACCOUNT_ADDRESS` names, or from the key's EVM address when it is unset. The local path does not check that the key is an approved agent of the named account. If the address names an account that has not approved this key, Whale reads that account's positions but the orders land on the key's own account. Before each order Whale reads the position in the coin:
 - With no position, Whale sends an isolated `updateLeverage` at 1x before the order, so neither a long nor a short opens at Hyperliquid's cross default.
 - With a position open, the order runs at the position's own margin mode and leverage, cross included. A buy grows a long or reduces a short. A sell reduces a long or grows a short.
 - When the position cannot be read, the order is skipped with `hyperliquid position unreadable`.
@@ -74,7 +74,7 @@ The `perp` tool takes no leverage. A signal sent to the executor can set `levera
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `HYPERLIQUID_ACCOUNT_ADDRESS` | unset | The account Whale reads and trades. Locally, set it only when the keystore key is an approved agent of another master account. Without it, Whale reads the agent's own empty account, sees no position, and sends `updateLeverage` before every order, a close included. On the hosted executor it is required. Without it, every perp order is skipped as `hyperliquid position unreadable`, a sell included |
+| `HYPERLIQUID_ACCOUNT_ADDRESS` | unset | The account Whale reads positions from. Orders are signed by the keystore key and trade on the account that key signs for. Locally, set it only when the keystore key is an approved agent of another master account. Without it, Whale reads the agent's own empty account, sees no position, and sends `updateLeverage` before every order, a close included. On the hosted executor it is required. Without it, every perp order is skipped as `hyperliquid position unreadable`, a sell included |
 | `HYPERCORE_SELL_LIMITS` | empty | A JSON object of sell limits, keyed `hypercore:perp:<asset>:sold` (or `hypercore:spot:<asset>:sold` for a spot sell) with a whole number of 1e-8 units of the sold asset, such as `{"hypercore:perp:1:sold":"1000000"}` for 0.01 ETH. A live sell, a close included, is refused with `no limit is set for hypercore:perp:<asset>:sold` when its key has no limit. This holds with `WHALE_BROADCAST` off. whale-signer keeps its own limit for the same key in its policy file |
 | `MAX_PERP_LEVERAGE` | `3` | The highest isolated leverage the app's signing policy signs, from 1 to 50 |
 
