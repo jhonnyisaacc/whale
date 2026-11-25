@@ -47,16 +47,16 @@ The Known issues block lists Whale's own gaps first.
 
 ## Copy claims only what the code backs
 
-Each claim was checked against `origin/main` on 2026-11-23.
+Each claim was checked against `origin/main` on 2026-11-25.
 
 | Topic | Site copy | Why |
 | --- | --- | --- |
-| Verbs | "Quote, swap and transfer (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking" | `bridge` ranks quotes and never broadcasts (`src/commands.ts:131`). `executeBridge` from #134 (`src/bridge/execute.ts:147`) has no MCP tool or CLI command yet, so the Known issues block reads "Bridge execution has no MCP or CLI tool yet". |
+| Verbs | "Quote, swap and transfer, trade Hyperliquid perps, and hold and send native BTC (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking" | The local MCP lists `perp` and `perp_positions` (`src/mcp-server.ts:34-35`) and `bitcoin_wallet` and `send_bitcoin` (`src/mcp-server.ts:37-38`) next to `quote`, `swap` and `transfer`. The hosted gateway lists none of the four. `bridge` ranks quotes and never broadcasts (`src/commands.ts:143`). `executeBridge` from #134 (`src/bridge/execute.ts:147`) has no MCP tool or CLI command yet, so the Known issues block reads "Bridge execution has no MCP or CLI tool yet". Per #171, live LI.FI bridges are also refused today. |
 | Swap and transfer | Dry-run by default, self-hosted live | Since #133 the local MCP sends live swaps and transfers through whale-signer when the caller asks for live. Hosted sends stay dry-run until gate #80 (`src/gateway/mcp-tools.ts:113`). |
-| Networks | "15 networks", with a badge on each limited chain | Ethereum: opt-in. Monad: opt-in, routers shipped (`src/chains.ts:296`), and its support tier defaults to disabled (`src/support.ts:6`). zkSync: opt-in, because its support tier defaults to dry_run (`src/support.ts:6`) and hosted wallets exclude it (`src/chains.ts:309`). Base, Optimism and Scroll: live, because they have L1 fee budgets (`src/chains.ts:283-285`). The hosted Turnkey policy renders their L2 gas clause (`src/signing-policy/turnkey.ts:83`), so an enclave wallet reaches them after its owner re-runs delegation. Blast: quotes only, because it has no L1 fee budget (`src/chains.ts:307`). HyperCore: orders only. |
+| Networks | "16 networks", with a badge on each limited chain | The chain table has 15 entries, and native Bitcoin from #155 is the 16th. Ethereum: opt-in. Monad: opt-in, routers shipped (`src/chains.ts:296`), and its support tier defaults to disabled (`src/support.ts:6`). zkSync: opt-in, because its support tier defaults to dry_run (`src/support.ts:6`) and hosted wallets exclude it (`src/chains.ts:309`). Base, Optimism and Scroll: live, because they have L1 fee budgets (`src/chains.ts:283-285`). The hosted Turnkey policy renders their L2 gas clause (`src/signing-policy/turnkey.ts:83`), so an enclave wallet reaches them after its owner re-runs delegation. Blast: quotes only, because it has no L1 fee budget (`src/chains.ts:307`). HyperCore: orders only, because no route calls the withdraw path (`src/broadcast/hypercore.ts:17`). Bitcoin: hold + send, because `send_bitcoin` sends only to `BITCOIN_WITHDRAW_ADDRESSES` (`src/bitcoin/send.ts:67`) and no tool trades BTC. |
 | Approval | "Trades on its own inside per-trade and daily USD caps" | On `main` since #88, the owner approval threshold defaults to none, and hosted swaps and transfers are both priced and counted against the per-trade and daily USD caps. An owner can still set a threshold, and sends above it wait for a passkey approval. The unused approval-mode module was removed in #95. |
 | Hosted gateway | "Sends are dry-run during beta" | Hosted live is not open. |
-| Signer | "Self-hosted signer, for EVM and Solana" | Since #133 the local MCP swaps and transfers sign through `whale-signer`. #129 adds HyperCore actions and withdrawals to the signer, but the local MCP does not send them. |
+| Signer | "Self-hosted signer, for EVM, Solana, HyperCore, BTC" | `whale-signer` signs EVM, Solana, HyperCore and Bitcoin jobs (`signer/src/lib.rs:42`, `:59`, `:94`, `:110`). Since #133 the local MCP swaps and transfers sign through it, the local `perp` tool signs HyperCore orders through it (`src/mcp-server.ts:34`), and `send_bitcoin` signs through it (`src/mcp-server.ts:38`). |
 | Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`, starts the executor on port 8788 with an `EXECUTOR_AUTH_TOKEN` (the default port is 8080, and `.mcp.json` points at 8788), then registers the MCP server with the same token, so `wallet_status` can reach it. Hermes stays "planned". It has a manifest since #108, but `hermes plugins install` blocks the package on its scan. |
 | License | "MIT License" | The `LICENSE` file landed in #94. |
 | Add a network | "An entry in src/chains.ts plus its fee limits" | A new EVM chain also needs a `DEFAULT_EVM_FEE_LIMITS` entry, or it gets no Turnkey clause (`src/signing-policy/turnkey.ts:83`). |
@@ -79,7 +79,7 @@ Owners sign in with a passkey (Google as the first-time fallback) and approve se
 
 - MCP OAuth: protected-resource and authorization-server metadata, dynamic client registration, client ID metadata documents, PKCE S256 only, https or loopback redirects, resource-bound tokens, 1-hour access tokens, 30-day refresh tokens with reuse detection, revocation (`src/gateway/routes-oauth.ts`, `src/gateway/oauth-store.ts`).
 - Consent page with wallet and limits (`web/src/pages/Connect.tsx`). Google sign-in (`web/src/pages/Login.tsx`). API keys shown once and hashed, with rotate and revoke (`src/gateway/agents.ts`, `web/src/pages/Agents.tsx`). Passkeys for step-up and approvals (`src/gateway/routes-passkeys.ts`).
-- A stdio forwarder that uses `WHALE_GATEWAY_URL` and `WHALE_API_KEY` (`src/mcp-server.ts:92`).
+- A stdio forwarder that uses `WHALE_GATEWAY_URL` and `WHALE_API_KEY` (`src/mcp-server.ts:119`).
 
 ### Designed here, not built yet
 
@@ -87,7 +87,7 @@ Owners sign in with a passkey (Google as the first-time fallback) and approve se
 - Device authorization grant: endpoint, `/device` page, and polling. `grant_types_supported` lists only `authorization_code` and `refresh_token`.
 - Passkey sign-in. Login offers Google only.
 - A "connected" page, a CAN / CANNOT scope list on consent, and the sign-in method in the Agents table.
-- Local setup: the executor listens on `0.0.0.0` (`src/executor-server.ts:246`), and its default port 8080 doesn't match the 8788 in `.mcp.json`.
+- Local setup: the executor listens on `0.0.0.0` (`src/executor-server.ts:254`), and its default port 8080 doesn't match the 8788 in `.mcp.json`.
 - The stdio forwarder can't use OAuth or device tokens yet, only an API key.
 
 ## Logo sources
