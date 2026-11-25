@@ -31,6 +31,7 @@ export interface TransactionSigner {
   solanaAddress(): string | null;
   signEvm(input: EvmSignInput): Promise<Hex>;
   signSolana(serialized: Uint8Array, context?: { buyMint: string | null }): Promise<Uint8Array>;
+  checkHyperliquid?(action: HyperliquidAction): void;
   signHyperliquid(action: HyperliquidAction, nonce: number, isMainnet: boolean): Promise<HyperliquidSignature>;
   signHyperliquidWithdraw?(action: WithdrawAction): Promise<HyperliquidSignature>;
 }
@@ -90,6 +91,9 @@ export function withPolicy(inner: TransactionSigner, config: AppConfig): Transac
         maxPriorityLamports: config.solanaMaxPriorityLamports,
       });
       return inner.signSolana(serialized, context);
+    },
+    checkHyperliquid(action) {
+      assertHyperliquidSigning(action, policy);
     },
     async signHyperliquid(action, nonce, isMainnet) {
       assertHyperliquidSigning(action, policy);
