@@ -1,23 +1,26 @@
-const NONCE_REJECTED = /nonce too low|nonce has already been used|replacement transaction underpriced|transaction underpriced|nonce_expired|invalid nonce/i;
+const NONCE_REJECTIONS = ["nonce too low", "nonce has already been used", "replacement transaction underpriced", "transaction underpriced", "nonce_expired", "invalid nonce"];
 
 // Node rejections that happen before the mempool: the transaction was never accepted anywhere.
-const PRE_MEMPOOL_REJECTED = new RegExp(
-  [
-    "insufficient funds",
-    "exceeds the balance of the account",
-    "intrinsic gas too (?:low|high)",
-    "exceeds block gas limit",
-    "invalid sender",
-    "fee cap less than block base fee",
-    "max fee per gas less than block base fee",
-    "cannot be lower than the block base fee",
-    "fee cap too low",
-    "tip higher than fee cap",
-    "max priority fee per gas higher than max fee per gas",
-    "transaction type not supported",
-  ].join("|"),
-  "i",
-);
+const PRE_MEMPOOL_REJECTIONS = [
+  "insufficient funds",
+  "exceeds the balance of the account",
+  "intrinsic gas too low",
+  "intrinsic gas too high",
+  "exceeds block gas limit",
+  "invalid sender",
+  "fee cap less than block base fee",
+  "max fee per gas less than block base fee",
+  "cannot be lower than the block base fee",
+  "fee cap too low",
+  "tip higher than fee cap",
+  "max priority fee per gas higher than max fee per gas",
+  "transaction type not supported",
+];
+
+export const DEFINITE_REJECTIONS: readonly string[] = [...NONCE_REJECTIONS, ...PRE_MEMPOOL_REJECTIONS];
+
+const NONCE_REJECTED = new RegExp(NONCE_REJECTIONS.join("|"), "i");
+const PRE_MEMPOOL_REJECTED = new RegExp(PRE_MEMPOOL_REJECTIONS.join("|"), "i");
 
 export function isNonceRejection(message: string): boolean {
   return NONCE_REJECTED.test(message);
