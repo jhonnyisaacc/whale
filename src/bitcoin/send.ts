@@ -9,7 +9,7 @@ import { BroadcastRefused, esploraIndexer, transactionId, type BitcoinIndexer } 
 import { selectCoins, unsignedTransaction } from "./plan.js";
 import { btcUsd, satsUsd } from "./read.js";
 import { verifiedBitcoinTransaction } from "./verify.js";
-import { bitcoinWallet, destinationScript, sameScript, type BitcoinWallet } from "./wallet.js";
+import { BITCOIN_KEY, bitcoinWallet, destinationScript, sameScript, type BitcoinWallet } from "./wallet.js";
 
 export type SendBitcoin = Extract<WalletCommand, { kind: "send_bitcoin" }>;
 export type BitcoinPlanView = { inputs: number; feeSats: string; feeRate: number; spentSats: string; usd: number };
@@ -59,6 +59,13 @@ async function signBitcoin(deps: BitcoinSendDeps, unsigned: Uint8Array, previous
   return signed;
 }
 
+async function signAndRecord(deps: BitcoinSendDeps, command: SendBitcoin, unsigned: Uint8Array, previous: readonly Uint8Array[], spent: BitcoinSpend, jobs: SignerJobRecord[]) {
+  const signed = await signBitcoin(deps, unsigned, previous, spent, jobs);
+  const txid = transactionId(signed);
+  await deps.spend.record(command.idempotencyKey, { chainKey: BITCOIN_KEY, txHash: txid, from: deps.wallet.address, to: command.to, value: command.sats, outcome: "signed" });
+  return { signed, txid };
+}
+
 async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<BitcoinSendResult> {
   const { bitcoin, wallet, indexer } = deps;
   if (!/^[1-9]\d{0,15}$/.test(command.sats)) return skipped("sats is a positive integer number of satoshis");
@@ -82,11 +89,10 @@ async function sendOnce(deps: BitcoinSendDeps, command: SendBitcoin): Promise<Bi
   if (reserved === "exists") return skipped("duplicate spend", plan);
   const release = () => deps.spend.release(command.idempotencyKey).catch(() => undefined);
   const jobs: SignerJobRecord[] = [];
-  const signed = await signBitcoin(deps, unsigned, previous, spent, jobs).catch(async (error: unknown) => {
+  const { signed, txid } = await signAndRecord(deps, command, unsigned, previous, spent, jobs).catch(async (error: unknown) => {
     await release();
     throw error;
   });
-  const txid = transactionId(signed);
   if (deps.hold) {
     await deps.spend.commit(command.idempotencyKey).catch(() => undefined);
     return { kind: "send_bitcoin", status: "signed", reason: HELD, jobs, plan, txid, signedTransaction: hex(signed) };
