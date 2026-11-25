@@ -127,6 +127,7 @@ test("perp tool text matches its flat vs open-position leverage rules and HYPERC
   assert.ok(perpTool);
   assert.match(perpTool.description, /notionalUsd \(in USD, not smallest units\)/);
   assert.match(perpTool.description, /whale-signer's key signs for/);
+  assert.match(perpTool.description, /hyperliquid agent is not approved/);
   assert.match(perpTool.description, /With no position it sets 1x isolated leverage/);
   assert.match(perpTool.description, /With a position open, the order runs at that position's margin mode and leverage, cross included/);
   assert.match(perpTool.description, /does not check HYPERCORE_SELL_LIMITS/);
