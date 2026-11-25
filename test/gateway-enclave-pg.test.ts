@@ -87,7 +87,7 @@ test("expected Turnkey policies follow the wallet's EVM chains and scope Whale's
   const policies = expectedPolicies({ delegateUserId, walletId: randomUUID(), solanaAddress: SOLANA, policy: DEFAULT_POLICY, config: DELEGATION });
   const evm = policies.find((policy) => policy.policyName.startsWith("EVM"));
   assert.match(evm?.condition ?? "", /eth\.tx\.chain_id == 42161/);
-  assert.doesNotMatch(evm?.condition ?? "", /eth\.tx\.chain_id == 8453/);
+  assert.match(evm?.condition ?? "", /eth\.tx\.chain_id == 8453 && eth\.tx\.gas <= 1500000 && eth\.tx\.max_fee_per_gas <= 1000000000 /);
   assert.doesNotMatch(evm?.condition ?? "", /eth\.tx\.chain_id == 1 /);
   assert.ok(policies.every((policy) => policy.consensus === `approvers.any(user, user.id == '${delegateUserId}')`));
   assert.throws(() => delegationFromEnv({ TURNKEY_DELEGATE_API_PUBLIC_KEY: "nothex" }), /compressed P-256/);

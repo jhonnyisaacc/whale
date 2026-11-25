@@ -473,11 +473,11 @@ test("the checked-in Turnkey policy matches the code", () => {
   };
   const filled = JSON.stringify(turnkeyPolicyDocument(sample));
   assert.equal(/<[A-Z_]+>/.test(filled), false);
-  assert.doesNotMatch(filled, /eth\.tx\.chain_id == 8453/);
+  assert.match(filled, /\(eth\.tx\.chain_id == 8453 && eth\.tx\.gas <= 1500000 && eth\.tx\.max_fee_per_gas <= 1000000000 && eth\.tx\.gas_price <= 1000000000 && \(eth\.tx\.to == '0x1111111111111111111111111111111111111111'\)\)/);
   assert.match(filled, /eth\.tx\.chain_id == 1 && eth\.tx\.gas <= 600000 && eth\.tx\.max_fee_per_gas <= 3000000000 && eth\.tx\.gas_price <= 3000000000 && \(eth\.tx\.to == '0x2222222222222222222222222222222222222222'\)/);
   const tuned = JSON.stringify(turnkeyPolicyDocument({ ...sample, feeLimits: { 1: { maxGas: 2_000_000n, maxFeePerGas: 7n }, 8453: { maxGas: 2_000_000n, maxFeePerGas: 7n } } }));
   assert.match(tuned, /eth\.tx\.chain_id == 1 && eth\.tx\.gas <= 2000000 && eth\.tx\.max_fee_per_gas <= 7 && eth\.tx\.gas_price <= 7 && \(eth\.tx\.to == '0x2222222222222222222222222222222222222222'\)/);
-  assert.doesNotMatch(tuned, /eth\.tx\.chain_id == 8453/, "an L1 data fee chain renders no clause even with a limit");
+  assert.doesNotMatch(tuned, /eth\.tx\.chain_id == 8453/, "an L1 data fee chain renders no clause when its limit has no L1 budget");
   for (const id of ["10", "8453", "81457", "534352"]) {
     assert.throws(() => evmFeeLimits(JSON.stringify({ [id]: { maxGas: "1", maxFeePerGas: "1" } })), /EVM_FEE_LIMITS_JSON is invalid/);
   }
