@@ -1,5 +1,7 @@
 import { DEFINITE_REJECTIONS } from "./nonce.js";
 
+const OWN_REASONS = new Set(["simulation reverted", "a simulated call reverted", "no rpc is configured"]);
+
 const KNOWN_PHRASES = [
   ...DEFINITE_REJECTIONS,
   "already known",
@@ -9,14 +11,32 @@ const KNOWN_PHRASES = [
   "blockhash not found",
   "already been processed",
   "simulation reverted",
-  "a simulated call reverted",
-  "no rpc is configured",
 ];
 
 const CHAIN_MISMATCH =
   /refusing (?:[a-z0-9-]{1,40}|chain \d{1,12}): it is configured as chain \d{1,12}, but an RPC in RPC_URL_\d{1,12}, RPC_URLS_\d{1,12} or MEV_RPC_URL_\d{1,12} answered eth_chainId with chain \d{1,20}/;
 
-const NODE_CODE = /^[A-Z][A-Z0-9_]{1,40}$/;
+const TRANSPORT_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ECONNABORTED",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  "EPROTO",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "CERT_HAS_EXPIRED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
 
 export class RpcFailure extends Error {}
 
@@ -29,9 +49,9 @@ function causes(error: unknown): Error[] {
 function detail(chain: readonly Error[]): string | null {
   for (const error of chain) {
     const { code, status } = error as { code?: unknown; status?: unknown };
-    if (typeof code === "number" && Number.isSafeInteger(code)) return `code ${code}`;
-    if (typeof status === "number" && Number.isSafeInteger(status)) return `http ${status}`;
-    if (typeof code === "string" && NODE_CODE.test(code)) return code;
+    if (typeof code === "number" && Number.isSafeInteger(code) && Math.abs(code) <= 1_000_000) return `code ${code}`;
+    if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599) return `http ${status}`;
+    if (typeof code === "string" && !/rpc/i.test(error.name) && TRANSPORT_CODES.has(code)) return code;
     if (error.name === "TimeoutError" || error.name === "AbortError") return "timed out";
   }
   return null;
@@ -41,6 +61,7 @@ export function rpcReason(error: unknown): string {
   if (error instanceof RpcFailure) return error.message;
   const chain = causes(error);
   const text = chain.length > 0 ? chain.map((entry) => entry.message).join("\n") : String(error);
+  if (OWN_REASONS.has(text)) return text;
   const mismatch = CHAIN_MISMATCH.exec(text)?.[0];
   if (mismatch) return mismatch;
   const lower = text.toLowerCase();
