@@ -124,6 +124,7 @@ const realLifiBridge = onBase(LIFI_DIAMOND, lifiBridge.tx.data);
 const realAcrossBridge = onBase(BASE_SPOKE_POOL, acrossBridgeWith(() => undefined));
 const realSwapAndStart = onBase(LIFI_DIAMOND, lifiSwapAndStart.tx.data);
 const swapFirst = (edit) => onBase(LIFI_DIAMOND, swapAndStartWith(edit));
+const BASE_STEPS = LIFI_STEP_TARGETS[BASE];
 const bridgeCases = [
   ["a real LI.FI AcrossV4 bridge from Base to this wallet on Arbitrum", realLifiBridge, "signed", null, null, bridgeSpent(realLifiBridge)],
   ["a real Across SpokePool deposit from Base to this wallet on Arbitrum", realAcrossBridge, "signed", null, null, bridgeSpent(realAcrossBridge)],
@@ -148,6 +149,8 @@ const bridgeCases = [
   ["a LI.FI swap then bridge whose fee step forwards exactly 50 bps", swapFirst(({ swaps }) => (swaps[0].callData = feeStep(10_000n))), "signed"],
   ["a LI.FI swap then bridge whose swap step calls an attacker", swapFirst(({ swaps }) => (swaps[0].callTo = ATTACKER)), "refused", `the LI.FI swap step calls 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`],
   ["a LI.FI swap then bridge whose swap step approves an attacker", swapFirst(({ swaps }) => (swaps[0].approveTo = ATTACKER)), "refused", `the LI.FI swap step approves 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`],
+  ["a LI.FI swap then bridge whose swap step calls a listed router and approves a listed spender", swapFirst(({ swaps }) => Object.assign(swaps[0], { callTo: BASE_STEPS.targets[0], approveTo: BASE_STEPS.spenders[0], callData: "0x" })), "signed"],
+  ["a LI.FI swap then bridge whose swap step calls a spender, which may only be approved", swapFirst(({ swaps }) => Object.assign(swaps[0], { callTo: BASE_STEPS.spenders[0], approveTo: BASE_STEPS.spenders[0], callData: "0x" })), "refused", `the LI.FI swap step calls 0x${BASE_STEPS.spenders[0].slice(2).toLowerCase()}, which is not a listed LI.FI step target`],
   ["a LI.FI swap then bridge with a second swap step to an attacker", swapFirst(({ swaps }) => swaps.push({ ...swaps[0], callTo: ATTACKER, approveTo: ATTACKER, fromAmount: 1_995_000n, callData: "0xabcdef", requiresDeposit: false })), "refused", `the LI.FI swap step calls 0x${ATTACKER.slice(2)}, which is not a listed LI.FI step target`],
   ["a LI.FI swap then bridge whose swap ends in another token", swapFirst(({ swaps }) => (swaps[0].receivingAssetId = WETH)), "refused", "not one the signer can read"],
   ["a LI.FI swap then bridge that pulls WETH and bridges USDC", swapFirst(({ swaps }) => (swaps[0].sendingAssetId = WETH)), "refused", "a pair the bridge token table does not list"],
