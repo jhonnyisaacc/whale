@@ -1,6 +1,6 @@
 # Whale landing page and docs design
 
-The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `exports/` are review copies of the same frames.
+The design source is `whale.pen`. Open it in Pencil (pen.dev). The PNGs in `exports/` are review copies of the same frames, exported before #144, so their copy is older than `whale.pen` and this file. The built site is in `../site`. See `../site/README.md`.
 
 | File | What it shows |
 | --- | --- |
@@ -37,7 +37,7 @@ One block that a user pastes into any agent host that can run shell commands. Th
 
 ## Comparison
 
-The competitor cells come from public docs as of 2026-11-18. The Known issues block comes from public GitHub issues, each confirmed still open on 2026-11-23. Check them again before publishing.
+The competitor cells come from public docs as of 2026-11-18. The Known issues block comes from public GitHub issues, each confirmed still open on 2026-11-26. Check them again before publishing.
 
 - MetaMask: https://metamask.com/agent-wallet, `MetaMask/metamask-docs#3032`, `MetaMask/agent-skills#66`, `MetaMask/agent-wallet-plugin-template#6` and `#7`, `MetaMask/metamask-extension#47534`
 - Phantom: https://docs.phantom.com/phantom-mcp-server, `phantom/phantom-connect-sdk#405`, `#407`, `#408`, `#410`
@@ -47,18 +47,25 @@ The Known issues block lists Whale's own gaps first.
 
 ## Copy claims only what the code backs
 
-Each claim was checked against `origin/main` on 2026-11-25.
+Each claim was checked against `origin/main` on 2026-11-26 (2065cac).
 
 | Topic | Site copy | Why |
 | --- | --- | --- |
-| Verbs | "Quote, swap and transfer, trade Hyperliquid perps, and hold and send native BTC (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking" | The local MCP lists `perp` and `perp_positions` (`src/mcp-server.ts:34-35`) and `bitcoin_wallet` and `send_bitcoin` (`src/mcp-server.ts:37-38`) next to `quote`, `swap` and `transfer`. The hosted gateway lists none of the four. `bridge` ranks quotes and never broadcasts (`src/commands.ts:143`). `executeBridge` from #134 (`src/bridge/execute.ts:147`) has no MCP tool or CLI command yet, so the Known issues block reads "Bridge execution has no MCP or CLI tool yet". Per #171, live LI.FI bridges are also refused today. |
+| Verbs | "Quote, swap and transfer, trade Hyperliquid perps, and hold and send native BTC (dry-run by default; self-hosted live, hosted pending), plus bridge-quote ranking" | The local MCP lists `perp` and `perp_positions` (`src/mcp-server.ts:34-35`) and `bitcoin_wallet` and `send_bitcoin` (`src/mcp-server.ts:37-38`) next to `quote`, `swap` and `transfer`. The hosted gateway lists none of the four. `bridge` ranks quotes and never broadcasts (`src/commands.ts:143`). `executeBridge` from #134 (`src/bridge/execute.ts:157`) has no MCP tool or CLI command yet, so the Known issues block reads "Bridge execution has no MCP or CLI tool yet". Since #182 both signers sign a live LI.FI `swapAndStartBridgeTokensViaAcrossV4` bridge (`src/signing-policy/bridge-terms.ts:25`), so the gap is the missing tool, not the signer. |
 | Swap and transfer | Dry-run by default, self-hosted live | Since #133 the local MCP sends live swaps and transfers through whale-signer when the caller asks for live. Hosted sends stay dry-run until gate #80 (`src/gateway/mcp-tools.ts:113`). |
-| Networks | "16 networks", with a badge on each limited chain | The chain table has 15 entries, and native Bitcoin from #155 is the 16th. Ethereum: opt-in. Monad: opt-in, routers shipped (`src/chains.ts:296`), and its support tier defaults to disabled (`src/support.ts:6`). zkSync: opt-in, because its support tier defaults to dry_run (`src/support.ts:6`) and hosted wallets exclude it (`src/chains.ts:309`). Base, Optimism and Scroll: live, because they have L1 fee budgets (`src/chains.ts:283-285`). The hosted Turnkey policy renders their L2 gas clause (`src/signing-policy/turnkey.ts:83`), so an enclave wallet reaches them after its owner re-runs delegation. Blast: quotes only, because it has no L1 fee budget (`src/chains.ts:307`). HyperCore: orders only, because no route calls the withdraw path (`src/broadcast/hypercore.ts:17`). Bitcoin: hold + send, because `send_bitcoin` sends only to `BITCOIN_WITHDRAW_ADDRESSES` (`src/bitcoin/send.ts:67`) and no tool trades BTC. |
+| Networks | "16 networks", with a badge on each limited chain | The chain table has 15 entries, and native Bitcoin from #155 is the 16th. Ethereum: opt-in. Monad: opt-in, routers shipped (`src/chains.ts:296`), and its support tier defaults to disabled (`src/support.ts:6`). zkSync: on, with live sends at dry-run by default, because its support tier defaults to dry_run (`src/support.ts:6`) and hosted wallets exclude it (`src/chains.ts:309`). Base, Optimism and Scroll: live, because they have L1 fee budgets (`src/chains.ts:283-285`). The hosted Turnkey policy renders their L2 gas clause (`src/signing-policy/turnkey.ts:83`), so an enclave wallet reaches them after its owner re-runs delegation. Blast: quotes only, because it has no L1 fee budget, so live mode refuses to boot with it enabled (`src/chains.ts:307`, `src/config/guard.ts:96`). HyperCore: orders only, because no route calls the withdraw path (`src/broadcast/hypercore.ts:17`). Bitcoin: hold + send, because `send_bitcoin` sends only to `BITCOIN_WITHDRAW_ADDRESSES` (`src/bitcoin/send.ts:88`) and no tool trades BTC. |
 | Approval | "Trades on its own inside per-trade and daily USD caps" | On `main` since #88, the owner approval threshold defaults to none, and hosted swaps and transfers are both priced and counted against the per-trade and daily USD caps. An owner can still set a threshold, and sends above it wait for a passkey approval. The unused approval-mode module was removed in #95. |
 | Hosted gateway | "Sends are dry-run during beta" | Hosted live is not open. |
 | Signer | "Self-hosted signer, for EVM, Solana, HyperCore, BTC" | `whale-signer` signs EVM, Solana, HyperCore and Bitcoin jobs (`signer/src/lib.rs:42`, `:59`, `:94`, `:110`). Since #133 the local MCP swaps and transfers sign through it, the local `perp` tool signs HyperCore orders through it (`src/mcp-server.ts:34`), and `send_bitcoin` signs through it (`src/mcp-server.ts:38`). |
 | Install | "Copy one block into any agent that can run shell commands" | The block runs `git clone` and `pnpm`, starts the executor on port 8788 with an `EXECUTOR_AUTH_TOKEN` (the default port is 8080, and `.mcp.json` points at 8788), then registers the MCP server with the same token, so `wallet_status` can reach it. Hermes installs the package with `hermes plugins install jhonnyisaacc/whale` (#197). |
 | License | "MIT License" | The `LICENSE` file landed in #94. |
+| Perps safety | "Every perp action passes the signing policy before any is sent. Leverage stops at 3x unless you raise MAX_PERP_LEVERAGE." | Every action is checked before any is signed (`src/broadcast.ts:32`, #190). The policy refuses leverage above the limit (`src/signing-policy/hypercore.ts:85`), and the limit defaults to 3 (`src/config/load.ts:87`, #143). A key that trades for another account must be its approved agent (`src/hyperliquid.ts:133`, #195). |
+| Outside text | "RPC failures, Hyperliquid rejections and Bitcoin indexer errors reach the agent in Whale's own words" | RPC errors pass through `rpcReason` (`src/rpc-reason.ts:60`, #193). A Hyperliquid rejection in an unknown form becomes a fixed string (`src/hyperliquid.ts:352`, #178). An Esplora refusal keeps only a known bitcoind reason (`src/bitcoin/esplora.ts:97`, #204). |
+| Support tiers | "SUPPORT_TIERS refuses a chain name it doesn't know, and local live sends obey each chain's tier" | Unknown keys throw at load (`src/support.ts:20`, #189). Local live sends check the tier (`src/local-sends.ts:94`, #177). |
+| Spend counting (docs only) | "A sent BTC spend keeps counting" | A failed journal commit leaves the row reserved with its txid (`src/bitcoin/send.ts:50`, #173, #192). The spend_journal cap has a TLA+ model (`.cursor/skills/spend-cap-model/SpendCap.tla`, #199). |
+| Hosted caps (docs only) | "Hosted wallet_status reports remainingTodayUsd" | `src/gateway/mcp-tools.ts:115` (#149). |
+| Enclave L2 chains (docs only) | "The hosted Turnkey policy renders their L2 gas clause" | `src/signing-policy/turnkey.ts:83` (#194). Blast still has no L1 budget, so it gets no clause. |
+| Checks (docs only) | "verify-whale" and "a test keeps every tracked file clear of the Hermes install scan" | `.cursor/skills/verify-whale/SKILL.md` (#198), `test/host-manifests.test.ts:201` (#200). |
 | Add a network | "An entry in src/chains.ts plus its fee limits" | A new EVM chain also needs a `DEFAULT_EVM_FEE_LIMITS` entry, or it gets no Turnkey clause (`src/signing-policy/turnkey.ts:83`). |
 
 ## Authentication
