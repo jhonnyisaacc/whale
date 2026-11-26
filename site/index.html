@@ -356,7 +356,7 @@ the result.</pre>
   </div>
   <div class="safety-item">
     <span class="glyph-dot dot-sky"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#chart-line-up"/></svg></span>
-    <div><h3>Perps checked before they move</h3><p>Every perp action passes the signing policy before any is sent. Leverage stops at 3x unless you raise MAX_PERP_LEVERAGE.</p></div>
+    <div><h3>Perps checked before they move</h3><p>Every perp action passes the signing policy before any is sent. Leverage stops at 3x unless you raise MAX_PERP_LEVERAGE. Orders under Hyperliquid's 10 USD minimum are refused before signing, so perps need a MAX_USD_PER_TRADE of at least 10.</p></div>
   </div>
   <div class="safety-item">
     <span class="glyph-dot dot-peach"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#chat-centered-text"/></svg></span>
