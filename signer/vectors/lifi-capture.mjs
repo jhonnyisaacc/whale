@@ -10,6 +10,8 @@ const CASES = [
   { name: "zkSync USDC to ETH", chainId: 324, sell: "0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4", buy: NATIVE, fromAmount: "5000000" },
   { name: "zkSync ETH to USDC", chainId: 324, sell: NATIVE, buy: "0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4", fromAmount: "1000000000000000" },
   { name: "Base USDC to WETH", chainId: 8453, sell: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", buy: "0x4200000000000000000000000000000000000006", fromAmount: "5000000" },
+  { name: "Ethereum USDC to WETH", chainId: 1, sell: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", buy: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", fromAmount: "5000000" },
+  { name: "Optimism USDC to WETH", chainId: 10, sell: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", buy: "0x4200000000000000000000000000000000000006", fromAmount: "5000000" },
   { name: "Arbitrum USDC to WETH", chainId: 42161, sell: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", buy: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", fromAmount: "100000000" },
 ];
 

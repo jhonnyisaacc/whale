@@ -61,7 +61,11 @@ export async function bridgeStatus(config: AppConfig, lookup: BridgeLookup, fetc
     const response = await vendorResponse(fetchImpl, statusUrl(config, lookup), { signal });
     const text = await readVendorText(response);
     if (!response.ok && response.status !== 404) throw new Error(`${lookup.provider} status answered ${response.status}`);
-    return JSON.parse(text) as unknown;
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error(`${lookup.provider} status answered a body that is not json`);
+    }
   });
   return lookup.provider === "lifi" ? readLifiStatus(lookup, body) : readAcrossStatus(lookup, body);
 }
