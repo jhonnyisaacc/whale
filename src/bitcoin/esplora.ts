@@ -80,7 +80,7 @@ const BITCOIND_REASONS = [
   "TX decode failed",
 ];
 
-export const UNKNOWN_BITCOIND_REASON = "reason not in a known bitcoind format";
+const UNKNOWN_BITCOIND_REASON = "reason not in a known bitcoind format";
 
 const rpcErrorBody = z.object({ message: z.string() }).loose();
 
@@ -94,7 +94,7 @@ function rpcMessage(text: string): string {
   }
 }
 
-export function bitcoindReason(text: string): string {
+function bitcoindReason(text: string): string {
   const message = rpcMessage(text.trim());
   return BITCOIND_REASONS.find((reason) => message === reason || [",", " (", ":"].some((separator) => message.startsWith(`${reason}${separator}`))) ?? UNKNOWN_BITCOIND_REASON;
 }
