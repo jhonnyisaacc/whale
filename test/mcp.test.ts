@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Keypair } from "@solana/web3.js";
@@ -79,8 +82,16 @@ test("wallet_status reads the executor and a quote with no provider skips", asyn
 const SERVER = fileURLToPath(new URL("../src/mcp-server.js", import.meta.url));
 
 function runServer(input: string, extra: Record<string, string> = {}) {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "WHALE_GATEWAY_URL" && key !== "WHALE_API_KEY"));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(WHALE_GATEWAY_URL|WHALE_API_KEY|WHALE_SIGNER_.*|SUPPORT_TIERS)$/.test(key)));
   return spawnSync(process.execPath, [SERVER], { input, env: { ...env, ...extra }, encoding: "utf8", timeout: 10_000 });
+}
+
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
 }
 
 test("the stdio server refuses a gateway URL without an API key, and a key without a URL", () => {
@@ -185,5 +196,25 @@ test("perp tool text matches its flat vs open-position leverage rules and HYPERC
   } finally {
     await queue.close();
     await new Promise<void>((resolve) => info.close(() => resolve()));
+  }
+});
+
+test("with whale-signer configured, an unusable config exits 1 with one redacted line", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "whale-mcp-"));
+  try {
+    const keystore = path.join(dir, "keystore.json");
+    writeFileSync(keystore, JSON.stringify({ evmAddress: "0x000000000000000000000000000000000000dEaD", solanaAddress: "11111111111111111111111111111111" }));
+    writeFileSync(path.join(dir, "keystore.token"), "t".repeat(40));
+    const typo = runServer("", { WHALE_SIGNER_KEYSTORE: keystore, WHALE_SIGNER_PORT: String(await freePort()), SUPPORT_TIERS: "bitcon:dry_run" });
+    assert.equal(typo.status, 1);
+    assert.equal(typo.stdout, "");
+    assert.match(typo.stderr, /^whale: config is not usable: SUPPORT_TIERS names unknown chain bitcon\. Known: /);
+    assert.equal(typo.stderr.split("\n").filter(Boolean).length, 1, typo.stderr);
+    const leaked = runServer("", { WHALE_SIGNER_KEYSTORE: keystore, WHALE_SIGNER_PORT: String(await freePort()), SUPPORT_TIERS: `0x${"ab".repeat(32)}:live` });
+    assert.equal(leaked.status, 1);
+    assert.equal(leaked.stderr.includes("ab".repeat(16)), false, leaked.stderr);
+    assert.match(leaked.stderr, /^whale: config is not usable: SUPPORT_TIERS names unknown chain \[redacted\]/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

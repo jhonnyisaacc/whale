@@ -97,7 +97,7 @@ git diff --stat d1657ec -- src/spend.ts src/executor.ts src/broadcast/evm.ts src
 
 ## Not covered
 
-Solana, HyperCore, and Bitcoin sends; multi-leg routes; the hosted ledger in `src/gateway/send-ledger.ts` and `hosted_sends`, which today answers quotes only; local MCP transfers in `src/local-sends.ts`, whose `onTx` never writes `signed_tx`; `withdraw_journal`; per-trade limits in `src/limits.ts`; legacy rows; day rollover; the in-memory journal of dry runs. A pass covers the model within these bounds, not the whole executor.
+Solana, HyperCore, and Bitcoin sends; multi-leg routes; the hosted ledger in `src/gateway/send-ledger.ts` and `hosted_sends`, which today answers quotes only; local MCP transfers in `src/local-sends.ts`; `withdraw_journal`; per-trade limits in `src/limits.ts`; legacy rows; day rollover; the in-memory journal of dry runs. A pass covers the model within these bounds, not the whole executor.
 
 ## Findings
 

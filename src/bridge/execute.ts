@@ -7,6 +7,7 @@ import type { ChainRef, TxRecord } from "../domain.js";
 import { BroadcastError } from "../executor.js";
 import type { EvmSignInput } from "../managed-signer.js";
 import type { BridgeProvider, BridgeRoute } from "../rebalance.js";
+import { guardRpc } from "../rpc-reason.js";
 import { redactError } from "../redact.js";
 import { readTransport } from "../rpc.js";
 import { BRIDGE_CONTRACTS, bridgeTerms, openAcrossDeposit, type ExecutableBridge } from "../signing-policy/bridge-terms.js";
@@ -23,6 +24,7 @@ export type BridgeSpend = {
   reserve(key: string, usd: number): Promise<"reserved" | "exists" | "cap">;
   release(key: string): Promise<void>;
   commit(key: string): Promise<void>;
+  record(key: string, tx: TxRecord): Promise<void>;
 };
 
 export type BridgeDeps = {
@@ -133,13 +135,20 @@ async function landed(submitted: Awaited<ReturnType<typeof submitEvm>>): Promise
   return records;
 }
 
-async function sendLive(deps: BridgeDeps, planned: Planned): Promise<{ txs: TxRecord[]; transfer: BridgeStatus }> {
+async function sendLive(deps: BridgeDeps, planned: Planned, key: string): Promise<{ txs: TxRecord[]; transfer: BridgeStatus }> {
   const { evm } = deps;
   const txs: TxRecord[] = [];
   if (planned.approve) {
     txs.push(...(await landed(await submitEvm(evm, { to: planned.sell, data: approveCall(planned), value: 0n, gas: null, purpose: "approve", approval: planned.charge }, null))));
   }
-  const bridge = await submitEvm(evm, { to: planned.call.to, data: planned.call.data, value: 0n, gas: planned.call.gas, purpose: "bridge", charge: planned.charge }, null);
+  const keyed = {
+    ...evm,
+    onTx: async (tx: TxRecord) => {
+      await deps.spend.record(key, tx);
+      await evm.onTx(tx);
+    },
+  };
+  const bridge = await submitEvm(keyed, { to: planned.call.to, data: planned.call.data, value: 0n, gas: planned.call.gas, purpose: "bridge", charge: planned.charge }, null);
   txs.push(...(await landed(bridge)));
   const lookup = { provider: planned.provider, fromChainId: evm.chainId, txHash: bridge.record.txHash };
   return { txs, transfer: await trackBridge(lookup, deps.status, evm.io, evm.io.now() + deps.trackTimeoutMs) };
@@ -157,7 +166,7 @@ export async function executeBridge(deps: BridgeDeps, order: BridgeOrder): Promi
       await deps.spend.release(key);
       return { status: "signed", provider: planned.provider, reason: HELD, txs };
     }
-    const { txs, transfer } = await sendLive(deps, planned);
+    const { txs, transfer } = await sendLive(deps, planned, key);
     const committed = await deps.spend.commit(key).then(
       () => "",
       (error: unknown) => `, and its spend stays reserved because the commit failed: ${redactError(error, deps.evm.secrets)}`,
@@ -172,12 +181,12 @@ export async function executeBridge(deps: BridgeDeps, order: BridgeOrder): Promi
 
 export function viemBridgeReads(chainId: number, rpcs: readonly string[]): BridgeReads {
   const client = createPublicClient({ chain: evmChain(chainId, rpcs), transport: readTransport(chainId, rpcs) });
-  return {
+  return guardRpc<BridgeReads>({
     allowance: (token, owner, spender) => client.readContract({ address: token, abi: erc20Abi, functionName: "allowance", args: [owner, spender] }),
     async simulate(from, calls) {
       const { results } = await client.simulateCalls({ account: from, calls: calls.map(({ to, data, value }) => ({ to, data, value })) });
       if (results.some((result) => result.status !== "success")) throw new Error("a simulated call reverted");
       return results.map((result) => result.gasUsed);
     },
-  };
+  });
 }

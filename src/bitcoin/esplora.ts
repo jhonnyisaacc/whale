@@ -13,9 +13,10 @@ export type BitcoinIndexer = {
   balance(address: string): Promise<AddressBalance>;
   simulate(signed: Uint8Array): Promise<void>;
   broadcast(signed: Uint8Array): Promise<string>;
+  transactionStatus(txid: string): Promise<"landed" | "pending" | null>;
 };
 
-export class BroadcastRefused extends Error {}
+export class SimulationRefused extends Error {}
 
 export const RAW_TX_OPTIONS = { allowUnknownOutputs: true, allowUnknownInputs: true, disableScriptCheck: true } as const;
 
@@ -56,7 +57,13 @@ export function parseFeeRate(body: unknown): number {
 export function parseMempoolTest(body: unknown, expected: string): void {
   const [result] = mempoolTest.parse(body);
   if (result.txid !== expected) throw new Error(`esplora tested txid ${result.txid} for transaction ${expected}`);
-  if (!result.allowed) throw new Error(`simulation rejected the transaction: ${(result["reject-reason"] ?? "no reason given").slice(0, 200)}`);
+  if (!result.allowed) throw new SimulationRefused(`simulation rejected the transaction: ${(result["reject-reason"] ?? "no reason given").slice(0, 200)}`);
+}
+
+const txStatus = z.object({ status: z.object({ confirmed: z.boolean() }).loose() }).loose();
+
+export function parseTransactionStatus(body: unknown): "landed" | "pending" {
+  return txStatus.parse(body).status.confirmed ? "landed" : "pending";
 }
 
 export function parseTransaction(body: string, expected: string): Uint8Array {
@@ -91,10 +98,16 @@ export function esploraIndexer(baseUrl: string, fetchImpl: typeof fetch = fetch)
     async broadcast(signed) {
       const expected = transactionId(signed);
       const response = await request("/tx", { method: "POST", headers: { "content-type": "text/plain" }, body: Buffer.from(signed).toString("hex") });
-      if (response.status >= 400 && response.status < 500) throw new BroadcastRefused(`esplora refused the transaction: ${response.text.slice(0, 300)}`);
-      if (!response.ok) throw new Error(`esplora broadcast failed ${response.status}`);
+      if (!response.ok) throw new Error(`esplora broadcast failed ${response.status}: ${response.text.slice(0, 300)}`);
       if (response.text.trim() !== expected) throw new Error(`esplora answered txid ${response.text.trim().slice(0, 64)} for transaction ${expected}`);
       return expected;
+    },
+    async transactionStatus(id) {
+      const expected = txid.parse(id);
+      const response = await request(`/tx/${expected}`);
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(`esplora tx status failed ${response.status}`);
+      return parseTransactionStatus(JSON.parse(response.text));
     },
   };
 }

@@ -146,6 +146,11 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
       await refused;
 
       assert.equal((await send({ kind: "perp", idempotencyKey: "nope", coin: "NOPE", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "live" })).reason, "NOPE is not a listed Hyperliquid perp");
+
+      const gated = localSender({ HYPERLIQUID_API_URL: info.url, SUPPORT_TIERS: "hypercore:dry_run" }, queue, { evmAddress: evm.address, solanaAddress: solana, token: TOKEN, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null });
+      const blockedLive = await gated({ kind: "perp", idempotencyKey: "tier-live", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "live" });
+      assert.deepEqual([blockedLive.status, blockedLive.reason, blockedLive.jobs.length], ["skipped", "chain is not enabled for live sends", 0]);
+      assert.equal((await gated({ kind: "perp", idempotencyKey: "tier-dry", coin: "ETH", side: "buy", notionalUsd: 4, slippageBps: 50, mode: "dry_run" })).status, "would_send");
     });
   } finally {
     await info.close();

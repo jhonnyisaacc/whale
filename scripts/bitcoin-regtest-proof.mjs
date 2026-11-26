@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { parseMempoolTest, transactionId } from "../dist/src/bitcoin/esplora.js";
 import { bitcoinWallet } from "../dist/src/bitcoin/wallet.js";
 import { localSender } from "../dist/src/local-sends.js";
 import { startSignerQueue } from "../dist/src/signer-queue.js";
@@ -59,10 +60,17 @@ function bitcoindIndexer() {
     },
     balance: async (address) => ({ confirmedSats: satsOf((await scan(address)).total_amount), pendingSats: 0n }),
     async simulate(signed) {
-      const [accepted] = await rpc("testmempoolaccept", [[Buffer.from(signed).toString("hex")]]);
-      if (accepted?.allowed !== true) throw new Error(`simulation rejected the transaction: ${accepted?.["reject-reason"] ?? "no answer"}`);
+      parseMempoolTest(await rpc("testmempoolaccept", [[Buffer.from(signed).toString("hex")]]), transactionId(signed));
     },
     broadcast: async (signed) => rpc("sendrawtransaction", [Buffer.from(signed).toString("hex")]),
+    async transactionStatus(txid) {
+      try {
+        const found = await rpc("getrawtransaction", [txid, true]);
+        return typeof found?.confirmations === "number" && found.confirmations > 0 ? "landed" : "pending";
+      } catch {
+        return null;
+      }
+    },
   };
 }
 

@@ -97,7 +97,7 @@ Every EVM transaction also pays its fee from the native balance. `gas` times `ma
 | Base (8453) | 20,480 bytes | 60,000,000,000,000 wei |
 | Scroll (534352) | 4,096 bytes | 5,000,000,000,000,000 wei |
 
-The network still charges the real L1 fee. The budget is bookkeeping, so the native daily limit fills faster than the real spend. Each budget covers a transaction at the cap with random calldata at an L1 base fee of 20 gwei and a blob base fee of 2 gwei, measured with `node scripts/l1-fee-budget.mjs`. Above those prices the real fee can pass the budget. Blast is refused: its fee oracle could not be measured, so it has no budget. The table lives in `l1_data_fee` in `src/evm.rs`. `tests/l1_fee.rs` checks it against `vectors/chains.json`, which `generate.mjs` writes from the app's `DEFAULT_EVM_FEE_LIMITS`.
+The network still charges the real L1 fee. The budget is bookkeeping, so the native daily limit fills faster than the real spend. Each budget covers a transaction at the cap with random calldata at an L1 base fee of 20 gwei and a blob base fee of 2 gwei, measured with `node scripts/l1-fee-budget.mjs`. Above those prices the real fee can pass the budget. Blast is refused and has no budget, because the chain is winding down. The table lives in `l1_data_fee` in `src/evm.rs`. `tests/l1_fee.rs` checks it against `vectors/chains.json`, which `generate.mjs` writes from the app's `DEFAULT_EVM_FEE_LIMITS`.
 
 On Solana, every program must be one of these:
 - System, Compute Budget, Token, Token-2022, or Associated Token Account;
