@@ -26,12 +26,10 @@ fn the_lifi_step_table_matches_the_apps() {
             "chain {}",
             table.chain
         );
-        let targets: Vec<String> = entry["targets"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(lower)
-            .collect();
-        assert_eq!(targets, table.targets, "chain {}", table.chain);
+        let list = |field: &str| -> Vec<String> {
+            entry[field].as_array().unwrap().iter().map(lower).collect()
+        };
+        assert_eq!(list("targets"), table.targets, "chain {}", table.chain);
+        assert_eq!(list("spenders"), table.spenders, "chain {}", table.chain);
     }
 }

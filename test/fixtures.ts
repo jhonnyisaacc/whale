@@ -2,7 +2,7 @@ import { decodeFunctionData, encodeFunctionData, parseAbi, type Hex } from "viem
 import type { SendResult } from "../src/domain.js";
 import type { HyperMarketOf } from "../src/executor/hypercore-market.js";
 import { LIFI_ABI } from "../src/signing-policy/swap-terms.js";
-import { LIFI_STEP_TARGETS } from "../src/signing-policy/lifi-steps.js";
+import { LIFI_STEP_TARGETS } from "../src/signing-policy/lifi-targets.js";
 
 export function landedSend(): SendResult {
   return {
