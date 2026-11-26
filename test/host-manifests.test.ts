@@ -176,8 +176,32 @@ test("a Hermes server path under the Hermes plugin root variable passes", () => 
   accepts((dir) => editHermesServer(dir, (server) => { (server as unknown as Record<string, unknown>).cwd = "./"; }));
 });
 
-test("no tracked file names a system password file, which the Hermes install scan blocks", () => {
+const hermesV0234HighOrCriticalPatterns: ReadonlyArray<readonly [id: string, pattern: RegExp]> = [
+  ["prompt_injection_ignore", /ignore\s+(?:\w+\s+)*(previous|all|above|prior)\s+instructions/i],
+  ["role_hijack", /you\s+are\s+(?:\w+\s+)*now\s+/i],
+  ["deception_hide", /do\s+not\s+(?:\w+\s+)*tell\s+(?:\w+\s+)*the\s+user(?!\s+to\s+["'\u201c\u2018])(?!.*\b(?:unless|except|until|confirm|diagnos\w*|verify|check)\b)/i],
+  ["sys_prompt_override", /system\s+(?:\w+\s+)*prompt\s+(?:\w+\s+)*override/i],
+  ["role_pretend", /pretend\s+(?:\w+\s+)*(you\s+are|to\s+be)\s+/i],
+  ["disregard_rules", /disregard\s+(?:\w+\s+)*(your|all|any)\s+(?:\w+\s+)*(instructions|rules|guidelines)/i],
+  ["forget_rules", /(?:(?<![^\W_])(?<![’'])(?!(?:(?:do|does|did|ca|could|would|should|wo|must|need|is|are|was|were|ai|has|have|had)n[’']?t|cannot|not|never)[ \t])(?:[^\W_]|[’'])+[ \t]+|(?:^|[^\w’' \t]|_|(?<!\w)[’'])[ \t]*)forget\s+(?:about\s+)?(your|all|any|previous|prior|above|earlier)\s+(?:\w+\s+){0,3}(instructions|rules|guidelines)(?![^\W_])/i],
+  ["leak_system_prompt", /output\s+(?:\w+\s+)*(system|initial)\s+prompt/i],
+  ["conditional_deception", /(when|if)\s+no\s*one\s+is\s+(watching|looking)/i],
+  ["bypass_restrictions", /act\s+as\s+(if|though)\s+(?:\w+\s+)*you\s+(?:\w+\s+)*(have\s+no|don't\s+have)\s+(?:\w+\s+)*(restrictions|limits|rules)/i],
+  ["translate_execute", /translate\s+.*\s+into\s+.*\s+and\s+(execute|run|eval)/i],
+  ["html_comment_injection", /<!--[^>]*(?:\b(?:ignore|forget|disregard|override)\s+(?:\w+\s+)*?(?:previous|prior|above|earlier|all|any|your|the)\s+(?:\w+\s+)*?(?:instructions?|rules|prompts?|guidelines|directions|restrictions)|\bsystem\s*(?:prompt|message|instructions?|override)|\b(?:override|secret|hidden|system)\s*:|\b(?:ignore|override|bypass|disable)\s+(?:\w+\s+)*?(?:safety|security|guardrails|filters)\b|\b(?:secret|hidden|new)\s+(?:instructions?|commands?|directives?|tasks?)\b|\byou\s+are\s+now\b|\bdo\s+not\s+(?:tell|reveal|show|mention|inform)\b|\b(?:note|message)\s+(?:to|for)\s+(?:the\s+)?(?:ai|agent|assistant|model|llm)\b)[^>]*-->/i],
+  ["hidden_div", /<\s*div\s+style\s*=\s*["'][\s\S]*?display\s*:\s*none/i],
+  ["system_passwd_access", /\/etc\/passwd|\/etc\/shadow/i],
+  ["jailbreak_dan", /\bDAN\s+mode\b|Do\s+Anything\s+Now/i],
+  ["jailbreak_dev_mode", /\bdeveloper\s+mode\b.*\benabled?\b/i],
+  ["hypothetical_bypass", /hypothetical\s+scenario.*(?:ignore|bypass|override)/i],
+  ["remove_filters", /(respond|answer|reply)\s+without\s+(?:\w+\s+)*(restrictions|limitations|filters|safety)/i],
+  ["fake_update", /you\s+have\s+been\s+(?:\w+\s+)*(updated|upgraded|patched)\s+to/i],
+];
+
+test("no tracked file matches a Hermes v0.23.4 high or critical injection or system-file pattern, which the install scan blocks", () => {
   const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repo, encoding: "utf8" }).split("\0").filter(Boolean);
-  const named = tracked.filter((file) => existsSync(path.join(repo, file)) && /\/etc\/(?:passwd|shadow)/i.test(readFileSync(path.join(repo, file), "latin1")));
-  assert.deepEqual(named, []);
+  const hits = tracked.filter((file) => existsSync(path.join(repo, file))).flatMap((file) =>
+    readFileSync(path.join(repo, file), "utf8").split(/\r\n|\r|\n/).flatMap((line, index) =>
+      hermesV0234HighOrCriticalPatterns.filter(([, pattern]) => pattern.test(line)).map(([id]) => `${file}:${index + 1} ${id}`)));
+  assert.deepEqual(hits, []);
 });
