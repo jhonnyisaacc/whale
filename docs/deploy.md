@@ -6,7 +6,7 @@ Deploy one executor from this repository. Leave `WHALE_BROADCAST` unset until yo
 
 The Railway root is the repository root. The Dockerfile pins `node:22-bookworm-slim` by digest, enables corepack for the pnpm version and hash in `package.json`, and runs `pnpm install --frozen-lockfile`. The runtime stage adds `--prod`. The Dockerfile command is `node dist/src/executor-server.js`. That is the same file `pnpm run start:executor` runs. `railway.json` checks `GET /health`. Do not add a public domain. Boot throws if `RAILWAY_PUBLIC_DOMAIN` is present. Call the executor on the private network URL.
 
-`pnpm run start:cli` and `pnpm run start:mcp` run on a laptop. The container command stays `node dist/src/executor-server.js`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
+`pnpm run start:cli` and `pnpm run start:mcp` run on a laptop. The container command stays `node dist/src/executor-server.js`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp`, `perp_positions`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
 
 jayson's `uuid` is overridden to `11.1.1` and its `stream-json` to `3.7.0` in `pnpm-workspace.yaml`. jayson still imports the old `StreamValues` path, so `patches/jayson@4.3.0.patch` points that require at the 3.7 stream adapters. pnpm applies the patch during install and fails the install if it no longer applies. The image does not install `@solana/web3.js` 3.
 
@@ -24,6 +24,8 @@ Set these Turnkey variables on the executor.
 
 - `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PUBLIC_KEY`, `TURNKEY_API_PRIVATE_KEY`
 - `TURNKEY_EVM_ADDRESS`, `TURNKEY_SOLANA_ADDRESS`, `TURNKEY_HYPERLIQUID_ADDRESS`
+- `HYPERLIQUID_ACCOUNT_ADDRESS`, the Hyperliquid master account that `TURNKEY_HYPERLIQUID_ADDRESS` is an approved agent of. Without it, every perp signal is skipped as `hyperliquid position unreadable`, a sell included, and live mode with `TURNKEY_HYPERLIQUID_ADDRESS` set refuses to boot
+- `HYPERCORE_SELL_LIMITS`, the per-asset sell limits from [Hyperliquid perps](../README.md#hyperliquid-perps). A live sell with no limit for its asset is refused
 - `ROUTER_ALLOWLIST_JSON` as a map of chain id to router addresses (Monad 143 defaults to the 0x AllowanceHolder and the KyberSwap router from `DEFAULT_ROUTERS` when the map does not name it), and `APPROVAL_CACHE_JSON` after the router approval in the [runbook](runbook.md)
 
 Live mode refuses `KEYSTORE_PATH` and `KEYSTORE_PASSPHRASE`.

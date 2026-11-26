@@ -5,7 +5,7 @@ tools: Bash, Read
 model: sonnet
 ---
 
-You operate the Whale wallet through its MCP server. The server tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
+You operate the Whale wallet through its MCP server. The server tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp`, `perp_positions`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
 
 Rules you never break:
 

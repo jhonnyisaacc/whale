@@ -8,7 +8,7 @@ Leave `WHALE_BROADCAST` unset. The process does not broadcast.
 
 If `LISTING_TRADER_LIVE` is set to any value, boot throws `LISTING_TRADER_LIVE is closed`. If `WITHDRAW_ENABLED` is set to any value, boot throws `WITHDRAW_ENABLED is closed`. `POST /withdraw` is absent.
 
-The scripts are `start:executor`, `start:cli`, and `start:mcp`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
+The scripts are `start:executor`, `start:cli`, and `start:mcp`. The MCP tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp`, `perp_positions`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
 
 ## Create a keystore
 
@@ -257,7 +257,7 @@ pnpm run start:executor
 pnpm run start:cli quote --sell-chain base --sell-address 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --sell-symbol USDC --sell-decimals 6 --buy-chain base --buy-address 0x4200000000000000000000000000000000000006 --buy-symbol WETH --buy-decimals 18 --sell-amount 1 --slippage-bps 50
 ```
 
-`swap`, `bridge`, `balance`, and `transfer` are the other commands. A dry-run swap returns `would_swap` with the best signable route, or `skipped` with the reason, such as no quote, a disabled chain, or the slippage cap. It signs and broadcasts nothing.
+`swap`, `bridge`, `balance`, `perp-positions`, and `transfer` are the other commands. A dry-run swap returns `would_swap` with the best signable route, or `skipped` with the reason, such as no quote, a disabled chain, or the slippage cap. It signs and broadcasts nothing.
 
 ```bash
 pnpm run start:cli bridge --from-chain base --to-chain arbitrum --asset USDC --amount 10000000 --to <owner address>
@@ -267,7 +267,7 @@ pnpm run start:cli bridge --from-chain base --to-chain arbitrum --asset USDC --a
 
 ## Start MCP
 
-`pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
+`pnpm run start:mcp` speaks stdio. The tools are `wallet_status`, `quote`, `swap`, `bridge`, `balance`, `perp`, `perp_positions`, `transfer`, `bitcoin_wallet`, and `send_bitcoin`.
 
 `wallet_status` reads `GET /status` on `EXECUTOR_URL`. The default in `.mcp.json` is `http://127.0.0.1:8788`. Set `EXECUTOR_AUTH_TOKEN` to the executor token. `swap` and `transfer` stay dry-run in this server.
 
