@@ -8,7 +8,7 @@ import { buildPairMap } from "../src/pairs.js";
 import type { LimitConfig } from "../src/limits.js";
 
 const limits: LimitConfig = {
-  maxUsdPerTrade: 5,
+  maxUsdPerTrade: 10,
   dailyUsdCap: 25,
   maxSlippageBps: 100,
   slippageHardMaxBps: 300,
@@ -18,7 +18,7 @@ const limits: LimitConfig = {
   enabledChainKeys: new Set(["solana", "hypercore"]),
 };
 
-function intent(notional = 5): SwapIntent {
+function intent(notional = 10): SwapIntent {
   return {
     idempotencyKey: `id-${notional}-${Math.random()}`,
     side: "buy",

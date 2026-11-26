@@ -555,6 +555,7 @@ test("hyperliquid sizes 100/3.7 and 250/0.01234 produce valid wire values", () =
 function hyperIntent(key: string): SwapIntent {
   return {
     ...evmIntent(key),
+    notionalUsd: 10,
     token: { symbol: "TKN", address: "TKN", decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } },
     hyperliquid: { coin: "TKN", assetIndex: 4, market: "perp", maxLeverage: 5 },
   };
@@ -570,7 +571,7 @@ function exchange(orderReply: unknown, seen: unknown[]): typeof fetch {
 }
 
 test("hyperliquid replies decide commit or release", async () => {
-  const hyperConfig = loadConfig({ HYPERLIQUID_API_URL: "https://hl.invalid" });
+  const hyperConfig = loadConfig({ HYPERLIQUID_API_URL: "https://hl.invalid", MAX_USD_PER_TRADE: "10" });
   const run = async (key: string, reply: unknown) => {
     resetExecutorState();
     const spend = new Map<string, string>();
@@ -593,11 +594,11 @@ test("hyperliquid replies decide commit or release", async () => {
   const rejected = await run("hl-rejected", { status: "ok", response: { type: "order", data: { statuses: [{ error: "Order could not immediately match against any resting orders. asset=4" }] } } });
   assert.equal(rejected.report.decision, "skipped");
   assert.equal(rejected.spend, "released");
-  const filled = await run("hl-filled", { status: "ok", response: { type: "order", data: { statuses: [{ filled: { totalSz: "5", avgPx: "1.001", oid: 9 } }] } } });
+  const filled = await run("hl-filled", { status: "ok", response: { type: "order", data: { statuses: [{ filled: { totalSz: "10", avgPx: "1.001", oid: 9 } }] } } });
   assert.equal(filled.report.decision, "sent");
   assert.equal(filled.spend, "committed");
-  assert.deepEqual(filled.report.fill, { totalSz: "5", avgPx: "1.001" });
-  assert.equal((filled.seen[1] as { orders: Array<{ s: string; p: string }> }).orders[0]?.s, "5");
+  assert.deepEqual(filled.report.fill, { totalSz: "10", avgPx: "1.001" });
+  assert.equal((filled.seen[1] as { orders: Array<{ s: string; p: string }> }).orders[0]?.s, "10");
   assert.equal(readExchangeResponse({ status: "ok", response: { data: { statuses: [{ resting: { oid: 1 } }] } } }).status, "ok");
 });
 
@@ -615,6 +616,7 @@ test("a hyperliquid spot buy sends only the order, with no leverage action", asy
   };
   const spot: SwapIntent = {
     ...hyperIntent("hl-spot"),
+    notionalUsd: 5,
     token: { ...evmIntent("hl-spot").token, chain: { kind: "evm", chainId: 999 }, chainKey: "hyperevm", pairMap: { pools: [], top: null } },
     hyperliquid: { coin: "TKN", assetIndex: 10_004, market: "spot", maxLeverage: 1 },
   };
@@ -673,7 +675,7 @@ test("a hyperliquid sizing failure is skipped, not thrown", async () => {
   resetExecutorState();
   const report = await execute(hyperIntent("hl-size"), {
     ...liveDeps(async () => assert.fail("must not send"), new Map(), [], false),
-    config: { ...evmConfig, enabledChainKeys: new Set(["base", "hypercore"]) },
+    config: { ...evmConfig, maxUsdPerTrade: 10, enabledChainKeys: new Set(["base", "hypercore"]) },
     markPrice: async () => 1_000_000_000,
     liquidityOf: async () => 100,
     hyperMarket: hyperMarketAt(4, 0),

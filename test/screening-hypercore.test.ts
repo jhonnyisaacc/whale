@@ -65,7 +65,7 @@ function perpIntent(coin: string, assetIndex: number): SwapIntent {
   return {
     idempotencyKey: `perp-${coin}`,
     side: "buy",
-    notionalUsd: 5,
+    notionalUsd: 12,
     slippageBps: 50,
     token: { symbol: coin, address: coin, decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } },
     holdings: [],
@@ -75,7 +75,7 @@ function perpIntent(coin: string, assetIndex: number): SwapIntent {
 }
 
 test("with WHALE_BROADCAST on, the real live executor refuses a delisted or unlisted coin before signing and signs a listed perp", async (t) => {
-  const config = loadConfig({ WHALE_BROADCAST: "true", HYPERLIQUID_API_URL: HL, MAX_USD_PER_TRADE: "5" });
+  const config = loadConfig({ WHALE_BROADCAST: "true", HYPERLIQUID_API_URL: HL, MAX_USD_PER_TRADE: "12" });
   const exchange: unknown[] = [];
   const signed: HyperliquidAction[] = [];
   const inner = keystoreSigner({ evm: null, solana: null, hyperliquid: null, evmAddress: null, solanaAddress: null });

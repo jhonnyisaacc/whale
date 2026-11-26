@@ -134,7 +134,7 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
   const intent = (side: "buy" | "sell"): SwapIntent => ({
     idempotencyKey: `hyper-${side}`,
     side,
-    notionalUsd: 5,
+    notionalUsd: 12,
     slippageBps: 50,
     token: { symbol: "TKN", address: "TKN", decimals: null, chain: { kind: "hypercore", market: "perp" }, chainKey: "hypercore", pairMap: { pools: [], top: null } },
     holdings: [{ symbol: "USDC", address: "usdc", amount: 20, usd: 20, native: false, decimals: 6, chainKey: "solana" }],
@@ -142,7 +142,7 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
     receivedAtMs: 0,
   });
   const deps: ExecutorDeps = {
-    config: { maxUsdPerTrade: 5, dailyUsdCap: 25, maxSlippageBps: 100, slippageHardMaxBps: 300, maxLeverage: 1, minLiquidityUsd: 75_000, killSwitch: false, enabledChainKeys: new Set(["solana", "hypercore"]) },
+    config: { maxUsdPerTrade: 12, dailyUsdCap: 25, maxSlippageBps: 100, slippageHardMaxBps: 300, maxLeverage: 1, minLiquidityUsd: 75_000, killSwitch: false, enabledChainKeys: new Set(["solana", "hypercore"]) },
     mode: "live",
     liquidityOf: async () => 100,
     spentTodayUsd: 0,
@@ -164,9 +164,9 @@ test("a HyperCore perp sell with no long opens a short, as on main, and the sign
     assert.equal((await execute(intent(side), deps)).decision, "sent", side);
   }
   const orders = sent.map((request) => request.hyperliquidActions.find((action) => action.type === "order"));
-  assert.deepEqual(orders.map((order) => order?.type === "order" && [order.orders[0]?.b, order.orders[0]?.r, order.orders[0]?.s]), [[true, false, "5"], [false, false, "5"]]);
-  for (const request of sent) for (const action of request.hyperliquidActions) assertHyperliquidSigning(action, { maxLeverage: 1, maxOrderUsd: 5.15, sellLimits: { "hypercore:perp:4:sold": 500_000_000n } });
-  assert.throws(() => assertHyperliquidSigning(orders[1]!, { maxLeverage: 1, maxOrderUsd: 5.15, sellLimits: {} }), /^Error: hypercore: no limit is set for hypercore:perp:4:sold$/);
+  assert.deepEqual(orders.map((order) => order?.type === "order" && [order.orders[0]?.b, order.orders[0]?.r, order.orders[0]?.s]), [[true, false, "12"], [false, false, "12"]]);
+  for (const request of sent) for (const action of request.hyperliquidActions) assertHyperliquidSigning(action, { maxLeverage: 1, maxOrderUsd: 12.36, sellLimits: { "hypercore:perp:4:sold": 1_200_000_000n } });
+  assert.throws(() => assertHyperliquidSigning(orders[1]!, { maxLeverage: 1, maxOrderUsd: 12.36, sellLimits: {} }), /^Error: hypercore: no limit is set for hypercore:perp:4:sold$/);
 });
 
 test("HYPERCORE_SELL_LIMITS sets each perp and spot sell size limit in 1e-8 units, refuses keys no sell would use, and the policy refuses a sell without one", async () => {
