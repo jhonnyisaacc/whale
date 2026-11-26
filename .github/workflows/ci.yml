@@ -62,6 +62,27 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
 
+  hermes-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: NousResearch/hermes-agent
+          ref: 8fc0374447313e276f6b9a2764bfc750190c966a # v0.23.4
+          path: hermes-agent
+          persist-credentials: false
+          sparse-checkout: |
+            hermes_cli
+            tools
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version-file: hermes-agent/.python-version
+      - run: python -I scripts/hermes-scan.py hermes-agent
+
   docker:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
