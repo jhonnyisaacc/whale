@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs: install Whale and compare it</title>
+<meta name="description" content="Install Whale in any agent host, connect to the hosted gateway, compare it with MetaMask, Phantom and PayBox, and read the safety model.">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+<script src="/site.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <nav class="wrap nav" aria-label="Main">
+    <a class="logo" href="/">Whale</a>
+    <div class="nav-links">
+      <a href="/#compare">Compare</a>
+      <a href="/#networks">Networks</a>
+      <a href="/#install">Install</a>
+      <a href="/#hosts">Hosts</a>
+      <a href="/#contribute">Contribute</a>
+    </div>
+    <a class="pill pill-line pill-sm nav-github" href="https://github.com/jhonnyisaacc/whale">
+      <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#star"/></svg>GitHub ★
+    </a>
+    <details class="menu">
+      <summary aria-label="Menu">
+        <svg class="icon icon-open" aria-hidden="true"><use href="/assets/icons.svg#list"/></svg>
+        <svg class="icon icon-close" aria-hidden="true"><use href="/assets/icons.svg#x"/></svg>
+      </summary>
+      <div class="menu-links">
+        <a href="/">Home</a>
+        <a href="#install">Install</a>
+        <a href="#comparison">Comparison</a>
+        <a href="#safety-model">Safety model</a>
+        <a href="https://github.com/jhonnyisaacc/whale">GitHub</a>
+      </div>
+    </details>
+  </nav>
+</header>
+
+<div class="wrap docs-layout">
+  <nav class="docs-nav" aria-label="Docs">
+    <p>docs</p>
+    <p class="docs-group">Start here</p>
+    <ol>
+      <li><a href="#install" data-chapter-link aria-current="true"><span>1</span>Install</a></li>
+      <li><a href="#comparison" data-chapter-link><span>2</span>Comparison</a></li>
+    </ol>
+    <p class="docs-group">Reference</p>
+    <ol>
+      <li><a href="/#networks"><span>3</span>Networks</a></li>
+      <li><a href="/#hosts"><span>4</span>Hosts</a></li>
+      <li><a href="#safety-model" data-chapter-link><span>5</span>Safety model</a></li>
+      <li><a href="/#contribute"><span>6</span>Contributing</a></li>
+    </ol>
+  </nav>
+
+  <main id="main" class="docs-main">
+    <p class="crumbs"><a href="/docs/">Docs</a> / Install</p>
+
+    <section id="install" class="chapter" aria-labelledby="install-title">
+      <p class="chapter-label">chapter 01</p>
+      <h1 id="install-title">Install</h1>
+      <p class="lede">Whale runs as an MCP server plus skills. Every host loads the same server and the same skills — only the manifest differs. Start with the one-paste block; it works in any agent that can run shell commands.</p>
+
+      <h2 class="step"><span>1.1</span>One paste, any agent with a shell</h2>
+      <div class="paste-card">
+        <div class="paste-bar">
+          <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="paste-label">paste into Claude Code</span>
+          <button class="copy-btn" type="button" data-copy-from="install-block" hidden><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#copy"/></svg><span data-copy-text>Copy</span></button>
+        </div>
+        <div class="paste-body">
+<pre class="wide" id="install-block">Install the Whale wallet from https://github.com/jhonnyisaacc/whale
+
+1. Clone it and run: pnpm install --frozen-lockfile &amp;&amp; pnpm run build
+2. Start the executor in the background with a random token:
+   PORT=8788 EXECUTOR_AUTH_TOKEN=&lt;token&gt; pnpm run start:executor
+3. Register its MCP server (stdio: node dist/src/mcp-server.js) with
+   EXECUTOR_URL=http://127.0.0.1:8788 and the same EXECUTOR_AUTH_TOKEN,
+   and the skills in skills/, with this host.
+
+The local MCP is dry-run by default: nothing signs or broadcasts.
+Then call wallet_status and show me the result.</pre>
+<pre class="narrow">Install the Whale wallet from
+https://github.com/jhonnyisaacc/whale
+
+1. Clone it and run:
+   pnpm install --frozen-lockfile
+   &amp;&amp; pnpm run build
+2. Start the executor in the
+   background with a random token:
+   PORT=8788 EXECUTOR_AUTH_TOKEN=&lt;token&gt;
+   pnpm run start:executor
+3. Register its MCP server
+   (stdio: node dist/src/mcp-server.js)
+   with EXECUTOR_URL=
+   http://127.0.0.1:8788 and the same
+   EXECUTOR_AUTH_TOKEN, and the skills
+   in skills/, with this host.
+
+The local MCP is dry-run by default:
+nothing signs or broadcasts.
+Then call wallet_status and show me
+the result.</pre>
+        </div>
+      </div>
+
+      <h2 class="step"><span>1.2</span>Per host</h2>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Host manifests, scrolls sideways">
+        <table class="host-table">
+          <thead>
+            <tr><th scope="col">Host</th><th scope="col">Manifest</th><th scope="col">Loads</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="host-cell"><img src="/assets/logos/h-claude-color.png" alt="" width="24" height="24">Claude Code</span></td><td>.claude-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
+            <tr><td><span class="host-cell"><img class="mono-logo" src="/assets/logos/h-openai.png" alt="" width="24" height="24">Codex</span></td><td>.codex-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
+            <tr><td><span class="host-cell"><img class="mono-logo" src="/assets/logos/h-grok.png" alt="" width="24" height="24">Grok</span></td><td>.grok-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
+            <tr><td><span class="host-cell"><img src="/assets/logos/h-meta-color.png" alt="" width="24" height="24">Muse</span></td><td>.muse-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
+            <tr><td><span class="host-cell"><img class="mono-logo" src="/assets/logos/h-nousresearch.png" alt="" width="24" height="24">Hermes</span></td><td>plugin.json</td><td>mcp.json + skills/</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 class="step"><span>1.3</span>Hosted gateway</h2>
+      <p class="lede gateway-lede">No clone. A client with MCP OAuth needs only the URL; others send an agent key as Authorization: Bearer whale_…. Sends through the gateway are dry-run during beta.</p>
+      <div class="cmd"><code id="cmd-hosted">claude mcp add --transport http whale https://app.mywhalewallet.com/mcp</code><button class="cmd-copy" type="button" data-copy-from="cmd-hosted" aria-label="Copy the hosted gateway command" hidden><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#copy"/></svg></button></div>
+      <div class="callout">
+        <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#shield-check"/></svg>
+        <p>Defaults are safe. The local MCP is dry-run by default. Spend caps live in the executor, and no step ever asks for a seed phrase.</p>
+      </div>
+    </section>
+
+    <section id="comparison" class="chapter" aria-labelledby="comparison-title">
+      <p class="chapter-label">chapter 02</p>
+      <h2 id="comparison-title">Comparison</h2>
+      <p class="lede">How Whale differs from wallets that added agent access. Cells come from each product's public docs; “Not stated” means we couldn't find it, not that it's absent.</p>
+      <div class="compare-wrap">
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Comparison table, scrolls sideways">
+      <table class="compare">
+        <caption class="visually-hidden">Whale compared with MetaMask, Phantom and PayBox</caption>
+        <colgroup><col class="label-col"><col class="whale-col"><col><col><col></colgroup>
+        <thead>
+          <tr>
+            <td class="sticky"></td>
+            <th scope="col" class="whale">Whale</th>
+            <th scope="col">MetaMask</th>
+            <th scope="col">Phantom</th>
+            <th scope="col">PayBox</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row" class="sticky">Built for AI agents</th>
+            <td class="whale"><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+          </tr>
+          <tr>
+            <th scope="row" class="sticky">Works through MCP</th>
+            <td class="whale"><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td>CLI + skills</td>
+            <td><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+          </tr>
+          <tr>
+            <th scope="row" class="sticky">Open source / self-hostable</th>
+            <td class="whale"><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td class="na">Not stated</td>
+            <td class="na">Not stated</td>
+            <td>Plugin public, service hosted</td>
+          </tr>
+          <tr>
+            <th scope="row" class="sticky">Dry-run by default</th>
+            <td class="whale"><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td>Simulates; dry-run “soon”</td>
+            <td class="na">Not stated</td>
+            <td class="na">Not stated</td>
+          </tr>
+          <tr>
+            <th scope="row" class="sticky">Spend caps enforced server-side<small>Agent can't raise them</small></th>
+            <td class="whale"><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td>Daily limits, onchain</td>
+            <td>Reported limits</td>
+            <td>Scoped grants, no cap</td>
+          </tr>
+          <tr>
+            <th scope="row" class="sticky">Self-hosted signer<small>For EVM, Solana, HyperCore, BTC</small></th>
+            <td class="whale"><span class="yes"><svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check"/></svg><span class="visually-hidden">Yes</span></span></td>
+            <td>BYOK key</td>
+            <td class="na">—</td>
+            <td>— (MPC)</td>
+          </tr>
+          <tr>
+            <th scope="row" class="sticky">Networks</th>
+            <td class="whale">16 (EVM + Solana + HyperCore + Bitcoin)</td>
+            <td>EVM + Solana + Hyperliquid</td>
+            <td>Solana, EVM, Bitcoin, Sui + HL perps</td>
+            <td>Solana, Ethereum, Base, Robinhood</td>
+          </tr>
+          <tr>
+            <th scope="row" class="sticky">Approval</th>
+            <td class="whale">Trades on its own inside per-trade and daily USD caps</td>
+            <td>Guard / Beast + 2FA</td>
+            <td class="na">Not stated</td>
+            <td>autonomous / iframe / always approve</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="swipe-hint" aria-hidden="true">swipe for MetaMask, Phantom, PayBox →</p>
+
+    <div class="issues-head">
+      <h3>Known issues</h3>
+      <p>Open on public GitHub as of Nov 26, 2026 — ours included.</p>
+    </div>
+    <div class="issues">
+      <section class="issue-group ours" aria-label="Whale known issues">
+        <h4>Whale <span>this repo</span></h4>
+        <ul>
+          <li>Bridge execution has no MCP or CLI tool yet<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/bridge/execute.ts#L157">execute.ts:157</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/commands.ts#L143">commands.ts:143</a></span></li>
+          <li>Hosted MCP sends are dry-run<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/gateway/mcp-tools.ts#L113">gateway/mcp-tools.ts:113</a></span></li>
+          <li>Blast is quotes only; zkSync is opt-in<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/chains.ts#L307">chains.ts:307</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/support.ts#L6">support.ts:6</a></span></li>
+        </ul>
+      </section>
+      <section class="issue-group" aria-label="MetaMask known issues">
+        <h4>MetaMask <span>Agent Wallet</span></h4>
+        <ul>
+          <li>Server-wallet signing fails on every chain<span class="cite"><a href="https://github.com/MetaMask/metamask-docs/issues/3032">metamask-docs#3032</a></span></li>
+          <li>Sign-in loops after Google auth<span class="cite"><a href="https://github.com/MetaMask/agent-skills/issues/66">agent-skills#66</a></span></li>
+          <li>Monad transactions fail<span class="cite"><a href="https://github.com/MetaMask/agent-wallet-plugin-template/issues/6">plugin-template#6</a> <a href="https://github.com/MetaMask/agent-wallet-plugin-template/issues/7">#7</a></span></li>
+          <li>Solana balance shows 0 after SRP import<span class="cite"><a href="https://github.com/MetaMask/metamask-extension/issues/47534">extension#47534</a></span></li>
+        </ul>
+      </section>
+      <section class="issue-group" aria-label="Phantom known issues">
+        <h4>Phantom <span>MCP server</span></h4>
+        <ul>
+          <li>Login fails with KMS 403<span class="cite"><a href="https://github.com/phantom/phantom-connect-sdk/issues/408">connect-sdk#408</a></span></li>
+          <li>Hyperliquid perps orders rejected<span class="cite"><a href="https://github.com/phantom/phantom-connect-sdk/issues/410">connect-sdk#410</a></span></li>
+          <li>Robinhood Chain unsupported<span class="cite"><a href="https://github.com/phantom/phantom-connect-sdk/issues/405">connect-sdk#405</a></span></li>
+          <li>Can't sign Solana v1 transactions<span class="cite"><a href="https://github.com/phantom/phantom-connect-sdk/issues/407">connect-sdk#407</a></span></li>
+        </ul>
+      </section>
+      <section class="issue-group" aria-label="PayBox known issues">
+        <h4>PayBox <span>plugin + MCP</span></h4>
+        <ul>
+          <li>Grok connector loads 0 tools<span class="cite"><a href="https://github.com/moonpay/paybox-plugin/issues/6">paybox-plugin#6</a></span></li>
+          <li>Swap to Robinhood Chain hangs<span class="cite"><a href="https://github.com/moonpay/paybox-plugin/issues/7">paybox-plugin#7</a></span></li>
+          <li>Signing window never reappears<span class="cite"><a href="https://github.com/moonpay/paybox-plugin/issues/8">paybox-plugin#8</a></span></li>
+          <li>CLI login fails<span class="cite"><a href="https://github.com/moonpay/paybox-plugin/issues/4">paybox-plugin#4</a></span></li>
+        </ul>
+      </section>
+    </div>
+      </div>
+      <p class="footnote">As of Nov 18, 2026. Sources: <a href="https://metamask.com/agent-wallet">metamask.com/agent-wallet</a> · <a href="https://docs.phantom.com/phantom-mcp-server">docs.phantom.com/phantom-mcp-server</a> · <a href="https://paybox.sh/llms.txt">paybox.sh/llms.txt</a>. Corrections welcome — <a href="https://github.com/jhonnyisaacc/whale/pulls">open a PR</a>.</p>
+    </section>
+
+    <section id="safety-model" class="chapter" aria-labelledby="safety-title">
+      <p class="chapter-label">chapter 05</p>
+      <h2 id="safety-title">Safety model</h2>
+      <p class="lede">What stops a send, and where in the code it happens. Each line links to the code on main at the commit this page was checked against.</p>
+      <dl class="claims">
+        <div><dt>Dry-run by default</dt><dd>Swap, transfer, perp and send_bitcoin plan and sign nothing unless the caller asks for live, and live needs whale-signer, whose refusal is final. Hosted sends stay dry-run until hosted live opens.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/mcp-server.ts#L31">mcp-server.ts:31</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/gateway/mcp-tools.ts#L113">gateway/mcp-tools.ts:113</a></span></dd></div>
+        <div><dt>USD caps in the executor</dt><dd>Live sends are priced and counted against per-trade and daily USD caps. Hosted wallet_status reports what is left today as remainingTodayUsd.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/gateway/mcp-tools.ts#L115">gateway/mcp-tools.ts:115</a> (#149)</span></dd></div>
+        <div><dt>A sent BTC spend keeps counting</dt><dd>If the spend journal fails to commit after a Bitcoin send, the row stays reserved with its txid, so reconciliation can finish it. A TLA+ model checks the spend_journal cap across restarts and retries.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/bitcoin/send.ts#L50">bitcoin/send.ts:50</a> (#173, #192) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/.cursor/skills/spend-cap-model/SpendCap.tla">SpendCap.tla</a> (#199)</span></dd></div>
+        <div><dt>Perps</dt><dd>Read positions, margin, funding and open orders. Every perp action is checked before any is signed or sent. The signing policy refuses leverage above MAX_PERP_LEVERAGE, 3 by default. When the signing key trades for another account, Whale first checks it is an approved agent of that account.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/broadcast.ts#L32">broadcast.ts:32</a> (#190) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/signing-policy/hypercore.ts#L85">signing-policy/hypercore.ts:85</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/config/load.ts#L87">config/load.ts:87</a> (#143) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/hyperliquid.ts#L133">hyperliquid.ts:133</a> (#195)</span></dd></div>
+        <div><dt>Native Bitcoin</dt><dd>Hold, receive and send BTC under the same USD caps. send_bitcoin pays only addresses in BITCOIN_WITHDRAW_ADDRESSES. No tool trades BTC.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/bitcoin/send.ts#L88">bitcoin/send.ts:88</a> (#155)</span></dd></div>
+        <div><dt>Bridges</dt><dd>Both signers can sign a live LI.FI AcrossV4 bridge under a decoding rule, but no MCP tool or CLI command executes a bridge yet. The bridge tool ranks quotes and never broadcasts.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/signing-policy/bridge-terms.ts#L25">signing-policy/bridge-terms.ts:25</a> (#182) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/commands.ts#L143">commands.ts:143</a></span></dd></div>
+        <div><dt>Outside text stays outside</dt><dd>RPC failures and Hyperliquid rejections reach the agent in Whale's own words. A rejection in an unknown form reads “reason not in a known Hyperliquid format”.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/rpc-reason.ts#L60">rpc-reason.ts:60</a> (#193) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/hyperliquid.ts#L352">hyperliquid.ts:352</a> (#178)</span></dd></div>
+        <div><dt>Support tiers</dt><dd>SUPPORT_TIERS refuses a chain name it doesn't know at boot. Local live sends obey each chain's tier: zkSync defaults to dry-run and Monad to disabled.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/support.ts#L20">support.ts:20</a> (#189) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/local-sends.ts#L94">local-sends.ts:94</a> (#177) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/support.ts#L6">support.ts:6</a></span></dd></div>
+        <div><dt>Base, Optimism and Scroll in the enclave</dt><dd>The hosted Turnkey policy renders their L2 gas clause, so an enclave wallet reaches them after its owner re-runs delegation. Blast still gets no clause.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/signing-policy/turnkey.ts#L83">signing-policy/turnkey.ts:83</a> (#194)</span></dd></div>
+        <div><dt>No seed phrase, ever</dt><dd>Keys stay in the signer. No prompt, tool or skill asks for a mnemonic.</dd></div>
+        <div><dt>How it is checked</dt><dd>pnpm run check runs the build and the tests. The verify-whale skill drives the MCP server, the CLI and the executor in dry-run. A test keeps every tracked file clear of the Hermes install scan's high and critical patterns.<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/.cursor/skills/verify-whale/SKILL.md">verify-whale</a> (#198) · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/test/host-manifests.test.ts#L201">host-manifests.test.ts:201</a> (#200)</span></dd></div>
+      </dl>
+    </section>
+  </main>
+</div>
+
+<footer class="wrap site-footer">
+  <div class="footer-row">
+    <a class="logo" href="/">Whale</a>
+    <div class="footer-links">
+      <a href="https://github.com/jhonnyisaacc/whale">GitHub</a>
+      <a class="mono" href="https://github.com/jhonnyisaacc/whale/blob/main/LICENSE">MIT License</a>
+      <a href="/docs/">Docs</a>
+    </div>
+    <p class="footer-tag">Made for agents, reviewed by humans.</p>
+  </div>
+</footer>
+<p class="visually-hidden" aria-live="polite" data-copy-status></p>
+</body>
+</html>
