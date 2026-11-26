@@ -36,7 +36,7 @@ Hermes installs this repo as a portable Agent Plugins v1 package. It reads the r
 
 Use a Hermes release from GitHub, installed with the Hermes installer. v0.23.4 is the release this was checked on. The `hermes-agent` 0.19.0 package on PyPI does not read Agent Plugins v1, so it does not install Whale.
 
-1. Install the package with `hermes plugins install jhonnyisaacc/whale --no-enable`. Hermes scans the package before it installs it, and the scan passes, so you do not need `--force`. A test fails when a tracked file names a system password file, which is the finding that made the scan block the package before.
+1. Install the package with `hermes plugins install jhonnyisaacc/whale --no-enable`. Hermes scans the package before it installs it, and the scan passes, so you do not need `--force`. A test fails when a tracked line matches one of the Hermes v0.23.4 high or critical injection patterns, or names the system password or shadow file. Those findings are what made the scan stop the package before. The test does not cover the other high or critical Hermes patterns, such as a hard-coded secret outside `test/`.
 2. Enable it with `hermes plugins enable whale`.
 3. Start `hermes` and type `/tools`. The `mcp-whale` toolset lists the ten Whale tools as `mcp__whale__wallet_status` and so on.
 
@@ -44,12 +44,12 @@ Hermes starts the `whale` server as `node scripts/mcp-server.mjs` from the packa
 
 - `EXECUTOR_URL`, `EXECUTOR_AUTH_TOKEN`, `WHALE_GATEWAY_URL`, and `WHALE_API_KEY`.
 - Each chain's RPC variable and its list form, such as `SOLANA_RPC_URL` and `RPC_URL_8453` or `RPC_URLS_8453`. `balance` needs the RPC variable of the chain it reads.
-- `HYPERLIQUID_API_URL` and `HYPERLIQUID_ACCOUNT_ADDRESS`. `perp_positions` reads that account.
+- `HYPERLIQUID_API_URL` and `HYPERLIQUID_ACCOUNT_ADDRESS`. `perp_positions` reads that account, and `perp` reads positions from it while trading on the account whale-signer's keystore key signs for. When it is unset, both fall back to whale-signer's EVM address. The file does not forward `WHALE_SIGNER_KEYSTORE`, so that fallback and `perp` work only from your own server entry, described below. With the keystore set there, set the address only when the keystore key is an approved agent of another master account. `perp` checks that approval, a dry run included, and refuses with `hyperliquid agent is not approved` otherwise. See [Hyperliquid perps](../README.md#hyperliquid-perps).
 - The quote provider keys `ZEROX_API_KEY`, `JUPITER_API_KEY`, `LIFI_API_KEY`, `ONEINCH_API_KEY`, and `OKX_API_KEY`. `quote` needs at least one.
 
 Each entry is written as `${NAME}`, so the file holds no value, and Hermes drops a variable that is unset. A test fails when the server reads one of these variables and `mcp.json` does not forward it. The retired `AUTH_TOKEN` is not forwarded. Use `EXECUTOR_AUTH_TOKEN`.
 
-Any other setting, such as `ENABLED_CHAINS`, needs its own entry. Define the server in `~/.hermes/config.yaml` under `mcp_servers.whale`. That entry replaces the package's server, so list every variable the server needs:
+Any other setting needs its own entry, such as `ENABLED_CHAINS`, `WHALE_SIGNER_KEYSTORE`, or `HYPERCORE_SELL_LIMITS`, without which a live `perp` sell is refused. Define the server in `~/.hermes/config.yaml` under `mcp_servers.whale`. That entry replaces the package's server, so list every variable the server needs:
 
 ```yaml
 mcp_servers:

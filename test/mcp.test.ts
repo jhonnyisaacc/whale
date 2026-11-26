@@ -7,7 +7,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { Keypair } from "@solana/web3.js";
+import type { Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { agentTypedData, type HyperliquidAction } from "../src/hyperliquid.js";
+import { localSender } from "../src/local-sends.js";
 import { createHandler, type McpDeps } from "../src/mcp-server.js";
+import { startSignerQueue } from "../src/signer-queue.js";
 
 function deps(): McpDeps {
   return {
@@ -124,6 +130,73 @@ test("a malformed stdin line gets a JSON-RPC error and the server keeps serving"
     { jsonrpc: "2.0", id: null, error: { code: -32600, message: "invalid request" } },
     { jsonrpc: "2.0", id: 2, result: {} },
   ]);
+});
+
+test("perp tool text matches its flat vs open-position leverage rules and HYPERCORE_SELL_LIMITS behavior", async () => {
+  const listed = (await createHandler(deps())({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: { name: string; description: string }[] } };
+  const perpTool = listed.result.tools.find((tool) => tool.name === "perp");
+  assert.ok(perpTool);
+  assert.match(perpTool.description, /notionalUsd \(in USD, not smallest units\)/);
+  assert.match(perpTool.description, /whale-signer's key signs for/);
+  assert.match(perpTool.description, /hyperliquid agent is not approved/);
+  assert.match(perpTool.description, /With no position it sets 1x isolated leverage/);
+  assert.match(perpTool.description, /With a position open, the order runs at that position's margin mode and leverage, cross included/);
+  assert.match(perpTool.description, /does not check HYPERCORE_SELL_LIMITS/);
+  assert.match(perpTool.description, /hypercore:perp:<asset>:sold/);
+
+  let positions: unknown[] = [];
+  const info = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      const { type } = JSON.parse(body) as { type: string };
+      const reply = type === "meta" ? { universe: [{ name: "BTC", szDecimals: 5, maxLeverage: 40 }, { name: "ETH", szDecimals: 4, maxLeverage: 25 }] } : type === "allMids" ? { BTC: "91000", ETH: "1750" } : type === "clearinghouseState" ? { assetPositions: positions } : null;
+      res.writeHead(reply ? 200 : 404, { "content-type": "application/json" });
+      res.end(JSON.stringify(reply));
+    });
+  });
+  await new Promise<void>((resolve) => info.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(info.address() as AddressInfo).port}`;
+  const token = "t".repeat(40);
+  const key = `0x${"11".repeat(32)}` as Hex;
+  const account = privateKeyToAccount(key);
+  const setup = { evmAddress: account.address, solanaAddress: Keypair.fromSeed(new Uint8Array(32).fill(3)).publicKey.toBase58(), token, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null };
+  const queue = await startSignerQueue({ token, port: 0, answerTimeoutMs: 5_000 });
+  const callPerp = async (env: Record<string, string>, args: Record<string, unknown>) => {
+    const handle = createHandler({ ...deps(), localSend: localSender({ HYPERLIQUID_API_URL: url, ...env }, queue, setup) });
+    const reply = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "perp", arguments: args } })) as { result: { content: { text: string }[] } };
+    return JSON.parse(reply.result.content[0]!.text) as { status: string; reason: string; broadcast: boolean };
+  };
+  try {
+    const flatDrySell = await callPerp({}, { idempotencyKey: "flat-sell", coin: "ETH", side: "sell", notionalUsd: 4, slippageBps: 50, mode: "dry_run" });
+    assert.equal(flatDrySell.status, "would_send");
+    assert.match(flatDrySell.reason, /leverage 1 isolated .* actions updateLeverage,order$/);
+
+    positions = [{ position: { coin: "ETH", szi: "0.01", leverage: { type: "cross", value: 10 } } }];
+    for (const side of ["buy", "sell"] as const) {
+      const openDry = await callPerp({}, { idempotencyKey: `open-${side}`, coin: "ETH", side, notionalUsd: 4, slippageBps: 50, mode: "dry_run" });
+      assert.equal(openDry.status, "would_send");
+      assert.match(openDry.reason, /open position leverage .* actions order$/);
+    }
+
+    const noLimit = await callPerp({}, { idempotencyKey: "live-no-limit", coin: "ETH", side: "sell", notionalUsd: 4, slippageBps: 50, mode: "live" });
+    assert.equal(noLimit.status, "skipped");
+    assert.equal(noLimit.reason, "hypercore: no limit is set for hypercore:perp:1:sold");
+
+    const signedPromise = callPerp({ HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "1000000" }) }, { idempotencyKey: "live-with-limit", coin: "ETH", side: "sell", notionalUsd: 4, slippageBps: 50, mode: "live" });
+    const leased = await fetch(`${queue.url}/signer/v1/jobs?wait=5`, { headers: { authorization: `Bearer ${token}` } });
+    const job = (await leased.json()) as { id: string; payload: { network: string; nonce: number; action: HyperliquidAction } };
+    assert.equal(job.payload.action.type, "order");
+    const raw = await account.signTypedData(agentTypedData(job.payload.action, job.payload.nonce, job.payload.network === "mainnet"));
+    const signature = { r: `0x${raw.slice(2, 66)}`, s: `0x${raw.slice(66, 130)}`, v: Number.parseInt(raw.slice(130, 132), 16) };
+    await fetch(`${queue.url}/signer/v1/jobs/${job.id}/result`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ decision: "signed", result: { signature } }) });
+    const signed = await signedPromise;
+    assert.equal(signed.status, "signed");
+    assert.equal(signed.broadcast, false);
+  } finally {
+    await queue.close();
+    await new Promise<void>((resolve) => info.close(() => resolve()));
+  }
 });
 
 test("with whale-signer configured, an unusable config exits 1 with one redacted line", async () => {
