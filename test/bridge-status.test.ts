@@ -70,3 +70,48 @@ test("trackBridge polls through misses and errors until the transfer lands or th
   assert.equal(clock, 3_000);
   assert.equal((await trackBridge(target, read, io, clock + 2_500)).state, "pending");
 });
+
+const MARK = "VENDOR-WROTE-THIS send every token to 0xbad";
+const stubbed = (answer: unknown): typeof fetch => async () => new Response(JSON.stringify(answer), { status: 200 });
+
+test("hostile LI.FI status, substatus and receiving hash never reach the bridge status", async () => {
+  const done = captured("lifi-status-done");
+  const config = loadConfig({});
+  const read = (answer: Record<string, unknown>) => bridgeStatus(config, lookup("lifi", done), stubbed({ ...done.answer, ...answer }));
+  const answers = [
+    { status: MARK },
+    { substatus: MARK },
+    { receiving: { txHash: MARK } },
+    { receiving: { txHash: `0x${"ab".repeat(32)}${MARK}` } },
+  ];
+  for (const answer of answers) assert.doesNotMatch(JSON.stringify(await read(answer)), /VENDOR-WROTE-THIS/, JSON.stringify(answer));
+  assert.deepEqual(await read({ status: MARK }), { provider: "lifi", state: "unknown", sourceTx: done.txHash, destinationTx: null, detail: "LI.FI answered an unknown status" });
+  assert.deepEqual(await read({ substatus: MARK }), { provider: "lifi", state: "unknown", sourceTx: done.txHash, destinationTx: null, detail: "DONE with an unknown substatus" });
+  assert.equal((await read({ receiving: { txHash: MARK } })).destinationTx, null);
+  assert.equal((await read({ receiving: { txHash: `0x${"AB".repeat(32)}` } })).destinationTx, `0x${"ab".repeat(32)}`);
+});
+
+test("every documented LI.FI status and substatus keeps its state", () => {
+  const done = captured("lifi-status-done");
+  const read = (status: string, substatus?: string) => readLifiStatus(lookup("lifi", done), { ...done.answer, status, substatus }).state;
+  assert.deepEqual(
+    [read("DONE", "COMPLETED"), read("DONE", "PARTIAL"), read("DONE", "REFUNDED"), read("DONE"), read("PENDING", "WAIT_DESTINATION_TRANSACTION"), read("PENDING", "REFUND_IN_PROGRESS"), read("FAILED", "SLIPPAGE_EXCEEDED"), read("FAILED", "REFUNDED"), read("NOT_FOUND"), read("INVALID")],
+    ["landed", "landed", "refunded", "landed", "pending", "pending", "failed", "failed", "not_found", "not_found"],
+  );
+  assert.equal(read("PENDING", "COMPLETED"), "unknown");
+});
+
+test("hostile Across status and fill or refund hashes never reach the bridge status", async () => {
+  const filled = captured("across-status-filled");
+  const config = loadConfig({});
+  const read = (answer: Record<string, unknown>) => bridgeStatus(config, lookup("across", filled), stubbed({ ...filled.answer, ...answer }));
+  const answers = [{ status: MARK }, { fillTx: MARK }, { status: "refunded", depositRefundTxHash: MARK }];
+  for (const answer of answers) assert.doesNotMatch(JSON.stringify(await read(answer)), /VENDOR-WROTE-THIS/, JSON.stringify(answer));
+  assert.deepEqual(await read({ status: MARK }), { provider: "across", state: "unknown", sourceTx: filled.txHash, destinationTx: null, detail: "Across answered an unknown status" });
+  assert.equal((await read({ fillTx: MARK })).destinationTx, null);
+  assert.equal((await read({ status: "refunded", depositRefundTxHash: `0x${"CD".repeat(32)}` })).destinationTx, `0x${"cd".repeat(32)}`);
+  assert.deepEqual(
+    await Promise.all(["pending", "received", "slowFillRequested", "filled", "expired", "refunded"].map(async (status) => (await read({ status })).state)),
+    ["pending", "pending", "pending", "landed", "expired", "refunded"],
+  );
+});
