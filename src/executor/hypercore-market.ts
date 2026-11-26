@@ -1,6 +1,7 @@
 import type { SwapIntent } from "../domain.js";
 import type { HyperMarket, HyperMarketQuery } from "../hyperliquid-markets.js";
-import { belowPerpMinimum, type LimitConfig } from "../limits.js";
+import { buildOrder, cappedLimitPx, orderSize, wirePrice, type OrderAction } from "../hyperliquid.js";
+import { belowPerpMinimum, HYPERLIQUID_MIN_ORDER_USD, type LimitConfig } from "../limits.js";
 
 export type HyperMarketOf = (query: HyperMarketQuery) => Promise<HyperMarket | null>;
 
@@ -29,4 +30,18 @@ export async function tokenHyperMarket(intent: SwapIntent, deps: { hyperMarket?:
     return `hyperliquid ${claim.coin} asset ${claim.assetIndex} is not the ${claim.market} market of ${intent.token.address}, asset ${market.assetIndex}`;
   }
   return market;
+}
+
+export function hyperOrder(intent: SwapIntent, market: HyperMarket, mark: number): OrderAction {
+  const isBuy = intent.side === "buy";
+  const order = buildOrder({
+    asset: market.assetIndex,
+    isBuy,
+    limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), market.szDecimals, market.market, isBuy),
+    size: orderSize(intent.notionalUsd, mark, market.szDecimals),
+  });
+  const { s, p } = order.orders[0]!;
+  const usd = Number(s) * Math.min(Number(p), mark);
+  if (market.market === "perp" && usd < HYPERLIQUID_MIN_ORDER_USD) throw new Error(`hyperliquid perp order rounds to ${Math.floor(usd * 100) / 100} USD, under the ${HYPERLIQUID_MIN_ORDER_USD} USD minimum`);
+  return order;
 }

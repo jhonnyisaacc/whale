@@ -52,7 +52,7 @@ test("captured mainnet orders are charged their notional whatever leverage backs
   await assert.rejects(() => signerFor({}).signHyperliquid(btcBuy, 1, false), /^Error: hypercore: order notional 502\.4377\d* USD exceeds the 5\.15 USD signing policy$/);
   const smallBuy = order(66, true, "2.037", "3.2", true);
   await assert.rejects(() => signerFor({}).signHyperliquid(smallBuy, 1, false), /order notional 6\.518\d* USD exceeds the 5\.15 USD/);
-  await signerFor({ MAX_USD_PER_TRADE: "10" }).signHyperliquid(smallBuy, 1, false);
+  await signerFor({ MAX_USD_PER_TRADE: "12" }).signHyperliquid(smallBuy, 1, false);
 });
 
 const captured = JSON.parse(readFileSync(new URL("../../test/fixtures/hyperliquid/mainnet-meta.json", import.meta.url), "utf8")) as { meta: { universe: { name: string }[] }; mids: Record<string, string> };
@@ -68,7 +68,7 @@ const holding = (from: Clearinghouse, sourceCoin: string, coin: string, szi?: st
 const metaFetch = (async () => new Response(JSON.stringify(captured.meta), { status: 200 })) as unknown as typeof fetch;
 const perp = (coin: string): HyperliquidMarket => ({ coin, assetIndex: captured.meta.universe.findIndex((row) => row.name === coin), market: "perp", maxLeverage: 50 });
 
-const PERP_CAPS = { MAX_USD_PER_TRADE: "10", DAILY_USD_CAP: "50" };
+const PERP_CAPS = { MAX_USD_PER_TRADE: "12", DAILY_USD_CAP: "50" };
 
 function perpIntent(coin: string, leverage: number | undefined, liquidityUsd = 100, side: "buy" | "sell" = "buy"): SwapIntent {
   const solanaToken = {
@@ -83,7 +83,7 @@ function perpIntent(coin: string, leverage: number | undefined, liquidityUsd = 1
   return intentSchema.parse({
     idempotencyKey: `${coin}-${side}-${leverage}-${liquidityUsd}`,
     side,
-    notionalUsd: 10,
+    notionalUsd: 12,
     slippageBps: 50,
     leverage,
     token: liquidityUsd < loadConfig({}).minLiquidityUsd ? hypercoreToken : solanaToken,
@@ -124,14 +124,14 @@ test("a dry run on captured mainnet meta plans updateLeverage at the asked lever
   assert.equal(fallback.reason, "hypercore ETH asset 1 leverage 1 isolated limit 1758.8 actions updateLeverage,order");
 });
 
-test("a 2x ETH buy sends isolated 2x and an order sized on its 10 USD notional, and both sign under a 10 USD trade cap", async () => {
+test("a 2x ETH buy sends isolated 2x and an order sized on its 12 USD notional, and both sign under a 12 USD trade cap", async () => {
   resetExecutorState();
   resetHyperMeta();
   const sent: SendRequest[] = [];
   assert.equal((await execute(perpIntent("ETH", 2), perpDeps("live", {}, sent))).decision, "sent");
   const [lever, order] = sent[0]!.hyperliquidActions;
   assert.deepEqual(lever, { type: "updateLeverage", asset: 1, isCross: false, leverage: 2 });
-  assert.deepEqual(order, { type: "order", orders: [{ a: 1, b: true, p: "1758.8", s: "0.0057", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" });
+  assert.deepEqual(order, { type: "order", orders: [{ a: 1, b: true, p: "1758.8", s: "0.0068", r: false, t: { limit: { tif: "Ioc" } } }], grouping: "na" });
   for (const action of sent[0]!.hyperliquidActions) await signerFor(PERP_CAPS).signHyperliquid(action, 1, false);
 });
 

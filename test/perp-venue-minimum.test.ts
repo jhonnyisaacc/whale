@@ -15,6 +15,8 @@ const TOKEN = "t".repeat(40);
 const evm = privateKeyToAccount(`0x${"11".repeat(32)}`);
 const solana = Keypair.fromSeed(new Uint8Array(32).fill(3)).publicKey.toBase58();
 const ETH: HyperliquidMarket = { coin: "ETH", assetIndex: 1, market: "perp", maxLeverage: 25 };
+const BTC: HyperliquidMarket = { coin: "BTC", assetIndex: 0, market: "perp", maxLeverage: 40 };
+const SZ_DECIMALS: Record<string, number> = { BTC: 5, ETH: 4 };
 const DEFAULT_REFUSAL = "hyperliquid perp orders need at least 10 USD notional, and MAX_USD_PER_TRADE is 5";
 
 async function hyperliquidInfo(): Promise<{ url: string; close: () => Promise<void> }> {
@@ -53,7 +55,7 @@ test("under the default config a local perp order below the 10 USD venue minimum
   }
 });
 
-function executorDeps(mode: "dry_run" | "live", env: Record<string, string>, sent: SendRequest[]): ExecutorDeps {
+function executorDeps(mode: "dry_run" | "live", env: Record<string, string>, sent: SendRequest[], market = ETH, mark = 1750): ExecutorDeps {
   return {
     config: { ...loadConfig(env), enabledChainKeys: new Set(["hypercore"]) },
     mode,
@@ -62,12 +64,12 @@ function executorDeps(mode: "dry_run" | "live", env: Record<string, string>, sen
     quoteHop: async () => {
       throw new Error("a perp order quotes no DEX hop");
     },
-    markPrice: async () => 1750,
-    hyperMarket: async () => ({ ...ETH, midKey: "ETH", szDecimals: 4 }),
+    markPrice: async () => mark,
+    hyperMarket: async () => ({ ...market, midKey: market.coin, szDecimals: SZ_DECIMALS[market.coin]! }),
     perpPosition: async () => ({ side: "flat" }),
     send: async (request) => {
       sent.push(request);
-      return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: "1750" } };
+      return { venue: "hypercore", txs: [], fill: { totalSz: "1", avgPx: String(mark) } };
     },
     readBalance: async () => 100,
     priceOf: () => 1,
@@ -76,14 +78,14 @@ function executorDeps(mode: "dry_run" | "live", env: Record<string, string>, sen
   };
 }
 
-const order = (notionalUsd: number) => perpIntent({ kind: "perp", idempotencyKey: `perp-${notionalUsd}`, coin: "ETH", side: "buy", notionalUsd, slippageBps: 50, mode: "live" }, ETH, 0);
+const order = (notionalUsd: number, side: "buy" | "sell" = "buy", market = ETH) => perpIntent({ kind: "perp", idempotencyKey: `perp-${market.coin}-${side}-${notionalUsd}`, coin: market.coin, side, notionalUsd, slippageBps: 50, mode: "live" }, market, 0);
 
 test("the executor refuses a perp order below the venue minimum before it reserves or signs, and names MAX_USD_PER_TRADE only when the cap is what keeps it below", async () => {
   const cases: [Record<string, string>, number, string | null][] = [
     [{}, 5, DEFAULT_REFUSAL],
     [{}, 10, "notional exceeds 5 USD"],
     [{ MAX_USD_PER_TRADE: "20" }, 9.99, "hyperliquid perp orders need at least 10 USD notional"],
-    [{ MAX_USD_PER_TRADE: "20" }, 10, null],
+    [{ MAX_USD_PER_TRADE: "20" }, 11, null],
     [{ MAX_USD_PER_TRADE: "20" }, 21, "notional exceeds 20 USD"],
   ];
   for (const [env, notionalUsd, reason] of cases) {
@@ -99,5 +101,56 @@ test("the executor refuses a perp order below the venue minimum before it reserv
       }
       assert.deepEqual([report.decision, report.reason, sent.length, reserved.length], ["skipped", reason, 0, 0], name);
     }
+  }
+});
+
+test("the executor refuses a perp order whose lot rounding or slippage limit takes it under 10 USD before it reserves or signs, and a larger order still sends", async () => {
+  const cases: [Record<string, string>, ReturnType<typeof order>, number, string | null][] = [
+    [{ MAX_USD_PER_TRADE: "10" }, order(10, "sell"), 1750.05, "hyperliquid perp order rounds to 9.92 USD, under the 10 USD minimum"],
+    [{ MAX_USD_PER_TRADE: "10" }, order(10, "buy", BTC), 91_000, "hyperliquid perp order rounds to 9.1 USD, under the 10 USD minimum"],
+    [{ MAX_USD_PER_TRADE: "20" }, order(10.9, "sell", BTC), 91_000, "hyperliquid perp order rounds to 9.95 USD, under the 10 USD minimum"],
+    [{ MAX_USD_PER_TRADE: "11" }, order(11, "sell"), 1750.05, null],
+    [{ MAX_USD_PER_TRADE: "12" }, order(12, "buy", BTC), 91_000, null],
+  ];
+  for (const [env, intent, mark, reason] of cases) {
+    for (const mode of ["dry_run", "live"] as const) {
+      resetExecutorState();
+      const sent: SendRequest[] = [];
+      const reserved: string[] = [];
+      const market = intent.hyperliquid?.coin === "BTC" ? BTC : ETH;
+      const report = await execute({ ...intent, idempotencyKey: `${intent.idempotencyKey}-${mode}` }, { ...executorDeps(mode, env, sent, market, mark), recordSpend: async (key) => (reserved.push(key), "reserved") });
+      const name = `${mode} ${intent.idempotencyKey} ${JSON.stringify(env)}`;
+      if (reason === null) {
+        assert.equal(report.decision, mode === "live" ? "sent" : "would_send", `${name}: ${report.reason}`);
+        assert.deepEqual([sent.length, reserved.length], mode === "live" ? [1, 1] : [0, 0], name);
+        continue;
+      }
+      assert.deepEqual([report.decision, report.reason, sent.length, reserved.length], ["skipped", reason, 0, 0], name);
+    }
+  }
+});
+
+test("a local 10 USD ETH sell or BTC buy under MAX_USD_PER_TRADE 10 is refused in dry run and queues no signing job live", async () => {
+  const info = await hyperliquidInfo();
+  const queue = await startSignerQueue({ token: TOKEN, port: 0, answerTimeoutMs: 1_000 });
+  try {
+    const send = localSender({ HYPERLIQUID_API_URL: info.url, MAX_USD_PER_TRADE: "10" }, queue, { evmAddress: evm.address, solanaAddress: solana, token: TOKEN, port: 0, answerTimeoutMs: 1_000, bitcoinPublicKey: null });
+    const cases = [
+      [{ kind: "perp", coin: "ETH", side: "sell", notionalUsd: 10, slippageBps: 50 }, "hyperliquid perp order rounds to 9.92 USD, under the 10 USD minimum"],
+      [{ kind: "perp", coin: "BTC", side: "buy", notionalUsd: 10, slippageBps: 50 }, "hyperliquid perp order rounds to 9.1 USD, under the 10 USD minimum"],
+    ] as const;
+    for (const [perp, reason] of cases) {
+      const dry = await send({ ...perp, idempotencyKey: `dry-${perp.coin}`, mode: "dry_run" });
+      assert.deepEqual([dry.status, dry.reason], ["skipped", reason], perp.coin);
+      const live = send({ ...perp, idempotencyKey: `live-${perp.coin}`, mode: "live" }).catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
+      const leased = await fetch(`${queue.url}/signer/v1/jobs?wait=1`, { headers: { authorization: `Bearer ${TOKEN}` } });
+      assert.equal(leased.status, 204, `${perp.coin}: no signing job was queued`);
+      const result = await live;
+      assert.ok(!(result instanceof Error), String(result));
+      assert.deepEqual([result.status, result.reason, result.jobs.length], ["skipped", reason, 0], perp.coin);
+    }
+  } finally {
+    await queue.close();
+    await info.close();
   }
 });

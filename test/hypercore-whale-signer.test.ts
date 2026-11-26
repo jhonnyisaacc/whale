@@ -15,7 +15,7 @@ const TOKEN = "t".repeat(40);
 const EVM_KEY = `0x${"11".repeat(32)}` as Hex;
 const OTHER_KEY = `0x${"22".repeat(32)}` as Hex;
 const evm = privateKeyToAccount(EVM_KEY);
-const PERP_CAP = { MAX_USD_PER_TRADE: "10" };
+const PERP_CAP = { MAX_USD_PER_TRADE: "12" };
 const solana = Keypair.fromSeed(new Uint8Array(32).fill(3)).publicKey.toBase58();
 
 type Job = { id: string; kind: string; payload: { network: string; nonce: number; action: HyperliquidAction | WithdrawAction } };
@@ -90,7 +90,7 @@ test("a withdraw3 goes to whale-signer with the nonce equal to its time, and a r
 test("an mcp perp order reaches the local sender, and without whale-signer it is skipped", async () => {
   const seen: unknown[] = [];
   const deps = { executorUrl: "http://127.0.0.1:1", executorAuthToken: null };
-  const args = { idempotencyKey: "p", coin: "ETH", side: "buy", notionalUsd: 10, slippageBps: 50 };
+  const args = { idempotencyKey: "p", coin: "ETH", side: "buy", notionalUsd: 12, slippageBps: 50 };
   assert.deepEqual(await callTool(deps, "perp", args), { kind: "perp", status: "skipped", reason: "a perp order needs whale-signer. set WHALE_SIGNER_KEYSTORE and run whale-signer serve" });
   await callTool({ ...deps, localSend: async (command) => (seen.push(command), { kind: "perp", status: "skipped", reason: "", broadcast: false, jobs: [], txs: [] }) }, "perp", { ...args, mode: "live" });
   assert.deepEqual(seen, [{ kind: "perp", ...args, mode: "live" }]);
@@ -121,13 +121,13 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
   try {
     await withQueue(async (queue) => {
       const send = localSender({ HYPERLIQUID_API_URL: info.url, ...PERP_CAP }, queue, { evmAddress: evm.address, solanaAddress: solana, token: TOKEN, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null });
-      const dry = await send({ kind: "perp", idempotencyKey: "dry", coin: "ETH", side: "buy", notionalUsd: 10, slippageBps: 50, mode: "dry_run" });
+      const dry = await send({ kind: "perp", idempotencyKey: "dry", coin: "ETH", side: "buy", notionalUsd: 12, slippageBps: 50, mode: "dry_run" });
       assert.equal(dry.status, "would_send");
       assert.match(dry.reason, /hypercore ETH (asset 1 )?leverage 1 isolated limit .* actions updateLeverage,order/);
       assert.deepEqual(info.positionReads, [evm.address]);
       assert.deepEqual(info.agentReads, [], "the key's own account needs no agent check");
 
-      const live = send({ kind: "perp", idempotencyKey: "live", coin: "ETH", side: "buy", notionalUsd: 10, slippageBps: 50, mode: "live" });
+      const live = send({ kind: "perp", idempotencyKey: "live", coin: "ETH", side: "buy", notionalUsd: 12, slippageBps: 50, mode: "live" });
       const leverage = await lease(queue);
       assert.deepEqual(leverage.payload.action, { type: "updateLeverage", asset: 1, isCross: false, leverage: 1 });
       await answer(queue, leverage.id, { decision: "signed", result: { signature: await signJob(leverage, EVM_KEY) } });
@@ -139,19 +139,19 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
       assert.equal(result.broadcast, false);
       assert.deepEqual(result.txs.map((tx) => [tx.to, tx.outcome, tx.from]), [["updateLeverage", "signed", evm.address], ["order", "signed", evm.address]]);
 
-      const refused = assert.rejects(send({ kind: "perp", idempotencyKey: "refused", coin: "ETH", side: "buy", notionalUsd: 10, slippageBps: 50, mode: "live" }), (error: unknown) => error instanceof SignerRefusal && /above its whole 3000000 daily limit/.test(error.message));
+      const refused = assert.rejects(send({ kind: "perp", idempotencyKey: "refused", coin: "ETH", side: "buy", notionalUsd: 12, slippageBps: 50, mode: "live" }), (error: unknown) => error instanceof SignerRefusal && /above its whole 3000000 daily limit/.test(error.message));
       const first = await lease(queue);
       await answer(queue, first.id, { decision: "signed", result: { signature: await signJob(first, EVM_KEY) } });
       const second = await lease(queue);
       await answer(queue, second.id, { decision: "refused", reasons: ["hypercore: 3985900 of hypercore:usdc is above its whole 3000000 daily limit"] });
       await refused;
 
-      assert.equal((await send({ kind: "perp", idempotencyKey: "nope", coin: "NOPE", side: "buy", notionalUsd: 10, slippageBps: 50, mode: "live" })).reason, "NOPE is not a listed Hyperliquid perp");
+      assert.equal((await send({ kind: "perp", idempotencyKey: "nope", coin: "NOPE", side: "buy", notionalUsd: 12, slippageBps: 50, mode: "live" })).reason, "NOPE is not a listed Hyperliquid perp");
 
       const gated = localSender({ HYPERLIQUID_API_URL: info.url, ...PERP_CAP, SUPPORT_TIERS: "hypercore:dry_run" }, queue, { evmAddress: evm.address, solanaAddress: solana, token: TOKEN, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null });
-      const blockedLive = await gated({ kind: "perp", idempotencyKey: "tier-live", coin: "ETH", side: "buy", notionalUsd: 10, slippageBps: 50, mode: "live" });
+      const blockedLive = await gated({ kind: "perp", idempotencyKey: "tier-live", coin: "ETH", side: "buy", notionalUsd: 12, slippageBps: 50, mode: "live" });
       assert.deepEqual([blockedLive.status, blockedLive.reason, blockedLive.jobs.length], ["skipped", "chain is not enabled for live sends", 0]);
-      assert.equal((await gated({ kind: "perp", idempotencyKey: "tier-dry", coin: "ETH", side: "buy", notionalUsd: 10, slippageBps: 50, mode: "dry_run" })).status, "would_send");
+      assert.equal((await gated({ kind: "perp", idempotencyKey: "tier-dry", coin: "ETH", side: "buy", notionalUsd: 12, slippageBps: 50, mode: "dry_run" })).status, "would_send");
     });
   } finally {
     await info.close();
@@ -161,7 +161,7 @@ test("with WHALE_BROADCAST off, a local perp buy signs updateLeverage and the or
 test("a local perp trade on another HYPERLIQUID_ACCOUNT_ADDRESS needs that account to have approved the whale-signer key", async () => {
   const master = "0x3333333333333333333333333333333333333333";
   const setup = { evmAddress: evm.address, solanaAddress: solana, token: TOKEN, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null };
-  const dry = { kind: "perp", idempotencyKey: "dry", coin: "ETH", side: "buy", notionalUsd: 10, slippageBps: 50, mode: "dry_run" } as const;
+  const dry = { kind: "perp", idempotencyKey: "dry", coin: "ETH", side: "buy", notionalUsd: 12, slippageBps: 50, mode: "dry_run" } as const;
   for (const [agents, approved] of [[[], false], [[{ address: "0x4444444444444444444444444444444444444444", validUntil: null }], false], [[{ address: evm.address.toLowerCase(), validUntil: Date.now() - 1 }], false], [[{ address: evm.address.toLowerCase(), validUntil: Date.now() + 60_000 }], true]] as const) {
     const info = await hyperliquidInfo([...agents]);
     try {

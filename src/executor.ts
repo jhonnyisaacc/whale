@@ -6,10 +6,10 @@ import { stamp } from "./latency.js";
 import type { PriceOf } from "./prices.js";
 import { spendDay, type SpendScope } from "./spend.js";
 import { pickRoute } from "./routing.js";
-import { buildOrder, cappedLimitPx, orderSize, tradeActions, wirePrice, type HyperliquidAction, type PerpPosition } from "./hyperliquid.js";
+import { tradeActions, type HyperliquidAction, type PerpPosition } from "./hyperliquid.js";
 import { keepScreened, publicRoute, quotePlan, sizedLive } from "./executor/quotes.js";
 import { liquidityLookup, type LiquidityOf } from "./executor/liquidity.js";
-import { tokenHyperMarket, type HyperMarketOf } from "./executor/hypercore-market.js";
+import { hyperOrder, tokenHyperMarket, type HyperMarketOf } from "./executor/hypercore-market.js";
 import { liveTierBlocked, sendBlock, type SupportTier } from "./support.js";
 
 export type HopQuote = {
@@ -351,12 +351,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
     let order, actions: HyperliquidAction[];
     try {
       if (leverage !== undefined && !isBuy) throw new Error("leverage applies only to a HyperCore perp buy");
-      order = buildOrder({
-        asset: market.assetIndex,
-        isBuy,
-        limitPx: wirePrice(cappedLimitPx(mark, isBuy, intent.slippageBps), market.szDecimals, market.market, isBuy),
-        size: orderSize(intent.notionalUsd, mark, market.szDecimals),
-      });
+      order = hyperOrder(intent, market, mark);
       actions = tradeActions(market, order, leverage, position);
     } catch (error) {
       return blockReport(intent, deps, latency, "hypercore", error instanceof Error ? error.message : "hyperliquid order sizing failed");

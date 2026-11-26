@@ -146,6 +146,8 @@ test("perp tool text matches its flat vs open-position leverage rules and HYPERC
   assert.match(perpTool.description, /not reduce-only, so a sell larger than the long closes it and opens a short/);
   assert.doesNotMatch(perpTool.description, /side sell reduces a long/);
   assert.match(perpTool.description, /refuses a notionalUsd under 10 before it signs, in dry_run too, and refuses every perp order while MAX_USD_PER_TRADE \(default 5\) is under 10/);
+  assert.match(perpTool.description, /refuses an order whose size, rounded down to the coin's lot size, is worth under 10 USD at the mark or at its slippage-capped limit/);
+  assert.match(perpTool.description, /As guidance, not a guarantee, use a notionalUsd of 11 or more under a MAX_USD_PER_TRADE of 11 or more/);
 
   let positions: unknown[] = [];
   const info = createServer((req, res) => {
@@ -166,27 +168,27 @@ test("perp tool text matches its flat vs open-position leverage rules and HYPERC
   const setup = { evmAddress: account.address, solanaAddress: Keypair.fromSeed(new Uint8Array(32).fill(3)).publicKey.toBase58(), token, port: 0, answerTimeoutMs: 5_000, bitcoinPublicKey: null };
   const queue = await startSignerQueue({ token, port: 0, answerTimeoutMs: 5_000 });
   const callPerp = async (env: Record<string, string>, args: Record<string, unknown>) => {
-    const handle = createHandler({ ...deps(), localSend: localSender({ HYPERLIQUID_API_URL: url, MAX_USD_PER_TRADE: "10", ...env }, queue, setup) });
+    const handle = createHandler({ ...deps(), localSend: localSender({ HYPERLIQUID_API_URL: url, MAX_USD_PER_TRADE: "12", ...env }, queue, setup) });
     const reply = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "perp", arguments: args } })) as { result: { content: { text: string }[] } };
     return JSON.parse(reply.result.content[0]!.text) as { status: string; reason: string; broadcast: boolean };
   };
   try {
-    const flatDrySell = await callPerp({}, { idempotencyKey: "flat-sell", coin: "ETH", side: "sell", notionalUsd: 10, slippageBps: 50, mode: "dry_run" });
+    const flatDrySell = await callPerp({}, { idempotencyKey: "flat-sell", coin: "ETH", side: "sell", notionalUsd: 12, slippageBps: 50, mode: "dry_run" });
     assert.equal(flatDrySell.status, "would_send");
     assert.match(flatDrySell.reason, /leverage 1 isolated .* actions updateLeverage,order$/);
 
     positions = [{ position: { coin: "ETH", szi: "0.01", leverage: { type: "cross", value: 10 } } }];
     for (const side of ["buy", "sell"] as const) {
-      const openDry = await callPerp({}, { idempotencyKey: `open-${side}`, coin: "ETH", side, notionalUsd: 10, slippageBps: 50, mode: "dry_run" });
+      const openDry = await callPerp({}, { idempotencyKey: `open-${side}`, coin: "ETH", side, notionalUsd: 12, slippageBps: 50, mode: "dry_run" });
       assert.equal(openDry.status, "would_send");
       assert.match(openDry.reason, /open position leverage .* actions order$/);
     }
 
-    const noLimit = await callPerp({}, { idempotencyKey: "live-no-limit", coin: "ETH", side: "sell", notionalUsd: 10, slippageBps: 50, mode: "live" });
+    const noLimit = await callPerp({}, { idempotencyKey: "live-no-limit", coin: "ETH", side: "sell", notionalUsd: 12, slippageBps: 50, mode: "live" });
     assert.equal(noLimit.status, "skipped");
     assert.equal(noLimit.reason, "hypercore: no limit is set for hypercore:perp:1:sold");
 
-    const signedPromise = callPerp({ HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "1000000" }) }, { idempotencyKey: "live-with-limit", coin: "ETH", side: "sell", notionalUsd: 10, slippageBps: 50, mode: "live" });
+    const signedPromise = callPerp({ HYPERCORE_SELL_LIMITS: JSON.stringify({ "hypercore:perp:1:sold": "1000000" }) }, { idempotencyKey: "live-with-limit", coin: "ETH", side: "sell", notionalUsd: 12, slippageBps: 50, mode: "live" });
     const leased = await fetch(`${queue.url}/signer/v1/jobs?wait=5`, { headers: { authorization: `Bearer ${token}` } });
     const job = (await leased.json()) as { id: string; payload: { network: string; nonce: number; action: HyperliquidAction } };
     assert.equal(job.payload.action.type, "order");
