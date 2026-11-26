@@ -10,7 +10,7 @@ const UNREADABLE = "is not one the signer can read";
 const ROUTES = [
   { from: 8453, to: 42161, expect: "signed" },
   { from: 42161, to: 8453, expect: "signed" },
-  { from: 10, to: 8453, expect: "decoded" },
+  { from: 10, to: 8453, expect: "signed" },
 ];
 const chains = [...new Set(ROUTES.flatMap((route) => [route.from, route.to]))];
 const usdc = (chainId) => BRIDGE_TOKENS.USDC[chainId].address;
