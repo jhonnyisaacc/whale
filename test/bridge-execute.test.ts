@@ -267,6 +267,15 @@ test("with broadcast on, the bridge sends, commits its spend, and tracks the tra
   assert.equal(result.status === "sent" && result.transfer?.sourceTx, keccak256(run.sent[1] ?? "0x"));
 });
 
+test("a bridge whose status stays unknown keeps its reservation once the source transaction lands", async () => {
+  const run = harness({ broadcast: true, statuses: Array.from({ length: 200 }, () => "unknown" as const) });
+  const result = await executeBridge(run.deps, order());
+  assert.equal(result.status, "sent", JSON.stringify(result));
+  assert.deepEqual(run.spend, ["reserve bridge:k1 2", "record bridge:k1 pending", "commit bridge:k1"]);
+  assert.equal(result.status === "sent" && result.transfer?.state, "unknown");
+  assert.equal(result.reason, "bridge unknown");
+});
+
 test("a bridge that landed keeps its reservation and reports sent when the spend commit fails", async () => {
   const run = harness({ broadcast: true });
   run.deps.spend = { ...run.deps.spend, commit: async () => Promise.reject(new Error("db connection reset")) };
