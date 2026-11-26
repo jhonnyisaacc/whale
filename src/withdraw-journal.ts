@@ -1,5 +1,5 @@
 import type { TxOutcome } from "./domain.js";
-import { reserveDecision, type SpendStatus } from "./spend.js";
+import { applySchema, reserveDecision, type SpendStatus } from "./spend.js";
 
 export type WithdrawJournalAction = "commit" | "release" | "keep";
 
@@ -82,7 +82,7 @@ export function createMemoryWithdrawJournal() {
 }
 
 const pools = new Map<string, import("pg").Pool>();
-const ready = new Set<string>();
+const ready = new Map<string, Promise<void>>();
 
 async function poolFor(databaseUrl: string) {
   const { default: pg } = await import("pg");
@@ -91,10 +91,13 @@ async function poolFor(databaseUrl: string) {
     pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
     pools.set(databaseUrl, pool);
   }
-  if (!ready.has(databaseUrl)) {
-    await pool.query(WITHDRAW_SCHEMA);
-    ready.add(databaseUrl);
+  let boot = ready.get(databaseUrl);
+  if (!boot) {
+    boot = applySchema(pool, WITHDRAW_SCHEMA);
+    ready.set(databaseUrl, boot);
+    boot.catch(() => ready.delete(databaseUrl));
   }
+  await boot;
   return pool;
 }
 
