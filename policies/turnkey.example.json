@@ -1,10 +1,10 @@
 [
   {
     "policyName": "EVM swaps on allowlisted chains and routers",
-    "notes": "Scoped to the EVM wallet. Routers, selectors, and the 2000000000000000 wei native cap come from turnkeyPolicyDocument. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.",
+    "notes": "Scoped to the EVM wallet. Routers, selectors, per-chain gas and fee-per-gas limits, and the 2000000000000000 wei native cap come from turnkeyPolicyDocument. A chain without a fee limit matches nothing. An empty router map matches no chain. Withdrawals and token approvals are a root-quorum ceremony, not this policy.",
     "effect": "EFFECT_ALLOW",
     "consensus": "approvers.any(user, user.id == '11111111-1111-4111-8111-111111111111')",
-    "condition": "activity.action == 'SIGN' && wallet.id == '22222222-2222-4222-8222-222222222222' && ((eth.tx.chain_id == 8453 && (eth.tx.to == '0x1111111111111111111111111111111111111111'))) && eth.tx.value <= 2000000000000000"
+    "condition": "activity.action == 'SIGN' && wallet.id == '22222222-2222-4222-8222-222222222222' && ((eth.tx.chain_id == 8453 && eth.tx.gas <= 1500000 && eth.tx.max_fee_per_gas <= 1000000000 && eth.tx.gas_price <= 1000000000 && (eth.tx.to == '0x1111111111111111111111111111111111111111'))) && eth.tx.value <= 2000000000000000"
   },
   {
     "policyName": "Solana swaps through Jupiter and the base programs",

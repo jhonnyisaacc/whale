@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { Hex } from "viem";
-import { buildLeverage, fetchPerpPosition, signL1Action, type HyperliquidAction } from "../src/hyperliquid.js";
+import { assertApprovedAgent, buildLeverage, fetchPerpPosition, signL1Action, type HyperliquidAction } from "../src/hyperliquid.js";
 import { fetchHyperMarket, resetHyperMeta } from "../src/hyperliquid-markets.js";
 import { keystoreSigner, withPolicy } from "../src/managed-signer.js";
 import { loadConfig } from "../src/config.js";
@@ -187,6 +187,31 @@ test("captured clearinghouseState responses parse to the position Whale plans ag
   await assert.rejects(() => read({ assetPositions: [{ position: { coin: "ETH", szi: "1", leverage: { type: "margin", value: 3 } } }] }, "ETH"));
   const down = (async () => new Response("busy", { status: 502 })) as unknown as typeof fetch;
   await assert.rejects(() => fetchPerpPosition(MAINNET, ACCOUNT, "ETH", down), /clearinghouseState failed/);
+});
+
+test("a position read and the agent check wait out a slow /info, and a read that never answers still fails closed", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const answerAfter = (delayMs: number, body: unknown = accounts.cross) =>
+    ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => resolve(new Response(JSON.stringify(body), { status: 200 })), delayMs);
+        init?.signal?.addEventListener("abort", () => (clearTimeout(timer), reject(init.signal?.reason)), { once: true });
+      })) as unknown as typeof fetch;
+  const slow = fetchPerpPosition(MAINNET, ACCOUNT, "ETH", answerAfter(4_000));
+  t.mock.timers.tick(4_000);
+  assert.deepEqual(await slow, { side: "long", margin: "cross", leverage: 10 });
+  const agent = `0x${"44".repeat(20)}`;
+  const approval = assertApprovedAgent(MAINNET, ACCOUNT, agent, answerAfter(4_000, [{ address: agent, validUntil: null }]));
+  t.mock.timers.tick(4_000);
+  await approval;
+
+  let settled = false;
+  const silent = fetchPerpPosition(MAINNET, ACCOUNT, "ETH", answerAfter(60_000)).finally(() => (settled = true));
+  t.mock.timers.tick(4_999);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "the read is still waiting just under 5 s");
+  t.mock.timers.tick(1);
+  await assert.rejects(silent, /timeout after 5000ms/);
 });
 
 test("a fresh sell opens its short at isolated 1x, and the buy that closes it sends no updateLeverage", async () => {

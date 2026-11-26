@@ -63,7 +63,7 @@ test("every EVM chain id matches its RPC variable, router allowlist, fee limit, 
   const allowlist = routerAllowlist({ ROUTER_ALLOWLIST: `0x${"3".repeat(40)}` } as NodeJS.ProcessEnv);
   assert.deepEqual(sorted(Object.keys(allowlist)), ids);
   const signable = sorted(evm.filter((chain) => chain.liveSend === "eip1559" && chain.key !== "blast").map((chain) => chain.id));
-  assert.deepEqual(sorted(Object.keys(DEFAULT_EVM_FEE_LIMITS)), signable, "every eip1559 chain but Blast, whose L1 fee oracle could not be measured, has a fee limit");
+  assert.deepEqual(sorted(Object.keys(DEFAULT_EVM_FEE_LIMITS)), signable, "every eip1559 chain but Blast, which is winding down, has a fee limit");
   for (const id of L1_DATA_FEE_CHAIN_IDS) assert.ok(ids.includes(id), `L1 data fee chain ${id} is in the chain table`);
   for (const [id, limit] of Object.entries(DEFAULT_EVM_FEE_LIMITS)) {
     assert.equal(limit.l1 !== undefined, L1_DATA_FEE_CHAIN_IDS.has(Number(id)), `chain ${id} has an L1 fee budget exactly when it charges an L1 data fee`);
@@ -77,5 +77,5 @@ test("every EVM chain id matches its RPC variable, router allowlist, fee limit, 
     maxValueWei: 1n,
   });
   const clauses = [...JSON.stringify(policy).matchAll(/eth\.tx\.chain_id == (\d+) &&/g)].map((match) => match[1] ?? "");
-  assert.deepEqual(sorted(clauses), signable.filter((id) => !L1_DATA_FEE_CHAIN_IDS.has(id) && !TURNKEY_EXCLUDED_CHAIN_IDS.has(id)), "the Turnkey policy stays closed on L1 data fee chains and on zkSync");
+  assert.deepEqual(sorted(clauses), signable.filter((id) => !TURNKEY_EXCLUDED_CHAIN_IDS.has(id)), "the Turnkey policy renders every signable chain but zkSync, and an L1 data fee chain only with its budget");
 });

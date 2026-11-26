@@ -25,8 +25,14 @@ export async function sendJito(fetchImpl: typeof fetch, url: string, signed: Uin
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "sendTransaction", params: [Buffer.from(signed).toString("base64"), { encoding: "base64" }] }),
   }, false);
   if (!response.ok) throw new Error("jito send failed");
-  const body = z.object({ error: z.unknown().optional() }).loose().parse(JSON.parse(await readVendorText(response)));
-  if (body.error) throw new Error("jito send failed");
+  let body: unknown;
+  try {
+    body = JSON.parse(await readVendorText(response));
+  } catch {
+    throw new Error("jito send failed");
+  }
+  const parsed = z.object({ error: z.unknown().optional() }).loose().safeParse(body);
+  if (!parsed.success || parsed.data.error) throw new Error("jito send failed");
 }
 
 export function landedStatus(status: SolanaStatus | undefined): "landed" | "reverted" | null {

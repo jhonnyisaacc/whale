@@ -4,9 +4,10 @@ import type { Holding } from "../domain.js";
 import { holdingFitsChain, type BalanceReader } from "../balances.js";
 import type { TransactionSigner } from "../managed-signer.js";
 import { evmReadClient, firstOk, solanaConnection } from "../rpc.js";
+import { guarded } from "../rpc-reason.js";
 
 export function chainReader(config: AppConfig, signer: TransactionSigner | null): BalanceReader {
-  return async (holding: Holding) => {
+  return guarded(async (holding: Holding) => {
     if (!signer || !holding.chainKey) return null;
     const spec = chainByKey(holding.chainKey);
     const rpcs = config.rpcUrlsByChainKey[holding.chainKey] ?? [];
@@ -42,6 +43,5 @@ export function chainReader(config: AppConfig, signer: TransactionSigner | null)
     if (!/^0x[0-9a-fA-F]{40}$/.test(holding.address)) return null;
     const raw = await client.readContract({ address: holding.address as `0x${string}`, abi: erc20Abi, functionName: "balanceOf", args: [owner as `0x${string}`] });
     return Number(formatUnits(raw, decimals));
-  };
+  });
 }
-
