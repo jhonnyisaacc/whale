@@ -33,6 +33,72 @@ export const feeEstimates = z.record(z.string(), z.number().positive().finite())
 export const txHex = z.string().trim().regex(/^(?:[0-9a-f]{2})+$/).min(120).max(800_000);
 export const mempoolTest = z.tuple([z.object({ txid, allowed: z.boolean(), "reject-reason": z.string().nullish() }).loose()]);
 
+const BITCOIND_REASONS = [
+  "missing-inputs",
+  "bad-txns-inputs-missingorspent",
+  "bad-txns-inputs-duplicate",
+  "bad-txns-in-belowout",
+  "bad-txns-vout-negative",
+  "bad-txns-vin-empty",
+  "bad-txns-vout-empty",
+  "bad-txns-oversize",
+  "bad-txns-nonstandard-inputs",
+  "bad-txns-too-many-sigops",
+  "bad-txns-premature-spend-of-coinbase",
+  "bad-txns-spends-conflicting-tx",
+  "bad-witness-nonstandard",
+  "txn-mempool-conflict",
+  "txn-already-in-mempool",
+  "txn-already-known",
+  "txn-same-nonwitness-data-in-mempool",
+  "min relay fee not met",
+  "mempool min fee not met",
+  "insufficient fee",
+  "mempool full",
+  "too-long-mempool-chain",
+  "too many potential replacements",
+  "replacement-adds-unconfirmed",
+  "non-mandatory-script-verify-flag",
+  "mandatory-script-verify-flag-failed",
+  "mempool-script-verify-flag-failed",
+  "max-fee-exceeded",
+  "absurdly-high-fee",
+  "dust",
+  "tx-size",
+  "tx-size-small",
+  "scriptpubkey",
+  "scriptsig-size",
+  "scriptsig-not-pushonly",
+  "bare-multisig",
+  "multi-op-return",
+  "version",
+  "non-final",
+  "non-BIP68-final",
+  "Transaction already in block chain",
+  "Transaction outputs already in utxo set",
+  "Fee exceeds maximum configured by user",
+  "TX decode failed",
+];
+
+const UNKNOWN_BITCOIND_REASON = "reason not in a known bitcoind format";
+
+const rpcErrorBody = z.object({ message: z.string() }).loose();
+
+function rpcMessage(text: string): string {
+  const json = /^sendrawtransaction RPC error: (\{.*\})$/s.exec(text)?.[1];
+  if (!json) return text;
+  try {
+    return rpcErrorBody.parse(JSON.parse(json)).message;
+  } catch {
+    return text;
+  }
+}
+
+function bitcoindReason(text: string): string {
+  const message = rpcMessage(text.trim());
+  return BITCOIND_REASONS.find((reason) => message === reason || [",", " (", ":"].some((separator) => message.startsWith(`${reason}${separator}`))) ?? UNKNOWN_BITCOIND_REASON;
+}
+
 export function transactionId(raw: Uint8Array): string {
   return Transaction.fromRaw(raw, RAW_TX_OPTIONS).id;
 }
@@ -57,7 +123,7 @@ export function parseFeeRate(body: unknown): number {
 export function parseMempoolTest(body: unknown, expected: string): void {
   const [result] = mempoolTest.parse(body);
   if (result.txid !== expected) throw new Error(`esplora tested txid ${result.txid} for transaction ${expected}`);
-  if (!result.allowed) throw new SimulationRefused(`simulation rejected the transaction: ${(result["reject-reason"] ?? "no reason given").slice(0, 200)}`);
+  if (!result.allowed) throw new SimulationRefused(`simulation rejected the transaction: ${result["reject-reason"] ? bitcoindReason(result["reject-reason"]) : "no reason given"}`);
 }
 
 const txStatus = z.object({ status: z.object({ confirmed: z.boolean() }).loose() }).loose();
@@ -72,6 +138,20 @@ export function parseTransaction(body: string, expected: string): Uint8Array {
   return new Uint8Array(raw);
 }
 
+function decode<T>(route: string, text: string, parse: (body: unknown) => T): T {
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error(`esplora ${route} answered a body that is not json`);
+  }
+  try {
+    return parse(body);
+  } catch (error) {
+    throw error instanceof z.ZodError ? new Error(`esplora ${route} answered an unexpected shape`) : error;
+  }
+}
+
 export function esploraIndexer(baseUrl: string, fetchImpl: typeof fetch = fetch): BitcoinIndexer {
   const base = baseUrl.replace(/\/$/, "");
   const request = (route: string, init: RequestInit = {}) =>
@@ -84,22 +164,25 @@ export function esploraIndexer(baseUrl: string, fetchImpl: typeof fetch = fetch)
     if (!response.ok) throw new Error(`esplora ${route.split("/")[1]} read failed ${response.status}`);
     return response.text;
   };
-  const json = async (route: string): Promise<unknown> => JSON.parse(await read(route));
+  const json = async <T>(route: string, parse: (body: unknown) => T): Promise<T> => decode(route.split("/")[1] ?? route, await read(route), parse);
   return {
-    utxos: async (address) => parseUtxos(await json(`/address/${encodeURIComponent(address)}/utxo`)),
+    utxos: async (address) => json(`/address/${encodeURIComponent(address)}/utxo`, parseUtxos),
     transaction: async (id) => parseTransaction(await read(`/tx/${txid.parse(id)}/hex`), id),
-    feeRate: async () => parseFeeRate(await json("/fee-estimates")),
-    balance: async (address) => parseBalance(await json(`/address/${encodeURIComponent(address)}`)),
+    feeRate: async () => json("/fee-estimates", parseFeeRate),
+    balance: async (address) => json(`/address/${encodeURIComponent(address)}`, parseBalance),
     async simulate(signed) {
       const response = await request("/txs/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify([Buffer.from(signed).toString("hex")]) });
       if (!response.ok) throw new Error(`esplora could not simulate the transaction: txs/test answered ${response.status}`);
-      parseMempoolTest(JSON.parse(response.text), transactionId(signed));
+      const expected = transactionId(signed);
+      decode("txs/test", response.text, (body) => parseMempoolTest(body, expected));
     },
     async broadcast(signed) {
       const expected = transactionId(signed);
       const response = await request("/tx", { method: "POST", headers: { "content-type": "text/plain" }, body: Buffer.from(signed).toString("hex") });
-      if (!response.ok) throw new Error(`esplora broadcast failed ${response.status}: ${response.text.slice(0, 300)}`);
-      if (response.text.trim() !== expected) throw new Error(`esplora answered txid ${response.text.trim().slice(0, 64)} for transaction ${expected}`);
+      if (!response.ok) throw new Error(`esplora broadcast failed ${response.status}: ${bitcoindReason(response.text)}`);
+      const answered = txid.safeParse(response.text.trim());
+      if (!answered.success) throw new Error(`esplora answered another txid for transaction ${expected}`);
+      if (answered.data !== expected) throw new Error(`esplora answered txid ${answered.data} for transaction ${expected}`);
       return expected;
     },
     async transactionStatus(id) {
@@ -107,7 +190,7 @@ export function esploraIndexer(baseUrl: string, fetchImpl: typeof fetch = fetch)
       const response = await request(`/tx/${expected}`);
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`esplora tx status failed ${response.status}`);
-      return parseTransactionStatus(JSON.parse(response.text));
+      return decode("tx", response.text, parseTransactionStatus);
     },
   };
 }
