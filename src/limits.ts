@@ -29,6 +29,14 @@ export type LimitInput = {
 
 export type LimitDecision = { ok: true } | { ok: false; reason: string };
 
+export const HYPERLIQUID_MIN_ORDER_USD = 10;
+
+export function belowPerpMinimum(config: Pick<LimitConfig, "maxUsdPerTrade">, notionalUsd: number): string | null {
+  const minimum = `hyperliquid perp orders need at least ${HYPERLIQUID_MIN_ORDER_USD} USD notional`;
+  if (config.maxUsdPerTrade < HYPERLIQUID_MIN_ORDER_USD) return `${minimum}, and MAX_USD_PER_TRADE is ${config.maxUsdPerTrade}`;
+  return notionalUsd >= HYPERLIQUID_MIN_ORDER_USD ? null : minimum;
+}
+
 export function checkLimits(config: LimitConfig, input: LimitInput): LimitDecision {
   if (config.killSwitch) return { ok: false, reason: "kill switch is on" };
   if (!config.enabledChainKeys.has(input.chainKey)) {

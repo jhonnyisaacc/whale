@@ -341,7 +341,7 @@ export async function execute(intent: SwapIntent, deps: ExecutorDeps): Promise<E
   }
 
   if (useHyper) {
-    const market = await tokenHyperMarket(intent, deps.hyperMarket);
+    const market = await tokenHyperMarket(intent, deps);
     if (typeof market === "string") return blockReport(intent, deps, latency, "hypercore", market);
     const leverage = intent.leverage;
     const [mark, position] = await Promise.all([deps.markPrice(market.midKey), market.market === "perp" ? (deps.perpPosition?.(market.coin).catch(() => null) ?? null) : null]);

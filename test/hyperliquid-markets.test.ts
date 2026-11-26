@@ -33,7 +33,7 @@ function intent(symbol: string, address: string, place: typeof SOLANA | typeof H
   return {
     idempotencyKey: `hl-${symbol}-${place.chainKey}-${JSON.stringify(hyperliquid)}`,
     side: "buy",
-    notionalUsd: 5,
+    notionalUsd: 10,
     slippageBps: 50,
     token: {
       symbol,
@@ -51,7 +51,7 @@ function intent(symbol: string, address: string, place: typeof SOLANA | typeof H
 function dryDeps(sends: string[], marks: string[], status = 200): ExecutorDeps {
   const info = mainnetInfo([], status);
   return {
-    config: { maxUsdPerTrade: 5, dailyUsdCap: 25, maxSlippageBps: 100, slippageHardMaxBps: 300, maxLeverage: 1, minLiquidityUsd: 75_000, killSwitch: false, enabledChainKeys: new Set(["solana", "hypercore", "hyperevm"]) },
+    config: { maxUsdPerTrade: 10, dailyUsdCap: 25, maxSlippageBps: 100, slippageHardMaxBps: 300, maxLeverage: 1, minLiquidityUsd: 75_000, killSwitch: false, enabledChainKeys: new Set(["solana", "hypercore", "hyperevm"]) },
     mode: "dry_run",
     spentTodayUsd: 0,
     liquidityOf: async () => 100,

@@ -81,7 +81,7 @@ const order = (notionalUsd: number) => perpIntent({ kind: "perp", idempotencyKey
 test("the executor refuses a perp order below the venue minimum before it reserves or signs, and names MAX_USD_PER_TRADE only when the cap is what keeps it below", async () => {
   const cases: [Record<string, string>, number, string | null][] = [
     [{}, 5, DEFAULT_REFUSAL],
-    [{}, 10, DEFAULT_REFUSAL],
+    [{}, 10, "notional exceeds 5 USD"],
     [{ MAX_USD_PER_TRADE: "20" }, 9.99, "hyperliquid perp orders need at least 10 USD notional"],
     [{ MAX_USD_PER_TRADE: "20" }, 10, null],
     [{ MAX_USD_PER_TRADE: "20" }, 21, "notional exceeds 20 USD"],
