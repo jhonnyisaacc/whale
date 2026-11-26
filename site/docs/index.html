@@ -119,10 +119,10 @@ the result.</pre>
             <tr><th scope="col">Host</th><th scope="col">Manifest</th><th scope="col">Loads</th></tr>
           </thead>
           <tbody>
-            <tr><td><span class="host-cell"><img src="/assets/logos/h-claude-color.png" alt="" width="24" height="24">Claude Code</span></td><td>.claude-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
+            <tr><td><span class="host-cell"><img src="/assets/logos/h-claude-color.png" alt="" width="24" height="24">Claude Code</span></td><td>.claude-plugin/plugin.json</td><td>plugin.json mcpServers + skills/</td></tr>
             <tr><td><span class="host-cell"><img class="mono-logo" src="/assets/logos/h-openai.png" alt="" width="24" height="24">Codex</span></td><td>.codex-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
             <tr><td><span class="host-cell"><img class="mono-logo" src="/assets/logos/h-grok.png" alt="" width="24" height="24">Grok</span></td><td>.grok-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
-            <tr><td><span class="host-cell"><img src="/assets/logos/h-meta-color.png" alt="" width="24" height="24">Muse</span></td><td>.muse-plugin/plugin.json</td><td>.mcp.json + skills/</td></tr>
+            <tr><td><span class="host-cell"><img src="/assets/logos/h-meta-color.png" alt="" width="24" height="24">Muse</span></td><td>.muse-plugin/plugin.json</td><td>plugin.json mcpServers + skills/</td></tr>
             <tr><td><span class="host-cell"><img class="mono-logo" src="/assets/logos/h-nousresearch.png" alt="" width="24" height="24">Hermes</span></td><td>plugin.json</td><td>mcp.json + skills/</td></tr>
           </tbody>
         </table>
@@ -227,7 +227,7 @@ the result.</pre>
         <ul>
           <li>Bridge execution has no MCP or CLI tool yet<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/bridge/execute.ts#L157">execute.ts:157</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/commands.ts#L143">commands.ts:143</a></span></li>
           <li>Hosted MCP sends are dry-run<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/gateway/mcp-tools.ts#L113">gateway/mcp-tools.ts:113</a></span></li>
-          <li>Blast is quotes only; zkSync is opt-in<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/chains.ts#L307">chains.ts:307</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/support.ts#L6">support.ts:6</a></span></li>
+          <li>Blast is quotes only; zkSync sends default to dry-run<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/1ab998e58e343579e804885519393b701d9168f2/src/chains.ts#L307">chains.ts:307</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/1ab998e58e343579e804885519393b701d9168f2/src/config/guard.ts#L96">guard.ts:96</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/support.ts#L6">support.ts:6</a></span></li>
         </ul>
       </section>
       <section class="issue-group" aria-label="MetaMask known issues">

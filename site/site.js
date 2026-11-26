@@ -54,3 +54,7 @@ if (chapterLinks.length > 0 && "IntersectionObserver" in window) {
     if (chapter) observer.observe(chapter);
   }
 }
+
+for (const link of document.querySelectorAll("details.menu a")) {
+  link.addEventListener("click", () => link.closest("details")?.removeAttribute("open"));
+}

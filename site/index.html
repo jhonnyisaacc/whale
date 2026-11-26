@@ -155,7 +155,7 @@
         <ul>
           <li>Bridge execution has no MCP or CLI tool yet<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/bridge/execute.ts#L157">execute.ts:157</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/commands.ts#L143">commands.ts:143</a></span></li>
           <li>Hosted MCP sends are dry-run<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/gateway/mcp-tools.ts#L113">gateway/mcp-tools.ts:113</a></span></li>
-          <li>Blast is quotes only; zkSync is opt-in<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/chains.ts#L307">chains.ts:307</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/support.ts#L6">support.ts:6</a></span></li>
+          <li>Blast is quotes only; zkSync sends default to dry-run<span class="cite"><a href="https://github.com/jhonnyisaacc/whale/blob/1ab998e58e343579e804885519393b701d9168f2/src/chains.ts#L307">chains.ts:307</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/1ab998e58e343579e804885519393b701d9168f2/src/config/guard.ts#L96">guard.ts:96</a> · <a href="https://github.com/jhonnyisaacc/whale/blob/2065caca79d382750336ecdaec62840b97eb3fc1/src/support.ts#L6">support.ts:6</a></span></li>
         </ul>
       </section>
       <section class="issue-group" aria-label="MetaMask known issues">
@@ -199,7 +199,7 @@
     <div class="net-group">
       <h3>EVM · 13</h3>
       <ul class="chips">
-        <li><span class="chip"><img src="/assets/logos/c-ethereum.png" alt="" width="32" height="32">Ethereum</span><span class="tag">opt-in</span></li>
+        <li><span class="chip off"><img src="/assets/logos/c-ethereum.png" alt="" width="32" height="32">Ethereum</span><span class="tag">opt-in</span></li>
         <li><span class="chip"><img src="/assets/logos/c-base.webp" alt="" width="32" height="32">Base</span></li>
         <li><span class="chip"><img src="/assets/logos/c-arbitrum.webp" alt="" width="32" height="32">Arbitrum</span></li>
         <li><span class="chip"><img src="/assets/logos/c-optimism.webp" alt="" width="32" height="32">Optimism</span></li>
@@ -208,7 +208,7 @@
         <li><span class="chip"><img src="/assets/logos/c-linea.webp" alt="" width="32" height="32">Linea</span></li>
         <li><span class="chip"><img src="/assets/logos/c-scroll.webp" alt="" width="32" height="32">Scroll</span></li>
         <li><span class="chip"><img src="/assets/logos/c-blast.webp" alt="" width="32" height="32">Blast</span><span class="tag">quotes only</span></li>
-        <li><span class="chip off"><img src="/assets/logos/c-zksync-era.webp" alt="" width="32" height="32">zkSync</span><span class="tag">opt-in</span></li>
+        <li><span class="chip"><img src="/assets/logos/c-zksync-era.webp" alt="" width="32" height="32">zkSync</span><span class="tag">dry-run</span></li>
         <li><span class="chip"><img src="/assets/logos/c-robinhood-chain.webp" alt="" width="32" height="32">Robinhood Chain</span></li>
         <li><span class="chip"><img src="/assets/logos/c-hyperevm.webp" alt="" width="32" height="32">HyperEVM</span></li>
         <li><span class="chip off"><img src="/assets/logos/c-monad.webp" alt="" width="32" height="32">Monad</span><span class="tag">opt-in</span></li>
